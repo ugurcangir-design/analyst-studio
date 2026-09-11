@@ -68,6 +68,11 @@ Bulguların çoğu **Jira Köprüsü** (bu oturumun yeni kodu) + CLI-mod token'�
 > **✅ UYGULANDI (A grubu, güvenli hızlı düzeltmeler):** GÜV allowlist fail-closed + accountId-only (docstring/`.env.example`/CLAUDE.md güncel);
 > KOD `_mesgul_mu()` köprü `_TUR_LOCK` + soru-uygula koordinasyonu; UI global `:focus-visible`; KOD `durum.json` `son_analiz` budama (`_MAX_SON_ANALIZ=40`);
 > GÜV kısa (<8) canlı-app şifre redaksiyonu (`sir_kaydet(asgari=4)`); PROMPT `kapsam_analizi_rol` numaralandırma+tekrar temizliği. (jira_kopru testi 32; ruff temiz.)
+> **✅ UYGULANDI (B grubu — CLI token kazanımı):** CLI moduna sıkı RAG bütçesi (`MAX_CHARS_REF_GLOBAL_CLI=100000`,
+> `_ref_global_butce`; CLI'de cache yok → her çağrının baskın girdi maliyeti düşer); köprü `_task_keywords` 12→8 + min-len 5
+> (aşırı-isabet/az-alaka referans azaltıldı → daha küçük getirim). **NOT:** açık-soruları ana çağrıya BİRLEŞTİRME (P0-1)
+> bilinçli ERTELENDİ — `_gorev_acik_sorular_uret` yakınsama (turlar içinde azalma) yük-taşıyan bir özellik; birleştirme
+> onu + çıktı kalitesini riske atar (yapıyı bozmadan ilkesi). Ayrı, dikkatli bir turda ele alınmalı.
 > **KALAN (B grubu / P2 / tasarım):** aşağıdaki maddeler backlog — bilinçli ele alınacak.
 
 #### P0 — önce bunlar

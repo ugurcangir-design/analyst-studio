@@ -61,6 +61,8 @@ MAX_CHARS_CONF_TOT=80_000  MAX_CHARS_JIRA_TOT=60_000  MAX_CHARS_SERVIS_TOT=60_00
 MAX_CHARS_LIVE_APP_TOT=60_000  MAX_CHARS_DIGER_TOT=20_000
 MAX_CHARS_REF_GLOBAL=140_000  # GETİRİM BÜTÇESİ: tüm tiplerin TOPLAM tavanı (.env; 0=sınırsız).
                               # _ref_bloklari_olustur tipleri sırayla doldurur, bütçe dolunca keser.
+MAX_CHARS_REF_GLOBAL_CLI=100_000  # CLI modunda prompt-cache YOK → bütçe her çağrıda tam ödenir; CLI için
+                              # daha sıkı tavan (_ref_global_butce: CLI'de min(genel, CLI); genel sınırsızsa CLI tavanı).
 
 # Token limitleri
 MAX_TOKENS_UZUN=16_000  (süreç analizi)   MAX_TOKENS_KISA=3_000

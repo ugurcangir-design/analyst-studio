@@ -159,6 +159,19 @@ MAX_CHARS_DIGER_TOT  =  20_000   # Diğer referanslar toplamı
 # TIP_KONFIG sırasıyla (Confluence→Jira→Servis→Canlı→Diğer) doldurulur; bütçe dolunca kesilir.
 # .env `MAX_CHARS_REF_GLOBAL` ile ayarlanır (0/negatif → sınırsız, eski davranış).
 MAX_CHARS_REF_GLOBAL = int(os.getenv("MAX_CHARS_REF_GLOBAL", "140000"))
+# CLI modunda prompt-cache YOK → getirim bütçesi HER çağrıda tam girdi-token'ı olarak ödenir.
+# CLI için daha sıkı tavan (varsayılan 100000 ≈ ~25K token). 0/negatif → CLI'de de genel tavana düş.
+MAX_CHARS_REF_GLOBAL_CLI = int(os.getenv("MAX_CHARS_REF_GLOBAL_CLI", "100000"))
+
+
+def _ref_global_butce() -> int:
+    """Etkin RAG getirim bütçesi (karakter). CLI modunda (cache yok) daha sıkı tavan uygulanır;
+    genel ve CLI tavanı pozitifse küçüğü kazanır. Genel sınırsız (<=0) + CLI pozitif → CLI tavanı."""
+    if USE_CLAUDE_CLI and MAX_CHARS_REF_GLOBAL_CLI > 0:
+        if MAX_CHARS_REF_GLOBAL > 0:
+            return min(MAX_CHARS_REF_GLOBAL, MAX_CHARS_REF_GLOBAL_CLI)
+        return MAX_CHARS_REF_GLOBAL_CLI
+    return MAX_CHARS_REF_GLOBAL
 
 MAX_TOKENS_UZUN     = 16_000   # süreç analizi: Confluence şablonu (AMAÇ/MOCKUP/GEREKSİNİMLER/DB/NOTLAR) + ekranlar + açık sorular +
                                # izlenebilirlik matrisi. 8K kesiliyordu.
@@ -1888,13 +1901,15 @@ def _ref_bloklari_olustur(ref_dosyalar: list[Path]) -> tuple[list[dict], list[st
     bloklari: list[dict] = []
     kullanilan: list[str] = []
     # Getirim bütçesi (madde 3): tüm tipler boyunca birikimli tavan. <=0 → sınırsız.
-    global_kalan = MAX_CHARS_REF_GLOBAL if MAX_CHARS_REF_GLOBAL > 0 else None
+    # CLI modunda cache olmadığından daha sıkı CLI tavanı uygulanır (_ref_global_butce).
+    _butce = _ref_global_butce()
+    global_kalan = _butce if _butce > 0 else None
 
     for baslik, aciklama, dosya_listesi, tip_limit, jira_modu in TIP_KONFIG:
         if not dosya_listesi:
             continue
         if global_kalan is not None and global_kalan <= 0:
-            logger.info("Getirim bütçesi (%d) doldu — kalan referans tipleri atlandı.", MAX_CHARS_REF_GLOBAL)
+            logger.info("Getirim bütçesi (%d) doldu — kalan referans tipleri atlandı.", _butce)
             break
         # Bu tipin limiti global kalanın üstüne çıkamaz.
         if global_kalan is not None:

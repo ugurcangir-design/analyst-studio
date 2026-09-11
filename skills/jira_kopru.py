@@ -245,17 +245,18 @@ _STOPWORDS = {
 }
 
 
-def _task_keywords(gorev: dict, azami: int = 12) -> list[str]:
+def _task_keywords(gorev: dict, azami: int = 8) -> list[str]:
     """Task başlığı+açıklamasından RAG için anahtar kelimeler çıkarır (deterministik,
-    0 token). Durak kelimeler elenir; ≥4 harfli, en sık/ilk geçen terimler alınır.
-    filtrele_referanslar bunları alt-dize olarak referans içeriğinde arar (#3)."""
+    0 token). Durak kelimeler elenir; **≥5 harfli** en sık/ilk geçen **en çok 8** terim.
+    filtrele_referanslar bunları alt-dize olarak arar → CLI'de token doğrudan RAG boyutuna
+    bağlı olduğundan az/isabetli kelime = daha küçük getirim (kısa/genel terim aşırı-isabet önlenir)."""
     metin = f"{gorev.get('summary', '')} {gorev.get('summary', '')} {gorev.get('description', '')}".lower()
-    tokenler = re.findall(r"[a-zçğıiöşü0-9][a-zçğıiöşü0-9\-]{3,}", metin)
+    tokenler = re.findall(r"[a-zçğıiöşü0-9][a-zçğıiöşü0-9\-]{4,}", metin)
     sayac: dict[str, int] = {}
     sira: list[str] = []
     for t in tokenler:
         t = t.strip("-")
-        if len(t) < 4 or t in _STOPWORDS or t.isdigit():
+        if len(t) < 5 or t in _STOPWORDS or t.isdigit():
             continue
         if t not in sayac:
             sira.append(t)
