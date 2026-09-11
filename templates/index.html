@@ -351,12 +351,18 @@ html[data-theme="dark"] .theme-toggle .ico-sun { display: none; }
 }
 
 /* ── İşlem Modu (JARVIS HUD, kırmızı) ──────────────────────────── */
+/* İçerik alanına CONTAIN edilir (tam sayfa DEĞİL): sidebar (232px) + topbar (44px) açıkta
+   kalır → analist sol menüden gezinebilir, üst-bar run-chip görünür; içerik butonları örtülü
+   → yanlış tıklama engellenir + çalışmanın başladığı belli olur. */
 #islem-modu {
-  position: fixed; inset: 0; z-index: 400; display: none;
+  position: fixed; top: 44px; left: 232px; right: 0; bottom: 0; z-index: 400; display: none;
   align-items: center; justify-content: center;
   background: radial-gradient(120% 90% at 50% 42%, #2b1214 0%, #150a0b 58%, #0c0607 100%);
+  border-left: 1px solid var(--border);
 }
 #islem-modu.show { display: flex; }
+.layout.sidebar-collapsed #islem-modu { left: 60px; }   /* menü daraltılınca hizala */
+@media (max-width: 760px) { #islem-modu { left: 0; } }   /* dar ekranda tam içerik genişliği */
 #islem-modu::before {
   content: ''; position: absolute; inset: 0; pointer-events: none;
   background: repeating-linear-gradient(0deg, rgba(239,68,68,.05) 0 1px, transparent 1px 4px); opacity: .5;

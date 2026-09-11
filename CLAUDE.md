@@ -24,9 +24,12 @@ Tüm v2 geliştirmesi burada, ayrı portta (`PORT=5003 ./start.sh`) yapılır. A
   yeşil = başarı · indigo = marka/aksiyon. Token-tabanlı olduğu için değişiklik tüm ekranlara yansır.
   **Yeni bileşenler (index.html):** üst barda kalıcı **işlem çipi** `#run-chip` (her ekranda; `_updateRunChip(s)`
   ile `updateUI`'den beslenir — running→kırmızı+süre / bekliyor→amber "Onayınızda"; tıkla→HUD veya pipeline) +
-  tam-ekran **İşlem Modu HUD** `#islem-modu` (JARVIS tarzı kırmızı reaktör; `islemModuAc/Kapat`, Esc kapatır —
-  kapatınca iş arka planda sürer). "hazırlanıyor" analiz görseli de kırmızıya çekildi. Tasarım kanvası:
-  artifact a6929f23. **5002/main'e asla uygulanmaz.**
+  **İşlem Modu HUD** `#islem-modu` (JARVIS tarzı kırmızı reaktör; `islemModuAc/Kapat`, Esc kapatır —
+  kapatınca iş arka planda sürer; süreç VE teknik analiz başlayınca otomatik gelir — `running=calisiyor&&!bekliyor`).
+  **İÇERİK ALANINA CONTAIN edilir, tam-ekran DEĞİL** (`position:fixed; top:44px topbar altı; left:232px sidebar sağı`;
+  daraltılmış menüde `left:60px`; ≤760px'de `left:0`) → sol menü + üst-bar açıkta kalır (analist gezinebilir, run-chip
+  görünür), yalnız içerik butonları örtülür → **yanlış tıklama engellenir + çalışma başladığı belli olur**.
+  "hazırlanıyor" analiz görseli de kırmızıya çekildi. **5002/main'e asla uygulanmaz.**
 - **UI v3 — ekran/menü düzeni & yeniden adlandırmalar (YALNIZ v2):**
   **Açılır-kapanır sol menü** (`sidebarAcKapa()` → `.layout.sidebar-collapsed`, localStorage `sidebar-collapsed`) +
   **grup başlıkları katlanır** (`navBolumAcKapa()`, chevron, localStorage `nav-collapsed-<grup>`; rol-gizli item'lar
