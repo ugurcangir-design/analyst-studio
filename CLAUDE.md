@@ -42,6 +42,12 @@ Tüm v2 geliştirmesi burada, ayrı portta (`PORT=5003 ./start.sh`) yapılır. A
   indigo focus ring. Yeni bir input tipi eklerken bu tabana düşer (bespoke sınıf daha yüksek özgüllükle ezer).
   Yardım metinleri (`.field-sub/.field-hint/.ctx-field-sub/.jg-sub/.la-ipucu`) okunaklılık için `--text2`,
   12px, satır-yüksekliği 1.55, `max-width` ile sınırlı — soluk/küçük değil.
+  **Aksiyon-bölümü deseni (onay kapıları + Jira Köprüsü — hedefli düzelt kutusu):** tek satırda sıkışık
+  input+buton+mesaj yerine → üst-etiket + **tam-genişlik input (flex:1)** + buton aynı satırda, durum mesajı
+  AYRI satırda (input'la yarışmaz). İki tekrar-kullanılabilir sınıf: `.adim-duzelt*` (index.html onay kapıları
+  `surec-act-onay`/`surec-act-teknik-onay` — `adim-sohbet-*` id'leri KORUNDU) ve `.kopru-actions`/`.kopru-duzelt*`/
+  `.kopru-eylem` (kopru.html — `kopruIs('duzelt'|'analiz'|'iliskili-ac')` onclick'leri KORUNDU). ≤640px'de dikey
+  yığılır. Yeni bir "hedefli düzelt / eylem" satırı eklerken bu deseni kullan (bespoke tek-satır flex değil).
 - **Denetim (audit) KALDIRILDI (v3):** `skills/denetim.py` silindi, `_denetim()` no-op, `/api/denetim` endpoint'i +
   `logs/audit.jsonl` + `/api/saglik` `denetim{}` alanı + Yetki ekranındaki Denetim paneli kaldırıldı. Analist iş
   takibi tamamen **Kullanım Raporu**'ndadır (`skills/telemetri`). Görünürlük (Yetki) yönetimi aynen durur.

@@ -823,6 +823,18 @@ input[type="tel"]:focus, textarea:focus, select:focus {
 .conf-publish-msg.ok, .jira-hierarchy-result.ok, .mockup-gen-msg.ok { color: var(--green); }
 .conf-publish-msg.err, .jira-hierarchy-result.err, .mockup-gen-msg.err { color: var(--red); }
 
+/* ── Onay kapısı "Bu adımı düzelt" — etiketli, tam-genişlik giriş (msg ayrı satırda,
+      input'la yarışmaz) ───────────────────────────────────────────── */
+.adim-duzelt { margin: 10px 0; padding: 10px 12px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius); }
+.adim-duzelt-lbl { display:block; font-size:11px; font-weight:600; color:var(--text3);
+  text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px; }
+.adim-duzelt-row { display:flex; gap:8px; align-items:stretch; }
+.adim-duzelt-inp { flex:1 1 auto; min-width:0; }
+.adim-duzelt-row .btn { flex:0 0 auto; white-space:nowrap; }
+.adim-duzelt-msg { display:block; flex:none; margin:6px 0 0; white-space:normal; }
+@media (max-width:640px){ .adim-duzelt-row { flex-direction:column; align-items:stretch; } }
+
 /* ── Jira hiyerarşi önizleme modalı ─────────────────────────────── */
 .jira-modal {
   display: none; position: fixed; inset: 0;
@@ -2307,15 +2319,17 @@ function temaDegistir() {
             <!-- AÇIK SORULAR — süreç onayında tek-tek cevapla (Sorular sekmesiyle aynı backend) -->
             <div class="onay-sorular" id="onay-sorular-surec" style="display:none"></div>
             <!-- ADIM SOHBETİ — basit: yalnız bu adımın çıktısını, ID/bölüm hedefli düzelt; otomatik uygulanır -->
-            <div class="mockup-gen-row" style="margin:8px 0 10px">
-              <span class="mono-meta" style="white-space:nowrap">Bu adımı düzelt:</span>
-              <input type="text" id="adim-sohbet-surec" autocomplete="off" style="flex:1;min-width:240px"
-                     placeholder="örn: PA-003'e iptal koşulu ekle · İş Kuralları bölümüne BR-007 ekle"
-                     onkeydown="if(event.key==='Enter')adimDuzelt('surec-analizi.md','adim-sohbet-surec','adim-sohbet-surec-msg')">
-              <button class="btn btn-primary btn-xs" id="adim-sohbet-surec-btn" onclick="adimDuzelt('surec-analizi.md','adim-sohbet-surec','adim-sohbet-surec-msg')">Uygula</button>
-              <span class="mockup-gen-msg" id="adim-sohbet-surec-msg"></span>
+            <div class="adim-duzelt">
+              <label class="adim-duzelt-lbl" for="adim-sohbet-surec">Bu adımı düzelt</label>
+              <div class="adim-duzelt-row">
+                <input type="text" id="adim-sohbet-surec" class="adim-duzelt-inp" autocomplete="off"
+                       placeholder="örn: PA-003'e iptal koşulu ekle · İş Kuralları bölümüne BR-007 ekle"
+                       onkeydown="if(event.key==='Enter')adimDuzelt('surec-analizi.md','adim-sohbet-surec','adim-sohbet-surec-msg')">
+                <button class="btn btn-primary btn-sm" id="adim-sohbet-surec-btn" onclick="adimDuzelt('surec-analizi.md','adim-sohbet-surec','adim-sohbet-surec-msg')">Uygula</button>
+              </div>
+              <span class="mockup-gen-msg adim-duzelt-msg" id="adim-sohbet-surec-msg"></span>
             </div>
-            <div class="btn-group">
+            <div class="btn-group" style="margin-top:12px">
               <button class="btn btn-success" onclick="onayla()">
                 <svg class="ico"><use href="#i-check"/></svg> Devam Et — Teknik Analiz Başlat
               </button>
@@ -2342,13 +2356,15 @@ function temaDegistir() {
               <!-- AÇIK SORULAR — teknik onayında tek-tek cevapla (Sorular sekmesiyle aynı backend) -->
               <div class="onay-sorular" id="onay-sorular-teknik" style="display:none"></div>
               <!-- ADIM SOHBETİ (teknik) — hedefli bölüm düzeltmesi, otomatik uygulanır -->
-              <div class="mockup-gen-row" style="margin:8px 0 6px">
-                <span class="mono-meta" style="white-space:nowrap">Bu adımı düzelt:</span>
-                <input type="text" id="adim-sohbet-teknik" autocomplete="off" style="flex:1;min-width:240px"
-                       placeholder="örn: T-BE-004 endpoint'ine sayfalama ekle · Güvenlik bölümünü genişlet"
-                       onkeydown="if(event.key==='Enter')adimDuzelt('teknik-analiz.md','adim-sohbet-teknik','adim-sohbet-teknik-msg')">
-                <button class="btn btn-primary btn-xs" id="adim-sohbet-teknik-btn" onclick="adimDuzelt('teknik-analiz.md','adim-sohbet-teknik','adim-sohbet-teknik-msg')">Uygula</button>
-                <span class="mockup-gen-msg" id="adim-sohbet-teknik-msg"></span>
+              <div class="adim-duzelt">
+                <label class="adim-duzelt-lbl" for="adim-sohbet-teknik">Bu adımı düzelt</label>
+                <div class="adim-duzelt-row">
+                  <input type="text" id="adim-sohbet-teknik" class="adim-duzelt-inp" autocomplete="off"
+                         placeholder="örn: T-BE-004 endpoint'ine sayfalama ekle · Güvenlik bölümünü genişlet"
+                         onkeydown="if(event.key==='Enter')adimDuzelt('teknik-analiz.md','adim-sohbet-teknik','adim-sohbet-teknik-msg')">
+                  <button class="btn btn-primary btn-sm" id="adim-sohbet-teknik-btn" onclick="adimDuzelt('teknik-analiz.md','adim-sohbet-teknik','adim-sohbet-teknik-msg')">Uygula</button>
+                </div>
+                <span class="mockup-gen-msg adim-duzelt-msg" id="adim-sohbet-teknik-msg"></span>
               </div>
               <!-- Tam yeniden-üretim: SON ÇARE (hedefli düzeltme bölüm bulamazsa) -->
               <details style="margin:0 0 8px">

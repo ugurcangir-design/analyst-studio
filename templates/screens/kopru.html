@@ -29,7 +29,21 @@
 
     <style>
       .kopru-acik .jg-soru-yardim { margin-bottom:8px; }
-      .kopru-actions .ds-inp { padding:5px 10px; }
+      /* Alt aksiyon bölümü — iki katman: (1) hedefli düzelt grubu, (2) eylem butonları */
+      .kopru-actions { margin-top:14px; padding-top:12px; border-top:1px solid var(--border);
+        display:flex; flex-direction:column; gap:12px; }
+      .kopru-duzelt-lbl { display:block; font-size:11px; font-weight:600; color:var(--text3);
+        text-transform:uppercase; letter-spacing:.04em; margin-bottom:6px; }
+      .kopru-duzelt-row { display:flex; gap:8px; align-items:stretch; }
+      .kopru-duzelt-inp { flex:1 1 auto; min-width:0; padding:8px 11px; }
+      .kopru-duzelt-row .btn { flex:0 0 auto; white-space:nowrap; }
+      .kopru-eylem { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+      .kopru-eylem-sep { flex:1 1 auto; }   /* Onayla/İptal'i sağa iter */
+      @media (max-width:640px){
+        .kopru-duzelt-row { flex-direction:column; align-items:stretch; }
+        .kopru-eylem { flex-direction:column; align-items:stretch; }
+        .kopru-eylem-sep { display:none; }
+      }
     </style>
 
     <script>
@@ -81,7 +95,7 @@
       return `<div class="kopru-acik" id="kacik-${key}">
           <div class="jg-soru-yardim">Her soruyu altındaki kutuda cevaplayın; boş bıraktıklarınız <b>atlanır</b>. <b>Cevapla &amp; Devam</b> deyince analiz cevaplara göre yeniden yazılır, sorular yakınsar.</div>
           <div id="jgs-${key}" style="display:flex;flex-direction:column;gap:10px">${kartlar}</div>
-          <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="kopruIs('cevap','${key}')">Cevapla &amp; Devam Et</button>
+          <button class="btn btn-primary" style="margin-top:12px" onclick="kopruIs('cevap','${key}')">Cevapla &amp; Devam Et</button>
         </div>`;
     }
 
@@ -101,13 +115,21 @@
           <span class="panel-spacer"></span>${taslakRozet}</div>
         <div class="panel-body">
           ${acik}
-          <div class="kopru-actions" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-            <input id="duz-${k.key}" class="ds-inp" placeholder="düzeltme talimatı (yalnız ilgili kısım)" style="width:260px">
-            <button class="btn btn-outline btn-sm" onclick="kopruIs('duzelt','${k.key}')">Düzelt</button>
-            <span class="topbar-sep" style="height:18px"></span>
-            <button class="btn btn-outline btn-sm" onclick="kopruIs('analiz','${k.key}')">Yeniden Analiz</button>
-            <button class="btn btn-outline btn-sm" onclick="kopruIs('iliskili-ac','${k.key}')">İlişkili Aç</button>
-            ${taslak}
+          <div class="kopru-actions">
+            <div class="kopru-duzelt">
+              <label class="kopru-duzelt-lbl" for="duz-${k.key}">İlgili kısmı düzelt</label>
+              <div class="kopru-duzelt-row">
+                <input id="duz-${k.key}" class="ds-inp kopru-duzelt-inp"
+                       placeholder="örn. Q-T-001'i AND kararıyla güncelle · §7 Frontend'e debounce süresini yaz"
+                       onkeydown="if(event.key==='Enter')kopruIs('duzelt','${k.key}')">
+                <button class="btn btn-outline btn-sm" onclick="kopruIs('duzelt','${k.key}')">Düzelt</button>
+              </div>
+            </div>
+            <div class="kopru-eylem">
+              <button class="btn btn-outline btn-sm" onclick="kopruIs('analiz','${k.key}')">↻ Yeniden Analiz</button>
+              <button class="btn btn-outline btn-sm" onclick="kopruIs('iliskili-ac','${k.key}')">＋ İlişkili Aç</button>
+              ${taslak ? `<span class="kopru-eylem-sep"></span>${taslak}` : ''}
+            </div>
           </div>
         </div></div>`;
     }
