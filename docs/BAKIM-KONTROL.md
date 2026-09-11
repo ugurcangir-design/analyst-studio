@@ -61,10 +61,57 @@ Yük taşıyan sözleşmeler. Bir değişiklik bunlardan birini etkiliyorsa: ön
 > Her derin denetimde buraya tarih + P0/P1/P2 bulgular eklenir; kapananlar işaretlenir.
 > Kaynak: paralel denetim ajanları (kod/güvenlik/performans/UI/prompt).
 
-### <!-- TARIH --> — İlk kapsamlı denetim (bu oturumda başlatıldı)
-_Bulgular denetim ajanları tamamlanınca sentezlenip buraya önceliklendirilerek eklenecek._
+### 2026-09-11 — İlk kapsamlı denetim (5 paralel ajan: kod/güvenlik/performans/UI/prompt)
+Genel: **ruff temiz**, hijyen güçlü, cache mimarisi 8.5/10, XML/parser tutarlı. Kritik kod-regresyonu yok.
+Bulguların çoğu **Jira Köprüsü** (bu oturumun yeni kodu) + CLI-mod token'ında yoğunlaşıyor.
 
-- **P0 (bozuk/riskli):** _(doldurulacak)_
-- **P1 (önemli):** _(doldurulacak)_
-- **P2 (iyileştirme):** _(doldurulacak)_
-- **Tasarım önerileri (UI):** _(gerçek uygulama örnekleriyle — doldurulacak)_
+#### P0 — önce bunlar
+- **[GÜV] Allowlist varsayılan AÇIK + onay aynı güvenilmez kanaldan** (`jira_kopru.py:197`, `.env.example`).
+  `JIRA_KOPRU=true` + allowlist boş ise: konfigüre projede yorum yazabilen HERHANGİ biri `analiz` (açıklamayı ezer)
+  ve `ilişkili-aç→onayla` (task açar) tetikler; `onayla` da yorumdan geldiğinden saldırgan kendi taslağını onaylar.
+  **Fix:** fail-closed (allowlist boşsa işleme) + yalnız `accountId` eşleşmesi (`displayName` taklit edilebilir, P1).
+  *(Pilotta allowlist zaten sana kısıtlı → şu an kapalı; ama varsayılan güvensiz.)*
+- **[GÜV] `analiz/cevap/düzelt/güncelle` DESCRIPTION'ı onaysız yazıyor** (`jira_kopru.py:377`). Bilinçli tasarım
+  (kullanıcı #1 geri bildirimi) ama modül docstring'i "alanlara dokunmaz" diyor → **bayat docstring** + orijinal
+  yalnız kırılgan regex ile korunuyor. **Fix:** docstring'i güncelle; orijinal talebi regex yerine ayrı sakla; risk P0-allowlist ile kapanır.
+- **[UI] Klavye odağı görünmüyor** (`index.html` `.btn`/`.nav-item` — `:focus-visible` YOK). WCAG 2.4.7.
+  **Fix:** global `.btn:focus-visible,.nav-item:focus-visible,[role=button]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}`.
+- **[UI] "çalışıyor=kırmızı" ↔ "hata=kırmızı" çakışması.** **Fix:** running=indigo/mavi+pulse, kırmızı yalnız hata.
+- **[PERF-CLI] Açık sorular ayrı çağrı → CLI'de 2 tam-model çağrısı** (`jira_gorevleri.py:963/876`). `MODEL_HAFIF`
+  CLI'de yok sayılır. **Fix:** ana teknik analiz + açık soruları TEK birleşik çağrıda üret (`api_cagri_kapanisli`
+  `</acik_sorular>` deseni) → CLI çağrısını yarıya indir.
+- **[PERF-CLI] CLI'de prompt-cache yok → RAG bütçesi (140K karakter) her çağrıda tam ödeniyor** (`base.py:161`).
+  **Fix:** CLI modunda `MAX_CHARS_REF_GLOBAL` varsayılanını düşür (~90–100K) ve/veya keyword filtresini sıkılaştır.
+
+#### P1 — önemli
+- **[KOD] `_mesgul_mu()` köprü AI turunu + cevap-uygulamayı görmüyor** (`app.py:1915`) → çalışan AI sırasında
+  otomatik güncelleme/disk temizliği kesebilir/yarışabilir. **Fix:** `_mesgul_mu`'ya `_TUR_LOCK.locked()` + `_sorular_uygula_durum["calisiyor"]` ekle.
+- **[KOD] `/api/adim/duzelt` (`_revizyon_lock`) ↔ `/api/sorular/uygula` (`_sorular_uygula_lock`) yarışı** aynı çıktıya yazar. **Fix:** ortak kilit.
+- **[GÜV] Yazar eşleşmesi `displayName` ile de kabul** (spoofable) → yalnız accountId. **[GÜV] arg prompt-injection** (yorum→model→kalıcı alan/issue). **[GÜV] tetikleyicide hız/maliyet sınırı yok** (token DoS). → hepsi allowlist fail-closed + accountId ile büyük ölçüde kapanır.
+- **[PERF] Referans dosyaları analiz başına 2× okunuyor/parse** (`_filtre_metni_oku` önbeleksiz, PDF çift parse). **Fix:** `(path,mtime)` memoization.
+- **[PERF] `_TUR_LOCK` uzun AI çağrısı boyunca bloklu** (UI-UI serileşme). **Fix:** key-bazlı kilit veya kuyruk + "sırada" bildirimi + `acquire(timeout=)`.
+- **[PERF] `GOREV_PARALEL=3` CLI'de 429'u hızlandırır.** **Fix:** CLI modunda varsayılan 2.
+- **[PROMPT] `kapsam_analizi_rol` bozuk numaralandırma + "Canlı uygulama gözlemi" 2×** (`base.py:960`). **Fix:** tekilleştir.
+- **[PROMPT] Kaynak-öncelik listesi aynı promptta 3× tekrar** (rol + analiz + EK KURALLAR) → drift + token. **Fix:** tek kanonik blok (`_ORTAK_EK_KURALLAR`), rol promptları 1 satır atıf.
+- **[PROMPT] ID şeması ↔ `_SUREC_ID_DESENI` denetçi uyumsuzluğu** (`base.py:1484`; A-/AF-/IB- denetlenmiyor, EK- yanlış eşleşir). **Fix:** hizala.
+- **[UI] Revizyon ekranı tamamen bespoke** (`.rz-*`, sistem dışı görünüyor); **boş durumlar 3 farklı**; **Köprü input'ları taşma + hardcode proje**; **onay kapısı yoğun + yeşil primary** (aksiyon=indigo olmalı); **Task Analizi paneli aşırı yoğun**.
+
+#### P2 — iyileştirme (backlog)
+- **[KOD]** `durum.json` `son_analiz`/`taslaklar` sınırsız büyür (buda); `_kopru_isler` kilitsiz; JQL proje kaçışı yok; `_onaySoruKart` ölü dal; `_ADIM_ID_DESEN` `Q-T` kapsamıyor; ilk-tarama pencere içi eski yorumları işler.
+- **[GÜV]** kısa (<8) canlı-app şifresi log redaksiyonuna kaydolmuyor; `/api/sorular/*` admin-gate yok (yalnız AUTH-sunucu modu).
+- **[PERF]** `_task_keywords` gevşek alt-dize eşleşmesi (6-8'e indir, `\b`); köprü döngüsü watermark'sız tüm yorumları çeker; `workflow_state` poll başına 2× okunur; MIMARI.md cache-breakpoint iddiası (2 breakpoint gerçekte) — belge düzeltmesi.
+- **[PROMPT]** `_ORTAK_EK_KURALLAR` tek-beden BRD/Kapsam'a da ekleniyor (whitelist/traceability ayır); traceability tablosu IB/Q eksik + T-BE hane; teknik 3 çağrı kaynağı cache'siz yeniden gönderir; `gorev_teknik_analiz` ~%30 kısaltılabilir; `MAX_TOKENS_BRD_CMB=9000` sıkı olabilir (ölç).
+- **[UI]** teal renk kalıntısı (`ds.css:38`); iki ikon sistemi; dark `--text3` kontrast; geri bildirim 3 kanal; statik breadcrumb; yaygın inline-style + ~11 tek-kullanım font boyutu; komut paleti yalnız isimle eşleşiyor.
+
+#### Tasarım önerileri (UI — gerçek ürün örnekli, backlog)
+1. Tek boş-durum bileşeni her yerde (Linear/Height) · 2. Kalıcı workflow stepper (Stripe/Linear) ·
+3. Onay kapısını "review" yerleşimi + tek primary (GitHub PR merge kutusu) · 4. running=indigo+pulse (Vercel/Linear) ·
+5. Görev listeleri gerçek tablo — kolon/sıralama/sticky (Jira/Linear/Height) · 6. Task Analizi progressive disclosure (GitHub/Notion) ·
+7. Zengin komut paleti — grup/kısayol/son kullanılan (Linear ⌘K/Raycast) · 8. Tek kart+buton ailesi (`.panel`+`.btn` kanonik) ·
+9. Tipografi/spacing token ölçeği (Primer/Tailwind) · 10. Onboarding checklist kartı (Linear/Vercel) ·
+11. Skeleton yükleme (Linear/Vercel) · 12. Bağlamsal breadcrumb + "sıra sende" vurgusu.
+
+#### Doğru çalıştığı doğrulanan (aksiyon YOK)
+ruff temiz · CSRF/Origin sağlam · şifre maskeleme + stdin (ps'de görünmez) · döngü koruması (ROBOT_IMZA+dedup+`_TUR_LOCK`) ·
+gitignore sır kapsamı · iki-kanal köprü tekilliği (`ui_komut`≡yorum yolu) · güncelle 0-token reuse · düzelt RAG kurmaz ·
+çıktı önbelleği CLI-model'i anahtara katar · getirim bütçesi tavanı · XML/parser hizası.
