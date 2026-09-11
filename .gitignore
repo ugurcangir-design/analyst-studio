@@ -82,3 +82,7 @@ reference/analiz_mcp.json
 # create_app.sh tarafından üretilen makineye-özel başlatıcı (yol+port içerir)
 _start.sh
 output/.gozlem-durum.json
+
+# Canlı-gözlem ajanının cwd (repo kökü) network/response dump artıkları — izlenmez
+/resp*.json
+/fixture_resp*.json
