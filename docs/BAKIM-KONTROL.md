@@ -96,8 +96,16 @@ Restart sonrası yeni kod (`71db3d4`) canlı doğrulandı: **(1) Jira Köprüsü
 > **[Bulgu 1 — gözlem uyarısı false-positive]** `_api_cagri_cli` sessiz-düşüş sezgisi (`base.py`) HERHANGİ "playwright/browser" reddini `_browser_reddi` sayıyordu → izin listesi DIŞINDAKİ yardımcı araç (`browser_evaluate`/`browser_take_screenshot`/`Bash`) reddi de tetikliyordu; çekirdek gözlem 29-57 tur başarıyla yapılsa bile `.gozlem-durum.json yapildi:false` + yanlış uyarı. **Fix:** yalnız `LIVE_APP_ALLOWED_TOOLS` içindeki (izinli) aracın reddi gerçek sorun sayılır; `num_turns<=1` guard'ı korundu. (`browser_evaluate` bilinçli izin-dışı — keyfi JS güvenliği; allowlist genişletilmedi.)
 > **[Bulgu 2 — ajan ön-söz sızıntısı]** Canlı-gözlem sonrası ajan rapor ÖNCESİ düşünme cümlesini (`"I have sufficient focused observation... Now I'll produce the report."`) `result`'ın başına sızdırıp markdown çıktıya karıştırıyordu. **Fix:** `_onsoz_kirp` — yalnız ilk markdown-yapısal satırdan önceki kısa (<600, `{` yok) düz-metin ön-sözü kırpar; canlı-gözlem yolunda uygulanır; JSON/uzun gövde korunur. Birim testi 4 senaryo yeşil.
 
-> **KALAN (canlı-doğrulamada keşfedilen — backlog):**
-> **[Bulgu 1b — hedefli soru-uygulama isabetsiz]** `_sorulari_hedefli_uygula` → `revizyon_ai.bolum_bul(metin, bagli_id)` süreç analizinde tüm `bagli_id`'ler (PA-003, BR-006, EF-001…) için başarısız oldu → `hedefli:0, tam_uretim:6` (hepsi tam-regenerasyona düştü). Sonuç DOĞRU ama pahalı (tüm doküman yeniden yazılır + ön-söz yeniden sızabilir). `bolum_bul` süreç-analizi ID/başlık deseniyle hizalanmalı (teknik analizde çalışıyor). Dikkatli tur — çıktı kalitesini bozmadan.
+> **✅ UYGULANDI [Bulgu 1b — hedefli soru-uygulama gövde-içi ID fallback]:** `revizyon_ai.bolum_bul`
+> yalnız BAŞLIKTA ID arıyordu → süreç analizinde ID'ler gövdede satır-içi (`**PA-003:** …`) olduğundan
+> tüm `bagli_id`'ler eşleşmiyor, `hedefli:0/tam_uretim:6` (tüm doküman yeniden yazılıyor + ön-söz yeniden
+> sızabiliyordu). Fix: başlık eşleşmesi ÖNCE (teknik analiz aynen çalışır), başarısızsa **gövde-içi fallback**
+> — `anahtar`'daki ID token'ını (`_anahtar_idleri`: `BR-001/BR-006`→2 ID, kelime-sınırı eşleşme) İÇEREN EN DERİN
+> (en spesifik) bölüm döner; ID yoksa/bulunmazsa None (doğru şekilde tam-regen'e düşer). Regresyon: `test_revizyon`
+> +7 assert (22 toplam). Artık süreç Q&A cevapları hedefli, ucuz ve preamble sızdırmadan uygulanır.
+>
+> **KALAN (izlenecek):** süreç onay kapısının taze çıktı varken bir kez idle'a düşmesi (multi-tab / session-start
+> timing şüphesi; kesinleşmedi — tekrar gözlenirse öncelik).
 
 #### P0 — önce bunlar
 - **[GÜV] Allowlist varsayılan AÇIK + onay aynı güvenilmez kanaldan** (`jira_kopru.py:197`, `.env.example`).

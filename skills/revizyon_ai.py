@@ -89,22 +89,55 @@ def bolumlere_ayir(md: str) -> list[dict]:
     return bolumler
 
 
-def bolum_bul(md: str, anahtar: str) -> dict | None:
-    """Başlığı `anahtar`'ı içeren İLK bölüm (küçük/büyük harf duyarsız).
+_ID_DESEN = re.compile(r"[A-Za-z]{1,5}-\d{1,4}")
 
-    `anahtar` bir ID (PA-001), başlık metni veya parçası olabilir. En düşük
-    seviyeli (en spesifik) eşleşme değil, dokümandaki ilk eşleşme döner —
-    çağıran taraf tam başlık verirse tekil olur.
+
+def _anahtar_idleri(anahtar: str) -> list[str]:
+    """`anahtar` içindeki yapısal ID token'larını çıkarır (BR-001/BR-006 → [BR-001, BR-006];
+    MOCKUP/EK-001 → [EK-001]; başlık metni → [])."""
+    return _ID_DESEN.findall(anahtar or "")
+
+
+def _id_govdede(icerik: str, id_: str) -> bool:
+    """ID'yi token olarak arar (komşu harf/rakam/tire yok) → PA-003, PA-0031'e uymaz."""
+    return re.search(r"(?<![\w-])" + re.escape(id_) + r"(?![\w-])", icerik, re.IGNORECASE) is not None
+
+
+def bolum_bul(md: str, anahtar: str) -> dict | None:
+    """`anahtar`'a uyan bölüm. `anahtar` bir ID (PA-001), başlık metni veya parçası olabilir.
+
+    İki aşama:
+      1. **Başlık eşleşmesi** (en kesin): başlığı `anahtar`'ı içeren İLK bölüm. Teknik
+         analizde ID'ler başlıkta (`### T-BE-004: …`) olduğundan burada eşleşir.
+      2. **Gövde-içi fallback** (yalnız 1 başarısızsa): `anahtar`'daki ID(ler) bir bölümün
+         GÖVDESİNDE satır-içi geçiyorsa (süreç analizinde `**PA-003:** …` deseni — ID başlıkta
+         DEĞİL), o ID'yi içeren EN DERİN (en spesifik) bölüm döner. Böylece hedefli düzeltme
+         tam-regenerasyona düşmeden çalışır. Başlık metni verilmişse (ID yok) fallback devre dışı.
     """
     hedef = anahtar.strip().casefold()
     if not hedef:
         return None
-    for b in bolumlere_ayir(md):
+    bolumler = bolumlere_ayir(md)
+    # 1) Başlık eşleşmesi (mevcut davranış, en kesin)
+    for b in bolumler:
         if b["seviye"] == 0:
             continue
         if hedef in b["baslik"].casefold():
             return b
-    return None
+    # 2) Gövde-içi fallback: ID'yi içeren en derin (eşitse en kısa) bölüm
+    idler = _anahtar_idleri(anahtar)
+    if not idler:
+        return None
+    en_iyi = None
+    for b in bolumler:
+        if b["seviye"] == 0:
+            continue
+        if any(_id_govdede(b["icerik"], i) for i in idler):
+            if (en_iyi is None
+                    or b["seviye"] > en_iyi["seviye"]
+                    or (b["seviye"] == en_iyi["seviye"] and len(b["icerik"]) < len(en_iyi["icerik"]))):
+                en_iyi = b
+    return en_iyi
 
 
 def _refine_bolum_ai(talimat: str, bolum: str) -> str:

@@ -95,7 +95,10 @@ Tüm v2 geliştirmesi burada, ayrı portta (`PORT=5003 ./start.sh`) yapılır. A
   düzeltir, "Devam Et" teknik analizi yeniden üretir. **Soru cevapları hedefli:** `/api/sorular/uygula` →
   `_sorulari_hedefli_uygula`: `bagli_id` bölümü analiz dosyasında (`_SORU_HEDEF_ANALIZ`: acik-sorular→
   teknik-analiz, brd-sorular→brd-analizi) bulunursa yalnız o bölüm düzenlenir; bulunamayanlar toplanıp
-  `yeniden_calistir`'a düşer (`sonuclar[].hedefli/tam_uretim`).
+  `yeniden_calistir`'a düşer (`sonuclar[].hedefli/tam_uretim`). **`revizyon_ai.bolum_bul` iki aşamalı:**
+  (1) başlık eşleşmesi (teknik analiz — ID başlıkta), (2) başarısızsa **gövde-içi ID fallback** (süreç analizi —
+  ID gövdede satır-içi `**PA-003:** …`; `anahtar`'daki ID token'ını içeren EN DERİN bölüm) → süreç Q&A cevapları da
+  hedefli/ucuz uygulanır, tam-regenerasyona düşmez. ID yoksa/bulunmazsa None (tam-regen — doğru davranış).
 - **Kaynak-öncelik sırası (KANONİK, tek liste — `_ORTAK_EK_KURALLAR` + 4 rol promptu hizalı):**
   `Swagger > Canlı Uygulama Gözlemi > Confluence > BRD/Süreç > Jira > UI`. İlke: **gözlemlenen/doğrulanabilir
   gerçek veri (Swagger sözleşmesi + MCP canlı gözlem), tarif edilen istekten (BRD) ÜSTÜNDÜR** — BRD

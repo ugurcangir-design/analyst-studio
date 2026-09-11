@@ -74,6 +74,21 @@ pa1 = ra.bolum_bul(MD, "PA-001")
 dogru("PA-002" not in pa1["icerik"], "PA-001 tekil")
 esit(ra.bolum_bul(MD, "YOK"), None, "bulunamayan None")
 
+# Bulgu 1b — gövde-içi ID fallback: süreç analizinde ID'ler başlıkta DEĞİL, gövdede
+# satır-içi (`**PA-003:** …`). Başlık eşleşmesi başarısızsa ID'yi içeren en derin bölüm dönmeli.
+MD2 = ("# Rapor\n\n## 2. İş Gereksinimleri\n### 2.1. Alan\n**BR-001:** 4 kolon.\n**BR-006:** FE giriş.\n"
+       "### 2.2. Endpoint\n**BR-005:** Bulk update.\n\n## 7. Frontend\n**PA-003:** Manuel giriş · Bağlı: BR-006\n")
+b = ra.bolum_bul(MD2, "PA-003")
+dogru(b is not None and b["baslik"].startswith("7."), "gövde-içi PA-003 → 7. Frontend bölümü")
+b = ra.bolum_bul(MD2, "BR-005")
+dogru(b is not None and b["baslik"].startswith("2.2"), "gövde-içi BR-005 → 2.2 bölümü")
+b = ra.bolum_bul(MD2, "BR-001/BR-006")
+dogru(b is not None and b["baslik"].startswith("2.1"), "bileşik ID → en derin (2.1) bölüm")
+esit(ra.bolum_bul(MD2, "ZZ-999"), None, "gövdede olmayan ID → None (tam-regen)")
+esit(ra.bolum_bul(MD2, "İş Kuralları"), None, "ID'siz başlık metni eşleşmezse None (fallback devre dışı)")
+esit(ra._anahtar_idleri("BR-001/BR-006"), ["BR-001", "BR-006"], "bileşik anahtardan ID çıkarımı")
+esit(ra._anahtar_idleri("MOCKUP/EK-001"), ["EK-001"], "harf-only segment ID sayılmaz")
+
 (tmp / "t.md").write_text(MD, encoding="utf-8")
 rv = ra.bolum_duzenle("t.md", "PA-001", "2fa ekle",
                       _ai_fn=lambda t, b: "### PA-001: Giriş\nE-posta + 2FA (DÜZENLENDİ).\n")
