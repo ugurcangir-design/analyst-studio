@@ -992,8 +992,11 @@ def workflow_state():
     # bu durumu "meşgul" sayıp Başlat butonunu DEVRE DIŞI bırakıyor, kullanıcı butona
     # basamadığı için o temizlik hiç tetiklenmiyordu (tavuk-yumurta). Poll edilen bu
     # uç noktada da çağırarak buton kalıcı şekilde inaktif kalmasın.
-    _stale_workflow_kurtar()
+    # Poll HOT PATH: durum dosyasını TEK okuyup stale-kurtarmaya ver (çift okuma önlenir);
+    # yalnız sıfırlama olduysa (nadir) yeniden oku.
     ozet = wf.ozet()
+    if _stale_workflow_kurtar(ozet):
+        ozet = wf.ozet()
     ozet["suspended"] = _suspended
     return jsonify(ozet)
 
@@ -1090,18 +1093,20 @@ def backlog_indir(dosya: str):
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
-def _stale_workflow_kurtar() -> None:
-    """Durum dosyası 'çalışıyor' diyor ama gerçek subprocess YOKSA sıfırlar.
+def _stale_workflow_kurtar(ozet: dict | None = None) -> bool:
+    """Durum dosyası 'çalışıyor' diyor ama gerçek subprocess YOKSA sıfırlar. Döner: sıfırlandı mı.
 
-    Senaryo: uygulama analiz ortasında kapatıldı → workflow-state.json
-    CALISIYOR'da takılı kaldı → yeniden açılışta kullanıcı sonsuza dek
-    'Bir işlem zaten çalışıyor' alırdı. Gerçek process kontrolüyle kurtarılır.
-    """
+    Senaryo: uygulama analiz ortasında kapatıldı → workflow-state.json CALISIYOR'da takılı kaldı
+    → yeniden açılışta kullanıcı sonsuza dek 'Bir işlem zaten çalışıyor' alırdı. Gerçek process
+    kontrolüyle kurtarılır. `ozet` verilirse durum dosyasını YENİDEN okumaz (poll'de çift okuma önlenir)."""
     import workflow as wf
-    if wf.calisiyor_mu() and not _analiz_calisiyor_mu():
-        durum = wf.oku()["durum"]
+    calisiyor = ozet["calisiyor"] if ozet is not None else wf.calisiyor_mu()
+    if calisiyor and not _analiz_calisiyor_mu():
+        durum = (ozet or wf.oku()).get("durum", "?")
         logger.warning("Stale workflow durumu (%s) — subprocess yok, sıfırlanıyor.", durum)
         wf.sifirla()
+        return True
+    return False
 
 
 @app.route("/api/run", methods=["POST"])
@@ -2151,6 +2156,7 @@ def jira_kopru_tara():
 # Tek beyin, iki kanal: Jira yorumu (/analyst_agent …) ve bu UI aynı jira_kopru.ui_komut'u
 # çağırır. Analiz/cevap uzun (AI) → arka plan işi + polling (Task Analizi deseni).
 _kopru_isler: dict = {}          # job_id → durum sözlüğü (son 24 tutulur)
+_kopru_isler_lock = threading.Lock()   # insert+trim eşzamanlı POST'larda "dict changed size" yarışına karşı
 
 
 def _kopru_is_calistir(job_id: str) -> None:
@@ -2192,12 +2198,13 @@ def jira_kopru_is_baslat():
     if not jira_kopru._ID_DESENI.match(key):
         return jsonify({"ok": False, "error": f"Geçersiz Jira anahtarı: {key}"}), 400
     job_id = uuid.uuid4().hex[:12]
-    _kopru_isler[job_id] = {"durum": "calisiyor", "key": key, "komut": komut, "arg": arg,
-                            "sonuc": None, "hata": None, "zaman": time.time()}
-    # bellek sınırı: son 24 iş
-    if len(_kopru_isler) > 24:
-        for eski in sorted(_kopru_isler, key=lambda j: _kopru_isler[j]["zaman"])[:-24]:
-            _kopru_isler.pop(eski, None)
+    with _kopru_isler_lock:
+        _kopru_isler[job_id] = {"durum": "calisiyor", "key": key, "komut": komut, "arg": arg,
+                                "sonuc": None, "hata": None, "zaman": time.time()}
+        # bellek sınırı: son 24 iş (kilit altında → eşzamanlı iterasyon/pop yarışı yok)
+        if len(_kopru_isler) > 24:
+            for eski in sorted(_kopru_isler, key=lambda j: _kopru_isler[j]["zaman"])[:-24]:
+                _kopru_isler.pop(eski, None)
     threading.Thread(target=_kopru_is_calistir, args=(job_id,), daemon=True, name=f"kopru-{job_id}").start()
     return jsonify({"ok": True, "job_id": job_id})
 

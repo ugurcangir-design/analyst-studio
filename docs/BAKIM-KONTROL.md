@@ -82,7 +82,12 @@ Bulguların çoğu **Jira Köprüsü** (bu oturumun yeni kodu) + CLI-mod token'�
 > tutuyor → `/api/adim/duzelt` ile aynı `output/*.md`+`output/revizyon/` oturumuna YARIŞMA yok (adim/duzelt non-blocking →
 > 409; circular-wait yok → deadlock yok). Köprü döngüsü JQL'e **watermark** (son taramadan geçen süre + 2dk örtüşme, `pencere`
 > ile sınırlı) → steady-state'te her turda tüm task yorumlarını çekmek yerine yalnız yeni-güncellenen task'lar → çok daha az Jira REST.
-> **KALAN (B grubu / P2 / tasarım):** aşağıdaki maddeler backlog — bilinçli ele alınacak.
+> **✅ UYGULANDI (P2 — eşzamanlılık + poll):** `_kopru_isler` insert+trim `_kopru_isler_lock` altında (eşzamanlı
+> POST'ta "dict changed size" yarışı kapandı). `workflow_state()` poll HOT PATH artık durum dosyasını TEK okuyor
+> (`_stale_workflow_kurtar(ozet)` ön-okunmuş özeti alır; yalnız nadir sıfırlamada yeniden okur) — poll başına 2→1 okuma.
+> **KALAN (P2 / tasarım — dikkatli tur):** `gorev_teknik_analiz` ~%30 kısaltma (prompt-kalite riski, gerçek testle),
+> `/api/sorular/*` admin-gate (AUTH-sunucu modu; naif ekleme analist işlevini kırar), ilk-tarama eski yorum (davranış kararı),
+> UI tasarım (12 öneri), açık-soru birleştirmesi. → BAKIM-KONTROL sonraki turlarda.
 
 #### P0 — önce bunlar
 - **[GÜV] Allowlist varsayılan AÇIK + onay aynı güvenilmez kanaldan** (`jira_kopru.py:197`, `.env.example`).
