@@ -3024,6 +3024,35 @@ def gozlem_durum_oku() -> dict | None:
     return None
 
 
+# Canlı-gözlem ajanının rapordan ÖNCE yazdığı düşünme/ön-söz cümlelerini kırpar
+# (ör. "I have sufficient focused observation. Let me... Now I'll produce the report.").
+# Bu metin çok-turlu tarayıcı gözleminden sonra bazen `result`'ın başına sızıp
+# markdown rapora karışıyor. Yalnız İLK markdown-yapısal satırdan (başlık/tablo/
+# yatay-çizgi/HTML-yorum/blok-alıntı/kod-çiti) ÖNCEKİ düz-metin ön-sözü atar; yapısal
+# içerik en baştan başlıyorsa VEYA ön-söz JSON/uzun gövde ise hiçbir şeye dokunmaz (güvenli).
+_YAPISAL_ONEK = ("#", "|", "---", "<!--", ">", "```")
+
+
+def _onsoz_kirp(metin: str) -> str:
+    satirlar = metin.split("\n")
+    ilk_yapisal = None
+    for i, s in enumerate(satirlar):
+        st = s.strip()
+        if not st:
+            continue
+        if st.startswith(_YAPISAL_ONEK):
+            ilk_yapisal = i
+            break
+        # düz-metin satırı (ön-söz adayı) — taramaya devam
+    if not ilk_yapisal:            # None (hiç yapısal yok) veya 0 (baştan yapısal) → dokunma
+        return metin
+    onsoz = "\n".join(satirlar[:ilk_yapisal]).strip()
+    # Güvenlik: ön-söz kısa, düz prozа olmalı; JSON/veri gövdesi ({ } ile) ASLA kırpılmaz.
+    if not onsoz or "{" in onsoz or len(onsoz) > 600:
+        return metin
+    return "\n".join(satirlar[ilk_yapisal:]).lstrip("\n")
+
+
 def _canli_app_sifre_redakte(metin: str) -> str:
     """Belt-and-suspenders: prompt'taki 'şifreyi çıktıya yazma' kuralına EK olarak,
     yapılandırılmış canlı-uygulama giriş şifresi çıktıda görünürse DETERMİNİSTİK temizle.
@@ -3362,13 +3391,19 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
         pass
 
     # Canlı gözlem İSTENDİ ama GERÇEKLEŞMEMİŞ olabilir mi? (sessiz-düşüş tespiti — Faz 7)
-    # Tek turn (hiç araç kullanılmadı) veya browser aracı reddi → MCP/Chrome erişilememiş
-    # olabilir; analiz URL'lere dayalı iddiaları DOĞRULANMAMIŞ üretmiş olabilir. Sessiz
-    # kalmasın: net uyarı logla + subprocess çıktısına yaz (analist app log'unda görür).
+    # Tek turn (hiç araç kullanılmadı) veya İZİN VERİLEN bir tarayıcı aracının reddi →
+    # MCP/Chrome erişilememiş olabilir; analiz URL'lere dayalı iddiaları DOĞRULANMAMIŞ
+    # üretmiş olabilir. Sessiz kalmasın: net uyarı logla + subprocess çıktısına yaz.
+    # NOT: İzin listesinde OLMAYAN yardımcı araçların (browser_evaluate/screenshot, Bash)
+    # reddi BEKLENEN ve zararsızdır — model whitelist DIŞINA uzanmıştır, gözlemin
+    # başarısızlığı DEĞİLDİR; bunlar `_browser_reddi`'yi tetiklememeli (aksi halde çekirdek
+    # gözlem 29-57 tur başarıyla yapılsa bile yanlışlıkla "yapılmadı" damgası basılıyordu).
     if canli_uygulama_kapsami and _live_args:
         _denials = veri.get("permission_denials") or []
         _turns = veri.get("num_turns") or 0
-        _browser_reddi = any(("playwright" in str(d) or "browser" in str(d)) for d in _denials)
+        _izinli_araclar = set(LIVE_APP_ALLOWED_TOOLS)
+        _red_araclar = [(d.get("tool_name") if isinstance(d, dict) else str(d)) or "" for d in _denials]
+        _browser_reddi = any(a in _izinli_araclar for a in _red_araclar)
         _yapildi = not (_browser_reddi or _turns <= 1)
         # UI'nın "Gözlem Raporu" rozeti için makine-doğrulanmış durum (log'un yanında).
         _gozlem_durum_yaz(yapildi=_yapildi, turns=_turns, reddedilen=[str(d)[:120] for d in _denials],
@@ -3388,6 +3423,9 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
             "claude CLI çıktısı '%s' nedeniyle erken bitti (num_turns=%s) — "
             "analiz eksik olabilir.", stop, veri.get("num_turns"),
         )
+    # Canlı gözlem çok-turlu tarama sonrası rapor ÖNCESİ ajan ön-sözü sızdırabilir → kırp.
+    if canli_uygulama_kapsami and _live_args:
+        yanit = _onsoz_kirp(yanit)
     return _canli_app_sifre_redakte(yanit)
 
 

@@ -89,6 +89,16 @@ Bulguların çoğu **Jira Köprüsü** (bu oturumun yeni kodu) + CLI-mod token'�
 > `/api/sorular/*` admin-gate (AUTH-sunucu modu; naif ekleme analist işlevini kırar), ilk-tarama eski yorum (davranış kararı),
 > UI tasarım (12 öneri), açık-soru birleştirmesi. → BAKIM-KONTROL sonraki turlarda.
 
+### 2026-09-11 — Canlı uçtan-uca doğrulama (gerçek analiz, kota harcandı)
+Restart sonrası yeni kod (`71db3d4`) canlı doğrulandı: **(1) Jira Köprüsü** `/analyst_agent analiz` (MBSTRADE-1249) — komut algılandı, CLI+canlı gözlem (~6 dk / 29 tur), gövdeye yazıldı (orijinal talep ×1 + teknik analiz ×1, **çift-başlık yok**), açık sorular ayrı yorum, scope doğru, task-keyword RAG, kilit+döngü koruması+fail-closed+CSRF — hepsi çalıştı. **(2) Süreç Analizi** (`ORNEK-DOKUMAN.md`) — onay kapısına geldi, **gömülü Q&A canlı çalıştı** (5 UI + 1 API cevabı işlendi → gövdeye `[K: Analist cevabı]` → sorular 8→2 yakınsadı; uydurma yok). Analistin (bir analist) "açık sorular tek tek görünmüyor" sorunu çözülmüş — teyit edildi.
+
+> **✅ UYGULANDI (canlı-doğrulama bulguları):**
+> **[Bulgu 1 — gözlem uyarısı false-positive]** `_api_cagri_cli` sessiz-düşüş sezgisi (`base.py`) HERHANGİ "playwright/browser" reddini `_browser_reddi` sayıyordu → izin listesi DIŞINDAKİ yardımcı araç (`browser_evaluate`/`browser_take_screenshot`/`Bash`) reddi de tetikliyordu; çekirdek gözlem 29-57 tur başarıyla yapılsa bile `.gozlem-durum.json yapildi:false` + yanlış uyarı. **Fix:** yalnız `LIVE_APP_ALLOWED_TOOLS` içindeki (izinli) aracın reddi gerçek sorun sayılır; `num_turns<=1` guard'ı korundu. (`browser_evaluate` bilinçli izin-dışı — keyfi JS güvenliği; allowlist genişletilmedi.)
+> **[Bulgu 2 — ajan ön-söz sızıntısı]** Canlı-gözlem sonrası ajan rapor ÖNCESİ düşünme cümlesini (`"I have sufficient focused observation... Now I'll produce the report."`) `result`'ın başına sızdırıp markdown çıktıya karıştırıyordu. **Fix:** `_onsoz_kirp` — yalnız ilk markdown-yapısal satırdan önceki kısa (<600, `{` yok) düz-metin ön-sözü kırpar; canlı-gözlem yolunda uygulanır; JSON/uzun gövde korunur. Birim testi 4 senaryo yeşil.
+
+> **KALAN (canlı-doğrulamada keşfedilen — backlog):**
+> **[Bulgu 1b — hedefli soru-uygulama isabetsiz]** `_sorulari_hedefli_uygula` → `revizyon_ai.bolum_bul(metin, bagli_id)` süreç analizinde tüm `bagli_id`'ler (PA-003, BR-006, EF-001…) için başarısız oldu → `hedefli:0, tam_uretim:6` (hepsi tam-regenerasyona düştü). Sonuç DOĞRU ama pahalı (tüm doküman yeniden yazılır + ön-söz yeniden sızabilir). `bolum_bul` süreç-analizi ID/başlık deseniyle hizalanmalı (teknik analizde çalışıyor). Dikkatli tur — çıktı kalitesini bozmadan.
+
 #### P0 — önce bunlar
 - **[GÜV] Allowlist varsayılan AÇIK + onay aynı güvenilmez kanaldan** (`jira_kopru.py:197`, `.env.example`).
   `JIRA_KOPRU=true` + allowlist boş ise: konfigüre projede yorum yazabilen HERHANGİ biri `analiz` (açıklamayı ezer)
