@@ -4,11 +4,13 @@ macOS masaüstü uygulaması. BRD/süreç dokümanı → RAG destekli analiz →
 Flask + Python **3.10+** (`str|None`), tarayıcı SPA `http://localhost:5002`.
 İki akış: **Süreç → Teknik → Jira** (ana, FE/BE ayrımı) · **BRD → Kapsam**.
 
-## ⚠️ Bu çalışma alanı = v2 KLONU (`brd-analyst-agent-v2`, dal `v2`, port **5003**)
-Bu dizin, üretimdeki eski uygulamanın (`/Users/dt/brd-analyst-agent`, port **5002**, dal `main`)
-**paralel klonudur**. Eski uygulamaya ve 5002'ye **dokunulmaz** — analistler kesintisiz kullanır.
-Tüm v2 geliştirmesi burada, ayrı portta (`PORT=5003 ./start.sh`) yapılır. Rollback çapası:
-`v1-stable` etiketi. Yol haritası (çapa, önce oku): **`docs/ROADMAP-V2.md`**.
+## ⚠️ Bu çalışma alanı = Analyst Studio v2 (AYRI repo · dal `main` · port **5003**)
+Dizin: `brd-analyst-agent-v2`. **Repo: `ugurcangir-design/analyst-studio` (Private), dal `main`.**
+v2 artık KENDİ reposunda (eski `Analysys_Agent` reposundan ayrıldı — o repo v1'i barındırır,
+`main`=v1/port 5002; bir süre sonra emekli edilecek). Geçiş döneminde üretimdeki eski uygulamaya
+(`/Users/dt/brd-analyst-agent`, port **5002**) **dokunulmaz** — analistler kesintisiz kullanır.
+Tüm v2 geliştirmesi burada, ayrı portta (`PORT=5003 ./start.sh`) yapılır. AUTO_UPDATE `origin/main`'i
+(dinamik: mevcut dal) `ff-only` çeker. Yol haritası (çapa, önce oku): **`docs/ROADMAP-V2.md`**.
 - **Ekran-eklenebilir arayüz** (Faz 0): ekran page blokları `templates/screens/*.html` partial'larına
   çıkarılıp `index.html`'de `{% include %}` edilir — bkz. `templates/screens/README.md`.
   İlk çıkarılan ekran: `kilavuz`. Kalan ekranlar Faz 2'de kademeli taşınır.

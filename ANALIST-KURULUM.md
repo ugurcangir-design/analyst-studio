@@ -61,14 +61,14 @@ açıldıktan sonra içine `/status` yazın; **e-posta adresinizin @sans-technol
 
 ## Bölüm B — Uygulamayı kurma (bir kez)
 
-### B1. Depoyu indirin (v2 dalı)
-Projeyi koymak istediğiniz klasöre geçip (örn. ana klasör), v2 dalını klonlayın:
+### B1. Depoyu indirin
+Projeyi koymak istediğiniz klasöre geçip (örn. ana klasör) depoyu klonlayın:
 ```bash
 cd ~
-git clone -b v2 https://github.com/ugurcangir-design/Analysys_Agent.git analyst-studio-v2
-cd analyst-studio-v2
+git clone https://github.com/ugurcangir-design/analyst-studio.git
+cd analyst-studio
 ```
-> GitHub deposuna erişiminiz yoksa (özel depo) ekip liderinden davet/erişim isteyin.
+> GitHub deposuna erişiminiz yoksa (özel depo) ekip liderinden davet/erişim isteyin (aşağıda "Erişim isteme" akışı).
 
 ### B2. Kurulumu çalıştırın
 ```bash

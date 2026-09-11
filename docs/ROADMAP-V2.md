@@ -240,7 +240,7 @@ tek faza odaklı, bu plana referanslı.
 | Öğe | Değer |
 |---|---|
 | Klon dizini | `/Users/dt/brd-analyst-agent-v2` |
-| Git dalı | `v2` (remote: `Analysys_Agent`) |
+| Git dalı | `main` (remote: `ugurcangir-design/analyst-studio`, Private) |
 | Rollback çapası | `v1-stable` etiketi (commit `40c847c`) |
 | v2 portu | **5003** (`PORT=5003 ./start.sh`) |
 | Eski (dokunulmaz) | `5002` — `/Users/dt/brd-analyst-agent`, kesintisiz |
