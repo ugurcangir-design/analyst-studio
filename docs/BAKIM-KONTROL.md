@@ -73,6 +73,11 @@ Bulguların çoğu **Jira Köprüsü** (bu oturumun yeni kodu) + CLI-mod token'�
 > (aşırı-isabet/az-alaka referans azaltıldı → daha küçük getirim). **NOT:** açık-soruları ana çağrıya BİRLEŞTİRME (P0-1)
 > bilinçli ERTELENDİ — `_gorev_acik_sorular_uret` yakınsama (turlar içinde azalma) yük-taşıyan bir özellik; birleştirme
 > onu + çıktı kalitesini riske atar (yapıyı bozmadan ilkesi). Ayrı, dikkatli bir turda ele alınmalı.
+> **✅ UYGULANDI (B grubu — prompt tekrar temizliği):** 4 rol promptundaki (`surec/teknik/brd/kapsam_analizi_rol`)
+> "BAĞLAM KULLANIMI" başlığı → "KAYNAKLARIN KULLANIMI"; kaynak-öncelik SIRASI + çakışma-kuralı verbatim tekrarları
+> kaldırıldı → tek KANONİK blok (`_ORTAK_EK_KURALLAR`, gövde promptunda 1×). Per-kaynak analize-özel kullanım notları
+> + BRD/Kapsam'daki ilke KORUNDU (değişmez zedelenmedi). Doğrulandı: 4 gövde promptunda "Öncelik Sırası"+"Çakışma Tespit
+> Kuralı" tam 1×, eski tekrar başlığı 0. (Gerçek analiz çalıştırılmadı — kota; yapısal doğrulama yapıldı.)
 > **KALAN (B grubu / P2 / tasarım):** aşağıdaki maddeler backlog — bilinçli ele alınacak.
 
 #### P0 — önce bunlar
