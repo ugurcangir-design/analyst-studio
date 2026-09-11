@@ -618,8 +618,21 @@ def _tek_tur_ic(pencere_dk: int | None = None) -> dict:
     durum = _durum_yukle()
     islenen_kayit = durum.setdefault("islenen", {})
 
+    # WATERMARK: son taramadan bu yana GEÇEN süre kadar geriye bak (+2 dk örtüşme), `pencere` ile
+    # sınırlı. Steady-state'te (ör. 60s aralık) yalnız son ~1-2 dk güncellenen task'lar taranır →
+    # her turda tüm task'ların TÜM yorumlarını çekmek yerine çok daha az Jira REST çağrısı.
+    # İlk tarama / eski son_tur → tam `pencere` (kaçırma yok).
+    etkin_pencere = pencere
+    if durum.get("son_tur"):
+        try:
+            gecen_dk = (datetime.now(timezone.utc) - datetime.strptime(
+                durum["son_tur"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)).total_seconds() / 60
+            etkin_pencere = min(pencere, max(2, int(gecen_dk) + 2))
+        except Exception:
+            pass
+
     projeler = ",".join(ayar["projeler"])
-    jql = f"project in ({projeler}) AND updated >= \"-{pencere}m\" ORDER BY updated DESC"
+    jql = f"project in ({projeler}) AND updated >= \"-{etkin_pencere}m\" ORDER BY updated DESC"
     body = {"jql": jql, "fields": ["summary"], "maxResults": 100}
     data = atlassian_post("/rest/api/3/search/jql", body=body, cloud_id=cloud_id)
     task_keys = [i.get("key") for i in data.get("issues", []) if i.get("key")]

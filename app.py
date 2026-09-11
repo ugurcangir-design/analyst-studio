@@ -2955,6 +2955,10 @@ def sorular_uygula():
     def _calistir(gruplar):
         from skills.sorular import (uygulandi_isaretle, parse_ve_birlestir)
         sonuclar = []
+        # Aynı output/*.md + output/revizyon/ oturumuna yazan /api/adim/duzelt ile YARIŞMA.
+        # adim/duzelt _revizyon_lock'u non-blocking alır (409) → burada bloklu al: serileşir,
+        # circular-wait yok (adim/duzelt bu worker'ı beklemez, yalnız 409 döner) → deadlock yok.
+        _revizyon_lock.acquire()
         try:
             for kaynak, sorular in gruplar.items():
                 if kaynak not in IZIN_VERILEN_CIKTILAR:
@@ -2986,6 +2990,7 @@ def sorular_uygula():
             _sorular_uygula_durum.update({"calisiyor": False, "sonuclar": sonuclar,
                                           "mesaj": f"{basari}/{len(sonuclar)} dosya güncellendi",
                                           "bitti": time.time()})
+            _revizyon_lock.release()
             _sorular_uygula_lock.release()
 
     threading.Thread(target=_calistir, args=(gruplar,), daemon=True).start()

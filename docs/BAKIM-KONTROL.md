@@ -78,6 +78,10 @@ Bulguların çoğu **Jira Köprüsü** (bu oturumun yeni kodu) + CLI-mod token'�
 > kaldırıldı → tek KANONİK blok (`_ORTAK_EK_KURALLAR`, gövde promptunda 1×). Per-kaynak analize-özel kullanım notları
 > + BRD/Kapsam'daki ilke KORUNDU (değişmez zedelenmedi). Doğrulandı: 4 gövde promptunda "Öncelik Sırası"+"Çakışma Tespit
 > Kuralı" tam 1×, eski tekrar başlığı 0. (Gerçek analiz çalıştırılmadı — kota; yapısal doğrulama yapıldı.)
+> **✅ UYGULANDI (P2 — kilit yarışı + watermark):** `/api/sorular/uygula` arka plan worker'ı artık `_revizyon_lock`'u
+> tutuyor → `/api/adim/duzelt` ile aynı `output/*.md`+`output/revizyon/` oturumuna YARIŞMA yok (adim/duzelt non-blocking →
+> 409; circular-wait yok → deadlock yok). Köprü döngüsü JQL'e **watermark** (son taramadan geçen süre + 2dk örtüşme, `pencere`
+> ile sınırlı) → steady-state'te her turda tüm task yorumlarını çekmek yerine yalnız yeni-güncellenen task'lar → çok daha az Jira REST.
 > **KALAN (B grubu / P2 / tasarım):** aşağıdaki maddeler backlog — bilinçli ele alınacak.
 
 #### P0 — önce bunlar
