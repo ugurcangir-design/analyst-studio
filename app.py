@@ -87,7 +87,7 @@ def _sirlari_yukle() -> None:
         from skills.base import sir_kaydet, load_context_filter
         sir_kaydet(os.getenv("ANTHROPIC_API_KEY", ""))
         _ctx = load_context_filter() or {}
-        sir_kaydet((_ctx.get("live_app_auth") or {}).get("password", ""))
+        sir_kaydet((_ctx.get("live_app_auth") or {}).get("password", ""), asgari=4)
     except Exception:
         pass
 
@@ -1924,6 +1924,16 @@ def _mesgul_mu() -> str | None:
         return "yeniden üretim sürüyor"
     if _revizyon_lock.locked():
         return "revizyon düzenlemesi sürüyor"
+    # Jira Köprüsü AI turu (yorum/UI kanalı) — otomatik güncelleme/disk temizliği bunu kesmesin.
+    try:
+        from skills import jira_kopru as _jk
+        if _jk._TUR_LOCK.locked():
+            return "Jira köprüsü işlemi sürüyor"
+    except Exception:
+        pass
+    # Soru cevaplarını analize işleme (arka plan) sürüyor mu?
+    if _sorular_uygula_durum.get("calisiyor"):
+        return "soru cevapları uygulanıyor"
     return None
 
 
@@ -3634,7 +3644,7 @@ def context_filter_kaydet():
     # Yeni/değişen canlı-uygulama şifresini log redaksiyon sır listesine ekle (P1-D).
     try:
         from skills.base import sir_kaydet
-        sir_kaydet(filtre["live_app_auth"]["password"])
+        sir_kaydet(filtre["live_app_auth"]["password"], asgari=4)
     except Exception:
         pass
     logger.info("Bağlam filtresi güncellendi.")

@@ -151,4 +151,9 @@ kontrol("düzelt ilgili kısmı düzeltip gövdeye yazdı",
 # ── döngü koruması: kendi 🤖 yanıtımız komut sayılmaz ────────────────────────
 kontrol("kendi yanıtı komut değil", jk._komut_coz(jk.ROBOT_IMZA + " ✅ güncellendi", PFX) is None)
 
+# ── GÜVENLİK: yazar allowlist fail-closed + accountId-only ────────────────────
+kontrol("allowlist boş → fail-closed (yetki yok)", jk._yazar_izinli({"hesap": "a", "yazar": "Ali"}, []) is False)
+kontrol("allowlist accountId ile eşleşir", jk._yazar_izinli({"hesap": "a"}, ["a"]) is True)
+kontrol("displayName yetkiye SOKULMAZ (spoof koruması)", jk._yazar_izinli({"yazar": "Ali", "hesap": "x"}, ["Ali"]) is False)
+
 print(f"\nJIRA KÖPRÜSÜ TESTLERİ GEÇTİ ({basari} kontrol)")

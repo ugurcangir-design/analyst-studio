@@ -164,7 +164,8 @@ Tüm v2 geliştirmesi burada, ayrı portta (`PORT=5003 ./start.sh`) yapılır. A
   task'tan hedef ekran (`_canli_gorev_baglam`→`canli_uygulama_baglami_hazirla(base_url_override, hedef_tarif)`) ·
   steering `analiz <talimat>`. (Ekran akışları `ekran_baglami=True` ile aynen korunur.) **Korkuluk:** yorum=KOMUT ·
   YENİ task açma yalnız `onayla` sonrası · çift-uygulama önlemi · eşzamanlı `_TUR_LOCK` · döngü koruması (kendi
-  `🤖` yanıtı prefiksle başlamaz + işlenen yorum id'leri `output/jira-kopru/durum.json`) · `JIRA_KOPRU_YAZAR_ALLOWLIST`.
+  `🤖` yanıtı prefiksle başlamaz + işlenen yorum id'leri `output/jira-kopru/durum.json`) · **`JIRA_KOPRU_YAZAR_ALLOWLIST`
+  (yalnız accountId; BOŞSA fail-closed → yorum komutları İŞLENMEZ; displayName yetkiye sokulmaz).** UI kanalı owner-gated (allowlist'ten bağımsız).
   Env: `JIRA_KOPRU_PROJELER` (zorunlu) / `_ARALIK` / `_PENCERE_DK` / `_KOMUT`. **Agent UI kanalı** (2. kanal):
   `screens/kopru.html` (nav "Jira Köprüsü", owner) — açık sorular arayüzde de görünür, oradan cevaplanıp analiz
   sürdürülür; Jira yorumu ile AYNI beyin (`jira_kopru.ui_komut`→`_komut_uygula`+`jira_yorum_ekle`, `_TUR_LOCK`);

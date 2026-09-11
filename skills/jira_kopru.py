@@ -13,9 +13,10 @@ Inbound bağlantı/webhook/tünel GEREKMEZ — mevcut OAuth + lokal mimariyle uy
 GÜVENLİK İLKELERİ (bkz. CLAUDE.md):
   • Yorum bir KOMUTtur, talimat kaynağı değil (prompt-injection sınırı). Analiz
     girdisi task'ın KENDİ içeriğidir; yorumdaki serbest metin yalnız komut argümanı.
-  • Okuma/analiz otomatik (yalnız yorum yazar, Jira ALANLARINA dokunmaz).
-    Geri-döndürülemez yazma (task güncelleme / yeni task açma) → TASLAK + ONAY
-    (`/analyst_agent onayla`). MVP-2.
+  • YAZMA KAPILARI: `analiz`/`cevap`/`düzelt`/`güncelle` task AÇIKLAMASINI (gövde) yazar —
+    orijinal talep korunur (`_orijinal_talep_ayikla`/`_orijinal_gorev`). Yeni Jira TASK açma
+    (`ilişkili-aç`) → TASLAK + `onayla`. GÜVENLİK: yorum komutları yalnız `JIRA_KOPRU_YAZAR_ALLOWLIST`
+    accountId'lerinden işlenir; allowlist BOŞSA fail-closed (hiç işlenmez). Owner UI kanalı (admin_gerekli) ayrı.
   • Varsayılan KAPALI: `JIRA_KOPRU=false`. Owner `.env`'de açar.
   • Kendi yanıtlarımız `ROBOT_IMZA` ile başlar ve komut prefiksiyle BAŞLAMAZ →
     kendi yorumlarımızı asla komut sanmayız (döngü koruması). İşlenen yorum
@@ -54,6 +55,7 @@ DURUM_DOSYA = BASE_DIR / "output" / "jira-kopru" / "durum.json"
 
 ROBOT_IMZA = "🤖 **Analyst Agent**"      # yanıtlarımızın başı — döngü koruması + tanınırlık
 _MAX_ISLENEN = 500                        # durum dosyasında tutulan işlenmiş yorum tavanı
+_MAX_SON_ANALIZ = 40                      # önbellekte tutulan task analizi (markdown) tavanı — disk şişmesin
 _TUR_LOCK = threading.Lock()             # aynı anda TEK tur — arka plan döngüsü + elle /tara çakışmasın (çift işleme önlemi)
 _ANALIZ_TAZE_DK = 60                      # `analiz` çıktısı bu kadar dakika içindeyse güncelle/ilişkili-aç yeniden ANALİZ ETMEZ
 _MAX_ILISKILI = 5                         # `ilişkili-aç` en fazla bu kadar task önerir
@@ -89,7 +91,7 @@ def ayarlar() -> dict:
         "pencere_dk": max(5, int(os.getenv("JIRA_KOPRU_PENCERE_DK", "120") or 120)),
         "projeler": projeler,
         "komut": os.getenv("JIRA_KOPRU_KOMUT", "/analyst_agent").strip() or "/analyst_agent",
-        "yazar_allowlist": izinli,   # displayName veya accountId; boş = herkes
+        "yazar_allowlist": izinli,   # yalnız accountId; BOŞ = FAIL-CLOSED (yorum komutları işlenmez)
     }
 
 
@@ -104,11 +106,16 @@ def _durum_yukle() -> dict:
 
 def _durum_yaz(d: dict) -> None:
     DURUM_DOSYA.parent.mkdir(parents=True, exist_ok=True)
-    # işlenen yorum kaydı sınırsız büyümesin — en yeni _MAX_ISLENEN tut
+    # Sınırsız büyümeyi önle — en yeni N kaydı tut (işlenen yorum id'leri + analiz önbelleği).
     islenen = d.get("islenen", {})
     if len(islenen) > _MAX_ISLENEN:
         sirali = sorted(islenen.items(), key=lambda kv: kv[1].get("zaman", ""))
         d["islenen"] = dict(sirali[-_MAX_ISLENEN:])
+    # son_analiz her task'ın tam analiz markdown'ını tutar → en yeni _MAX_SON_ANALIZ task ile sınırla.
+    son_analiz = d.get("son_analiz", {})
+    if len(son_analiz) > _MAX_SON_ANALIZ:
+        sirali = sorted(son_analiz.items(), key=lambda kv: (kv[1] or {}).get("zaman", ""))
+        d["son_analiz"] = dict(sirali[-_MAX_SON_ANALIZ:])
     DURUM_DOSYA.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -195,9 +202,12 @@ def _komut_coz(metin: str, prefix: str) -> tuple[str, str] | None:
 
 
 def _yazar_izinli(yorum: dict, izinliler: list[str]) -> bool:
+    """Yorum komutunu çalıştırma yetkisi. GÜVENLİK: yalnız `accountId` (kararlı, tekil)
+    eşleşir — `displayName` kullanıcı-düzenlenebilir/taklit edilebilir, yetkiye SOKULMAZ.
+    Boş allowlist FAIL-CLOSED (çağıran _tek_tur_ic zaten boşken hiç işlemez)."""
     if not izinliler:
-        return True
-    return yorum.get("yazar", "") in izinliler or yorum.get("hesap", "") in izinliler
+        return False
+    return yorum.get("hesap", "") in izinliler
 
 
 def _yardim_metni(prefix: str) -> str:
@@ -594,6 +604,13 @@ def _tek_tur_ic(pencere_dk: int | None = None) -> dict:
     ayar = ayarlar()
     if not ayar["projeler"]:
         return {"ok": False, "error": "JIRA_KOPRU_PROJELER tanımlı değil (.env)."}
+    # GÜVENLİK — FAIL-CLOSED: allowlist BOŞ iken YORUM kanalı komutları İŞLENMEZ. Aksi halde
+    # projedeki herhangi bir kullanıcı analiz/task-açma tetikleyip kendi taslağını onaylayabilir.
+    # Owner UI kanalı (admin_gerekli) etkilenmez. Owner .env'de accountId ile allowlist tanımlamalı.
+    if not ayar["yazar_allowlist"]:
+        return {"ok": False, "fail_closed": True,
+                "error": "JIRA_KOPRU_YAZAR_ALLOWLIST boş — güvenlik gereği yorum komutları işlenmez "
+                         "(fail-closed). Yetkili analistlerin Jira accountId'lerini ekleyin."}
     cloud_id = _cloud_id()   # Jira bağlı değilse net RuntimeError
     pencere = pencere_dk or ayar["pencere_dk"]
     prefix = ayar["komut"]

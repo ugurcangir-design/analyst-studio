@@ -957,10 +957,9 @@ görmesini sağlar. Ekip bu raporu okuyarak:
 2. Revize BRD (yüklenen) — değerlendirilen yeni versiyon
 3. Önceki BRD Analizi (varsa) — revize BRD'nin bilinen eksikleri
 4. Swagger/OpenAPI — çalışan API sözleşmesi; kapsam değişiminin API etkisi, yeni endpoint gerekir mi?
-5. Canlı uygulama gözlemi — Claude MCP/Chrome ile doğrulanmış mevcut davranış; değişimin gerçek etkisi
+5. Canlı uygulama gözlemi — Claude MCP/Chrome ile doğrulanmış mevcut davranış; değişimin gerçek etkisi + her alternatifin UI etkisi
 6. Confluence — mevcut mimari/sistem kısıtları değişimi etkiliyor mu?
 7. Jira task geçmişi — benzer kapsam değişiklikleri daha önce yaşandı mı?
-7. Canlı uygulama gözlemi — her alternatifin UI etkisi
 
 Referans YOKSA: yalnızca iki BRD'ye dayan; teknik etki tahminlerini
 "doğrulanmalı" olarak işaretle.
@@ -3046,12 +3045,14 @@ _SIR_DESENLER = [
 ]
 
 
-def sir_kaydet(*degerler) -> None:
-    """Redaksiyon için sır literalleri ekle (>=8 karakter). Fail-safe."""
+def sir_kaydet(*degerler, asgari: int = 8) -> None:
+    """Redaksiyon için sır literalleri ekle (>= `asgari` karakter). Genel sırlar için 8
+    (kısa yaygın dizeleri aşırı-redakte etme). BİLİNEN kısa sırlar (canlı-app şifresi)
+    için çağıran `asgari=4` geçer → 4-7 karakterlik şifre de loglardan maskelenir. Fail-safe."""
     with _sir_lock:
         for d in degerler:
             s = str(d or "").strip()
-            if len(s) >= 8:
+            if len(s) >= asgari:
                 _SIR_LITERALLER.add(s)
 
 

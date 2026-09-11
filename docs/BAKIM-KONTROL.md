@@ -65,6 +65,11 @@ Yük taşıyan sözleşmeler. Bir değişiklik bunlardan birini etkiliyorsa: ön
 Genel: **ruff temiz**, hijyen güçlü, cache mimarisi 8.5/10, XML/parser tutarlı. Kritik kod-regresyonu yok.
 Bulguların çoğu **Jira Köprüsü** (bu oturumun yeni kodu) + CLI-mod token'ında yoğunlaşıyor.
 
+> **✅ UYGULANDI (A grubu, güvenli hızlı düzeltmeler):** GÜV allowlist fail-closed + accountId-only (docstring/`.env.example`/CLAUDE.md güncel);
+> KOD `_mesgul_mu()` köprü `_TUR_LOCK` + soru-uygula koordinasyonu; UI global `:focus-visible`; KOD `durum.json` `son_analiz` budama (`_MAX_SON_ANALIZ=40`);
+> GÜV kısa (<8) canlı-app şifre redaksiyonu (`sir_kaydet(asgari=4)`); PROMPT `kapsam_analizi_rol` numaralandırma+tekrar temizliği. (jira_kopru testi 32; ruff temiz.)
+> **KALAN (B grubu / P2 / tasarım):** aşağıdaki maddeler backlog — bilinçli ele alınacak.
+
 #### P0 — önce bunlar
 - **[GÜV] Allowlist varsayılan AÇIK + onay aynı güvenilmez kanaldan** (`jira_kopru.py:197`, `.env.example`).
   `JIRA_KOPRU=true` + allowlist boş ise: konfigüre projede yorum yazabilen HERHANGİ biri `analiz` (açıklamayı ezer)
