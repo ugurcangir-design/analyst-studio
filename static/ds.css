@@ -35,7 +35,7 @@
 .ds-step.active .num{background:var(--accent);color:var(--on-accent)}
 .ds-step.todo .num{background:var(--surface2);color:var(--text3);border:1px solid var(--border-strong)}
 .ds-step.todo .lbl{color:var(--text3);font-weight:500}
-.ds-step.active{background:linear-gradient(180deg,rgba(45,212,191,.06),transparent)}
+.ds-step.active{background:linear-gradient(180deg,var(--accent-soft),transparent)}
 .ds-step.active::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--accent)}
 
 /* ── Panel başlığı uzantıları (aşama etiketi + not) ────────────────────── */

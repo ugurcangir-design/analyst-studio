@@ -8,9 +8,9 @@
           <h1>Jira Köprüsü</h1>
           <p>Jira task'larını buradan analiz et, açık soruları cevapla, analizi sürdür — Jira yorumlarıyla (<code>/analyst_agent</code>) aynı beyin.</p>
         </div>
-        <div class="ph-actions">
-          <input id="kopru-key" class="ds-inp" placeholder="MBSTRADE-1234" style="width:150px;text-transform:uppercase">
-          <input id="kopru-talimat" class="ds-inp" placeholder="(ops.) analiz talimatı" style="width:190px">
+        <div class="ph-actions" style="flex-wrap:wrap;gap:6px">
+          <input id="kopru-key" class="ds-inp" placeholder="PROJE-1234" style="width:130px;text-transform:uppercase">
+          <input id="kopru-talimat" class="ds-inp" placeholder="(ops.) analiz talimatı" style="width:170px;max-width:100%">
           <button class="btn btn-primary btn-sm" onclick="kopruIs('analiz')">Analiz Et</button>
           <button class="btn btn-outline btn-sm" onclick="kopruYukle()">Yenile</button>
         </div>
@@ -53,7 +53,11 @@
           : `<span class="i">!</span>Köprü KAPALI — <code>.env</code>'de <code>JIRA_KOPRU=true</code> + Yeniden Başlat. (Analizler yine burada listelenir.)`;
         du.className = 'ds-hint';
         if (!d.kayitlar || !d.kayitlar.length){
-          el.innerHTML = '<div class="panel"><div class="panel-body ds-hint">Henüz köprü analizi yok. Yukarıdan bir task anahtarı girip <b>Analiz Et</b>’e basın, ya da Jira’da task yorumuna <code>/analyst_agent analiz</code> yazın.</div></div>';
+          el.innerHTML = '<div class="ds-empty">'
+            + '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5h16M4 12h16M4 19h10"/></svg>'
+            + '<div class="t">Henüz köprü analizi yok</div>'
+            + '<div class="ds-hint" style="margin:0">Bir task anahtarı girip <b>Analiz Et</b>’e basın, ya da Jira’da task yorumuna <code>/analyst_agent analiz</code> yazın.</div>'
+            + '</div>';
           return;
         }
         el.innerHTML = d.kayitlar.map(kopruKart).join('');
