@@ -156,4 +156,26 @@ kontrol("allowlist boş → fail-closed (yetki yok)", jk._yazar_izinli({"hesap":
 kontrol("allowlist accountId ile eşleşir", jk._yazar_izinli({"hesap": "a"}, ["a"]) is True)
 kontrol("displayName yetkiye SOKULMAZ (spoof koruması)", jk._yazar_izinli({"yazar": "Ali", "hesap": "x"}, ["Ali"]) is False)
 
+# ── İSTEK 1: yetkisiz/entegrasyonsuz yazara TAM SESSİZLİK (_tek_tur_ic akışı) ──
+_yorum_cagrilari: list = []
+jk.jira_yorum_ekle = lambda key, md: _yorum_cagrilari.append((key, md)) or True
+jk.atlassian_post = lambda path, body=None, cloud_id=None: {"issues": [{"key": "MBS-1"}]}
+jk._issue_yorumlari = lambda key, cloud_id: [
+    {"id": "c1", "metin": f"{PFX} analiz", "yazar": "Yabancı", "hesap": "intruder"},
+    {"id": "c2", "metin": f"{PFX} analiz", "yazar": "Ben", "hesap": "me"},
+]
+_durum_bellek: dict = {}
+jk._durum_yukle = lambda: dict(_durum_bellek)
+jk._durum_yaz = lambda d: (_durum_bellek.clear() or _durum_bellek.update(d))
+os.environ["JIRA_KOPRU_PROJELER"] = "MBS"
+os.environ["JIRA_KOPRU_YAZAR_ALLOWLIST"] = "me"
+
+_ozet = jk._tek_tur_ic()
+kontrol("yetkisiz yazara ⛔/red yanıtı YAZILMAZ (tam sessizlik)",
+        all("⛔" not in md and "yetkisinde değil" not in md for _, md in _yorum_cagrilari))
+kontrol("yalnız yetkili yazar için Jira yorumu (1 yanıt)", len(_yorum_cagrilari) == 1)
+kontrol("yetkili yazarın komutu işlendi", len(_ozet["islenen"]) == 1 and _ozet["islenen"][0]["komut"] == "analiz")
+kontrol("yetkisiz komut 'atlanan'a sayıldı", _ozet["atlanan"] >= 1)
+kontrol("yetkisiz yorum işlenen-id'ye eklenmedi", "c1" not in _durum_bellek.get("islenen", {}))
+
 print(f"\nJIRA KÖPRÜSÜ TESTLERİ GEÇTİ ({basari} kontrol)")

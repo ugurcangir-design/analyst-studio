@@ -655,13 +655,11 @@ def _tek_tur_ic(pencere_dk: int | None = None) -> dict:
                 continue  # komut değil (kendi 🤖 yanıtlarımız da buraya düşer)
             komut, arg = coz
             if not _yazar_izinli(y, ayar["yazar_allowlist"]):
-                # İşlendi say (tekrar denenmesin) ama reddi bildir.
-                islenen_kayit[cid] = {"key": key, "komut": komut, "zaman": _simdi(), "red": "yazar-izinsiz"}
+                # İSTEK 1 — TAM SESSİZLİK: entegrasyonu olmayan / yetkisiz yazara Jira'ya YANIT
+                # YAZILMAZ ve işlenen-id'ye EKLENMEZ (başka analistin kendi agent'ı, kendi durum
+                # dosyasında, kendi komutunu işleyebilsin). Yorum düz bir Jira girdisi olarak kalır;
+                # agent'ın varlığı yetkisiz kullanıcıya sızmaz. `atlanan` yalnız owner tanısı için.
                 atlanan += 1
-                try:
-                    jira_yorum_ekle(key, f"{ROBOT_IMZA}\n\n⛔ `{y['yazar']}` bu komutu çalıştırma yetkisinde değil.")
-                except Exception:
-                    pass
                 continue
             try:
                 yanit = _komut_uygula(komut, arg, key, prefix, durum)
