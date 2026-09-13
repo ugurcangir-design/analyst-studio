@@ -44,7 +44,7 @@ otomatikleştirir; her adımda insan onayı alarak kontrolü kullanıcıda tutar
 ```
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
 │  Tarayıcı SPA   │────▶│  Flask Sunucusu  │────▶│  Claude API     │
-│  (tek sayfa UI) │◀────│  (app.py, 5002)  │◀────│  (Anthropic)    │
+│  (tek sayfa UI) │◀────│  (app.py, 5003)  │◀────│  (Anthropic)    │
 └─────────────────┘     └──────────────────┘     └─────────────────┘
                                │
                     ┌──────────┼──────────┐

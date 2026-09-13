@@ -1,9 +1,9 @@
 # Analyst Studio (v2) — Analist Kurulum Kılavuzu
 
-Bu kılavuz, **test sürümü v2**'yi kendi Mac'inize kurmanız içindir. Adımları **sırayla** izleyin.
+Bu kılavuz, **Analyst Studio**'yu kendi Mac'inize kurmanız içindir. Adımları **sırayla** izleyin.
 Takıldığınız yerde en alttaki "Sorun Giderme" bölümüne bakın veya ekip liderine yazın.
 
-> Not: v2, mevcut sürümle (5002) çakışmaz; ikisi aynı anda çalışabilir. v2 **5003** portunda açılır.
+> Not: Uygulama **5003** portunda açılır (varsayılan). Analyst Studio'nun tek ve güncel sürümüdür.
 
 ---
 
@@ -131,7 +131,7 @@ Tarayıcıda açın: **http://localhost:5003**
 | Sayfa açılmıyor (5003) | Uygulamanın çalıştığından emin olun (ikon/`./start.sh`); tarayıcıda `http://localhost:5003`. |
 | Analiz hata verdi | Ekrandaki hata kartı "ne oldu / ne yapmalı" der; teknik ayrıntıyı "Teknik ayrıntı" altından açıp ekip liderine iletin. |
 | Sol menüde **Yetki** veya **Kullanım Raporu** görünüyor (analistte olmamalı) | Bunlar owner'a özeldir; `.env`'inize yanlışlıkla owner bayrağı (`OWNER_KONSOL` veya `YETKI_PANELI`) gelmiş demektir. Kaldırın: `sed -i '' '/^OWNER_KONSOL=/d; /^YETKI_PANELI=/d' .env` → sonra **Güncelleme → Yeniden Başlat**. (Kurulumu her zaman `bash setup.sh` ile yapın; ekip liderinin `.env`'ini/klasörünü kopyalamayın — owner ekranları sızar.) |
-| "Adres kullanımda" / boş sayfa (5003) | Başka bir kopya zaten 5003'te olabilir. `.env`'de `PORT=5003` olduğundan ve eski uygulamanızın 5002'de kaldığından emin olun. |
+| "Adres kullanımda" / boş sayfa (5003) | Analyst Studio'nun başka bir kopyası zaten 5003'te açık olabilir. Onu kapatın veya `.env`'de farklı bir PORT verin. |
 | Masaüstü ikonu oluşmadı | `xcode-select --install` → sonra `bash create_app.sh`. İkon olmadan da `./start.sh` ile çalışır. |
 
 ---

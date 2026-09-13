@@ -4,13 +4,13 @@ macOS masaüstü uygulaması. BRD/süreç dokümanı → RAG destekli analiz →
 Flask + Python **3.10+** (`str|None`), tarayıcı SPA `http://localhost:5003` (v2; v1 = 5002, ayrı dizin/süreç).
 İki akış: **Süreç → Teknik → Jira** (ana, FE/BE ayrımı) · **BRD → Kapsam**.
 
-## ⚠️ Bu çalışma alanı = Analyst Studio v2 (AYRI repo · dal `main` · port **5003**)
-Dizin: `brd-analyst-agent-v2`. **Repo: `ugurcangir-design/analyst-studio` (Private), dal `main`.**
-v2 artık KENDİ reposunda (eski `Analysys_Agent` reposundan ayrıldı — o repo v1'i barındırır,
-`main`=v1/port 5002; bir süre sonra emekli edilecek). Geçiş döneminde üretimdeki eski uygulamaya
-(`/Users/dt/brd-analyst-agent`, port **5002**) **dokunulmaz** — analistler kesintisiz kullanır.
-Tüm v2 geliştirmesi burada, ayrı portta (`PORT=5003 ./start.sh`) yapılır. AUTO_UPDATE `origin/main`'i
-(dinamik: mevcut dal) `ff-only` çeker. Yol haritası (çapa, önce oku): **`docs/ROADMAP-V2.md`**.
+## Analyst Studio — TEK ve NİHAİ sürüm (repo `ugurcangir-design/analyst-studio` · dal `main` · port **5003**)
+Dizin: `brd-analyst-agent-v2`. **Repo: `ugurcangir-design/analyst-studio`, dal `main`.**
+Bu, agent'ın **tek ve güncel** sürümüdür. Eski sürüm (v1 — `Analysys_Agent` reposu, port 5002,
+`/Users/dt/brd-analyst-agent`) **EMEKLİYE AYRILDI ve git'ten silinecek**; ona **referans/bağımlılık
+BIRAKILMAZ** (kırılır). Başlatma: `./start.sh` (varsayılan port **5003**; `app.py` default'u da 5003 →
+env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` çeker. Faz/tarihçe:
+**`docs/DEGISIKLIK-GECMISI.md`**; eski geçiş yol haritası (tarihsel): `docs/ROADMAP-V2.md`.
 - **Ekran-eklenebilir arayüz** (Faz 0): ekran page blokları `templates/screens/*.html` partial'larına
   çıkarılıp `index.html`'de `{% include %}` edilir — bkz. `templates/screens/README.md`.
   İlk çıkarılan ekran: `kilavuz`. Kalan ekranlar Faz 2'de kademeli taşınır.
@@ -29,7 +29,7 @@ Tüm v2 geliştirmesi burada, ayrı portta (`PORT=5003 ./start.sh`) yapılır. A
   **İÇERİK ALANINA CONTAIN edilir, tam-ekran DEĞİL** (`position:fixed; top:44px topbar altı; left:232px sidebar sağı`;
   daraltılmış menüde `left:60px`; ≤760px'de `left:0`) → sol menü + üst-bar açıkta kalır (analist gezinebilir, run-chip
   görünür), yalnız içerik butonları örtülür → **yanlış tıklama engellenir + çalışma başladığı belli olur**.
-  "hazırlanıyor" analiz görseli de kırmızıya çekildi. **5002/main'e asla uygulanmaz.**
+  "hazırlanıyor" analiz görseli de kırmızıya çekildi.
 - **UI v3 — ekran/menü düzeni & yeniden adlandırmalar (YALNIZ v2):**
   **Açılır-kapanır sol menü** (`sidebarAcKapa()` → `.layout.sidebar-collapsed`, localStorage `sidebar-collapsed`) +
   **grup başlıkları katlanır** (`navBolumAcKapa()`, chevron, localStorage `nav-collapsed-<grup>`; rol-gizli item'lar

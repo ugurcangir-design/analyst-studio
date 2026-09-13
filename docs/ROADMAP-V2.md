@@ -1,8 +1,10 @@
 # Analyst Studio v2 — Yol Haritası
 
-> **Çapa doküman.** Bu plan v2 inisiyatifinin kalıcı çapasıdır. Her yeni context bu
-> dosyayı okuyup hizalanır. Kaynak artifact: `f67b7279-5df5-4d92-9d45-5ad7d59e54fc`
-> (Strateji & Yol Haritası · Eylül 2026).
+> **⏹ TARİHSEL / TAMAMLANDI.** v2 geçişi tamamlandı: Analyst Studio artık TEK ve güncel
+> sürümdür (repo `ugurcangir-design/analyst-studio`, dal `main`, port 5003); eski sürüm (v1)
+> emekliye ayrıldı. Bu doküman **geçiş dönemi planının arşividir** — güncel mimari/durum için
+> `CLAUDE.md` + `docs/MIMARI.md` + `docs/DEGISIKLIK-GECMISI.md` esastır. Aşağıdaki "paralel klon /
+> cutover / v1'e dokunma" ifadeleri geçmiş bağlamı yansıtır, artık uygulanmaz.
 
 **Amaç:** Süreç, BRD ve teknik analiz ekranlarını gerçek bir uygulama kalitesine
 taşımak; analizi tek-atış üretimden, analistle konuşarak ilerleyen, kodun gerçeğine

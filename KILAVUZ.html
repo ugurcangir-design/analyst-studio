@@ -227,7 +227,7 @@
 
   <main>
     <div style="background:#0e3530;border:1px solid #0d9488;border-left:4px solid #2dd4bf;border-radius:12px;padding:14px 18px;margin-bottom:22px;color:#e8eef2;font-size:14px;line-height:1.6">
-      <strong style="color:#5fe3d3">🆕 v2 test sürümündesiniz.</strong>
+      <strong style="color:#5fe3d3">🆕 Analyst Studio — güncel sürüm.</strong>
       Yenilikler: <b>Revizyon</b> (konuşarak bölüm-hedefli düzeltme + onay), <b>Çıktılar</b> (tazelik/köken rozeti),
       aşamalı <b>Süreç</b> akışı, ayrı <b>Delta</b> ekranı, komut paleti <b>⌘K</b> ve otomatik güncelleme.<br>
       <b>Yeni arayüz (v3):</b> yenilenmiş tasarım (koyu/açık tema), <b>açılır-kapanır sol menü</b> ve grup başlıkları,
@@ -289,7 +289,7 @@
     <div class="qs">
       <h3>En hızlı yol — otomatik kurulum (önerilen):</h3>
       <ol>
-        <li><strong>Klonla:</strong> <code>git clone https://github.com/ugurcangir-design/Analysys_Agent.git brd-analyst-agent && cd brd-analyst-agent</code></li>
+        <li><strong>Klonla:</strong> <code>git clone https://github.com/ugurcangir-design/analyst-studio.git && cd analyst-studio</code></li>
         <li><strong>Kur:</strong> <code>bash setup.sh</code> — Python sürümünü kontrol eder, venv kurar, paketleri yükler, <code>.env</code> oluşturur (CLI modu), masaüstü ikonu üretir.</li>
         <li><strong>Claude CLI giriş</strong> (ilk kez): <code>npm install -g @anthropic-ai/claude-code</code> → <code>claude</code> ile giriş yap.</li>
         <li><strong>Başlat:</strong> Masaüstündeki <strong>Analyst Studio</strong> ikonuna çift tıkla (veya <code>./start.sh</code>).</li>
@@ -324,8 +324,8 @@
       <p class="desc">Terminal aç, projenin gideceği klasöre git, depoyu klonla.</p>
 <pre><code>cd ~
 mkdir -p projects &amp;&amp; cd projects
-git clone https://github.com/ugurcangir-design/Analysys_Agent.git brd-analyst-agent
-cd brd-analyst-agent</code></pre>
+git clone https://github.com/ugurcangir-design/analyst-studio.git
+cd analyst-studio</code></pre>
       <div class="box tip">
         <strong>İpucu</strong>
         Bundan sonra tüm komutlar <code>~/projects/brd-analyst-agent</code> klasöründe çalıştırılacak.
@@ -451,7 +451,7 @@ source venv/bin/activate
 python app.py</code></pre>
       </li>
     </ul>
-    <p>Tarayıcı otomatik <code>http://localhost:5002</code>'ye yönlenir. İlk açılışta basit bir kullanıcı oluşturmanız istenebilir (yerel hesap).</p>
+    <p>Tarayıcı otomatik <code>http://localhost:5003</code>'ye yönlenir. İlk açılışta basit bir kullanıcı oluşturmanız istenebilir (yerel hesap).</p>
 
     <h3 id="y-oauth">4.2 Atlassian (Jira + Confluence) bağlantısı <span class="pill opt">opsiyonel</span></h3>
     <p>
@@ -469,7 +469,7 @@ python app.py</code></pre>
       <p>Ayarlar:</p>
       <ul>
         <li><strong>Callback URL</strong> (developer console'a kaydedilir, uygulamadaki bir alana YAZILMAZ):
-          <code>http://localhost:5002/api/jira/callback</code></li>
+          <code>http://localhost:5003/api/jira/callback</code></li>
         <li><strong>Permissions (scopes):</strong>
           <ul>
             <li>Jira: <code>read:jira-work</code>, <code>write:jira-work</code>, <code>read:jira-user</code>, <code>offline_access</code></li>
@@ -1478,7 +1478,7 @@ Doküman yükle <span class="arr">→</span> Süreç Analizi <span class="arr">�
       <tr><th>Paylaşılan</th><th>Nasıl?</th></tr>
       <tr>
         <td>Kod / sürüm</td>
-        <td>GitHub repo (<code>ugurcangir-design/Analysys_Agent</code>) — her analist Ayarlar → Güncelleme sayfasından kendi makinesinde günceller</td>
+        <td>GitHub repo (<code>ugurcangir-design/analyst-studio</code>) — her analist Ayarlar → Güncelleme sayfasından kendi makinesinde günceller</td>
       </tr>
       <tr>
         <td>Atlassian erişimi</td>
@@ -1606,8 +1606,8 @@ pip install -r requirements.txt   # gerekirse</code></pre>
         <td>Terminalden çalıştır: <code>source venv/bin/activate &amp;&amp; python app.py</code>. Hata mesajı görünür.</td>
       </tr>
       <tr>
-        <td>Port 5002 dolu</td>
-        <td><code>lsof -i :5002</code> → eski süreç var → <code>kill PID</code></td>
+        <td>Port 5003 dolu</td>
+        <td><code>lsof -i :5003</code> → eski süreç var → <code>kill PID</code></td>
       </tr>
       <tr>
         <td>"ANTHROPIC_API_KEY yok" (API modu)</td>
@@ -1682,7 +1682,7 @@ pip install -r requirements.txt   # gerekirse</code></pre>
       </tr>
       <tr>
         <td>Cross-origin POST reddedildi (403)</td>
-        <td>İstek başka bir origin'den geliyor. Tarayıcı sekmesini doğru host:port'ta açtığınızdan emin olun (localhost:5002 veya kurulum IP'si).</td>
+        <td>İstek başka bir origin'den geliyor. Tarayıcı sekmesini doğru host:port'ta açtığınızdan emin olun (localhost:5003 veya kurulum IP'si).</td>
       </tr>
       <tr>
         <td>"Admin yetkisi gerekli" (403)</td>

@@ -4,7 +4,7 @@ Hafif regresyon güvencesi — v2 Faz 2.6.
 Flask test client ile DETERMİNİSTİK uçları dener (AI çağrısı YOK, kota YOK, ağ YOK).
 Çalıştır:  venv/bin/python tests/smoke_test.py
 Kural: her yeni deterministik endpoint buraya bir satır ekler. Gerçek output/'a
-dokunmaz (geçici OUTPUT_DIR); 5002/5003 süreçlerinden bağımsız çalışır.
+dokunmaz (geçici OUTPUT_DIR); çalışan süreçlerden bağımsız çalışır.
 """
 
 import importlib

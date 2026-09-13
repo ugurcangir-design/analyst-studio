@@ -35,7 +35,7 @@ if curl -s --max-time 1 "\$URL" > /dev/null 2>&1; then
 fi
 
 source venv/bin/activate
-export PORT   # app.py PORT'u env'den okur — helper'ın portuyla eşleşmeli (yoksa 5002'ye düşer)
+export PORT   # app.py PORT'u env'den okur — helper'ın portuyla eşleşmeli (env yoksa app.py default 5003)
 DESKTOP_MODE=true nohup python app.py >> /tmp/brd-agent-desktop-v2.log 2>&1 &
 disown
 

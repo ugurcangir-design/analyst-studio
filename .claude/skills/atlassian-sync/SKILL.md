@@ -8,13 +8,13 @@ Run the following steps:
 
 1. Start the sync:
 ```bash
-curl -s -X POST http://localhost:5002/api/sources/sync
+curl -s -X POST http://localhost:5003/api/sources/sync
 ```
 
 2. Poll until complete (sync can take 30–120 seconds):
 ```bash
 for i in $(seq 1 30); do
-  STATUS=$(curl -s http://localhost:5002/api/sources/sync/status)
+  STATUS=$(curl -s http://localhost:5003/api/sources/sync/status)
   RUNNING=$(echo "$STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('running', True))")
   if [ "$RUNNING" = "False" ]; then
     echo "$STATUS" | python3 -m json.tool

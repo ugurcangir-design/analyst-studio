@@ -1,6 +1,6 @@
 """
 Jira OAuth 2.0 (3-legged) yetkilendirme yardımcıları.
-Web app callback: http://localhost:5002/api/jira/callback
+Web app callback: http://localhost:5003/api/jira/callback
 """
 
 import os
@@ -14,13 +14,13 @@ load_dotenv(dotenv_path=ENV_PATH)
 
 # Callback URL — Atlassian developer console'da KAYITLI olan ile birebir
 # eşleşmelidir. Port veya host farklıysa .env'den override edilebilir:
-#   JIRA_REDIRECT_URI=http://localhost:5002/api/jira/callback
-# Aksi halde PORT env'inden türetilir (varsayılan localhost:5002).
+#   JIRA_REDIRECT_URI=http://localhost:5003/api/jira/callback
+# Aksi halde PORT env'inden türetilir (varsayılan localhost:5003).
 def _redirect_uri_belirle() -> str:
     acik = os.getenv("JIRA_REDIRECT_URI", "").strip()
     if acik:
         return acik
-    port = os.getenv("PORT", "5002")
+    port = os.getenv("PORT", "5003")
     host = os.getenv("JIRA_CALLBACK_HOST", "localhost")
     return f"http://{host}:{port}/api/jira/callback"
 

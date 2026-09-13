@@ -429,7 +429,7 @@ def csrf_kontrol():
 
     origin = request.headers.get("Origin", "")
     referer = request.headers.get("Referer", "")
-    host_url = request.host_url.rstrip("/")  # örn. http://localhost:5002
+    host_url = request.host_url.rstrip("/")  # örn. http://localhost:5003
 
     # Origin varsa öncelik onda; yoksa Referer'a bak
     kaynak = origin or referer

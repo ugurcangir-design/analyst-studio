@@ -151,7 +151,7 @@ def jira_site_url(cloud_id: str = "") -> str:
     eşleşmesiyle bulur ve süreç boyunca cache'ler.
 
     `.env` `JIRA_URL`'e GÜVENMEZ: o değer bazı kurulumlarda OAuth callback adresini
-    (ör. http://localhost:5002/jira-callback) tutuyor → yanlış browse link'i üretir.
+    (ör. http://localhost:5003/jira-callback) tutuyor → yanlış browse link'i üretir.
     accessible-resources başarısız olursa yalnızca gerçek bir site gibi görünen
     (`.atlassian.net` içeren) JIRA_URL'e düşer; aksi hâlde boş döner."""
     env = env_oku()
