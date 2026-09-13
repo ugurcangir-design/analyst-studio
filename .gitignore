@@ -87,3 +87,9 @@ output/.gozlem-durum.json
 # Canlı-gözlem ajanının cwd (repo kökü) network/response dump artıkları — izlenmez
 /resp*.json
 /fixture_resp*.json
+
+# Canlı-gözlem (playwright) snapshot dump'ları — cwd'ye düşer, ŞİRKET UI içeriği; izlenmez
+/nav.yml
+/*-modal.yml
+/snapshot*.yml
+/*.snapshot.yml

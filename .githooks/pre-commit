@@ -68,7 +68,12 @@ def main():
         # .example ve bu hook'un kendisi içerik taramasından muaf (desenleri anlatır)
         if f.endswith(".example") or f.endswith(".githooks/pre-commit") or f == ".githooks/pre-commit":
             continue
-        for satir in staged_eklenen(f):
+        eklenen = staged_eklenen(f)
+        # Canlı-gözlem (playwright) snapshot'ı — şirket UI erişilebilirlik ağacı sızıntısı
+        ref_satir = sum(1 for s in eklenen if re.search(r"\[ref=[a-z]?[0-9a-f]{2,}\]", s))
+        if ref_satir >= 3:
+            bulgular.append(f"  ⛔ CANLI-GÖZLEM SNAPSHOT'ı (şirket UI içeriği): {f}  ({ref_satir} [ref=] satırı)")
+        for satir in eklenen:
             if IZIN_BAGLAM.search(satir):
                 continue
             for ad, desen, _ in ICERIK:

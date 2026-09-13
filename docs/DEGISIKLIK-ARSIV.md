@@ -396,26 +396,25 @@ sunulmalı — sport id örneğiyle); bölümler `## Gereksinim` + `## Çözüm`
 görmek için görev yeniden analiz edilmeli (CLI limiti açıkken ya da API modunda).
 
 ## Swagger fetch — HTML yerine gerçek OpenAPI spec'i çöz (kök neden) ✅
-**Analist:** Verdiği Swagger servisini (Servis definition-service/markets, sportId parametreli) agent
+**Analist:** Verdiği Swagger servisini (bir OpenAPI tanım servisi) agent
 görmemiş/analize eklememiş. **Kök neden:** `/api/reference/fetch-be`, URL JSON döndürmediğinde (Swagger
 UI HTML sayfası geldiğinde) `except` dalında HAM HTML'i olduğu gibi kaydediyordu → `reference/services/
-Servis.json` içinde 0 endpoint, sadece Swagger UI HTML boilerplate → RAG'e çöp gidiyor, agent endpoint'i
+<servis>.json` içinde 0 endpoint, sadece Swagger UI HTML boilerplate → RAG'e çöp gidiyor, agent endpoint'i
 göremiyordu.
 **Çözüm:** `_swagger_spec_cek` — URL doğrudan spec değilse (HTML), gerçek OpenAPI URL'ini çözer
 (swagger-initializer.js + HTML içindeki `url:"…"` + yaygın yollar: v3/api-docs, swagger.json, openapi.json,
 swagger-config `urls[]`). YALNIZ geçerli spec (paths/openapi/swagger) kaydedilir; 0 endpoint ya da
 çözülemezse net hata + HAM HTML ASLA kaydedilmez. Ek güvenlik: RAG yükleyici (`_ref_bloklari_olustur`)
-geçersiz servis dosyalarını (OpenAPI olmayan) atlar. Bozuk Servis.json silindi (yeniden eklenmeli).
-Doğrulandı: mock testte HTML UI URL'i → /v3/api-docs'a çözülüp markets+sportId spec'i alındı; spec yoksa
+geçersiz servis dosyalarını (OpenAPI olmayan) atlar. Bozuk servis.json silindi (yeniden eklenmeli).
+Doğrulandı: mock testte HTML UI URL'i → /v3/api-docs'a çözülüp gerçek spec alındı; spec yoksa
 None; ruff temiz.
 
 ## Swagger çözücü aynı-host önceliği + görev promptu "mevcut yetenek" kuralı ✅
 Analistin verdiği Swagger UI URL'i, initializer varsayılan **petstore.swagger.io**'ya işaret ettiğinden
-çözücü yanlış (Petstore demo) spec'i kaydediyordu → agent gerçek `GET /api/v1/market?sportId=` yeteneğini
+çözücü yanlış (Petstore demo) spec'i kaydediyordu → agent gerçek servis yeteneğini
 göremeyip "servise özellik eklenmeli" diyordu. Düzeltmeler:
 - **`_swagger_spec_cek`**: spec adayları AYNI-HOST önce denenir; `petstore.swagger.io` demo adayları elenir.
-  (Kullanıcı doğru `.../v3/api-docs`'u verince Servis Definition Service — 45 endpoint, `sportId`'li
-  `/api/v1/market` — doğru kaydedildi.)
+  (Kullanıcı doğru `.../v3/api-docs`'u verince gerçek OpenAPI spec'i — çok sayıda endpoint — doğru kaydedildi.)
 - **`gorev_teknik_analiz` promptu**: "MEVCUT YETENEĞİ 'YENİ İŞ' SANMA" kuralı — çözümden önce Swagger'ı
   tara, gereken parametre (sportId) VARSA onu KULLAN, 'eklenmeli' deme; zaten var olan parametre dururken
   dolaylı (sport-NAME) eşleştirme anlatma; yeni çözümle gereksizleşen davranışı (ekrandaki sport-name

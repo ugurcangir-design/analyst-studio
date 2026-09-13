@@ -478,7 +478,7 @@ def _cevap_islet(key: str, arg: str, durum: dict, prefix: str) -> str:
     yeni bloklayan eklenir), gövdeyi günceller (orijinal korunur)."""
     if not (arg or "").strip():
         return (f"{ROBOT_IMZA}\n\n⚠ Cevap metni gerekli. Örn: "
-                f"`{prefix} cevap Q-T-001: Event Name korunur, freeText destekleyici`")
+                f"`{prefix} cevap Q-T-001: <cevabınız> · Q-T-002: <cevabınız>`")
     gorev = gorev_getir(key)
     if not gorev:
         return f"{ROBOT_IMZA}\n\n⚠ `{key}` okunamadı (yetki/erişim?)."

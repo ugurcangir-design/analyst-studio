@@ -307,7 +307,7 @@ def istatistik(gun: int = 90, donem: str = "gun", analist: str | None = None) ->
     for an in analistler.values():
         an["ort_sure_ms"] = round(an["sure_ms_toplam"] / an["toplam"]) if an["toplam"] else 0
 
-    # İsim bazında SABİT sıralama + id (Emin=1, Denizhan=2 gibi; aynı kadro → aynı id).
+    # İsim bazında SABİT sıralama + id (Ali=1, Veli=2 gibi; aynı kadro → aynı id).
     sirali = sorted(analistler.values(), key=lambda x: str(x["analist"]).casefold())
     for i, an in enumerate(sirali, start=1):
         an["id"] = i

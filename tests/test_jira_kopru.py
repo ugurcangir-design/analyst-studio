@@ -109,14 +109,14 @@ r = jk._komut_uygula("iptal", "", "MBSTRADE-3", PFX, durum)
 kontrol("iptal bekleyen taslağı düşürdü", "MBSTRADE-3" not in durum.get("taslaklar", {}) and "iptal edildi" in r.lower())
 
 # ── #3: task'tan RAG anahtar kelimeleri çıkar ────────────────────────────────
-kws = jk._task_keywords({"summary": "Prematch Program free-text search input",
-                         "description": "freeText parametresi elastic search ile debounced"})
+kws = jk._task_keywords({"summary": "Rapor ekranı arama filtresi alanı",
+                         "description": "kullanıcı rapor ekranında arama yapabilmeli için modül"})
 kontrol("task keyword'leri çıkarıldı (durak kelimeler elenmiş)",
-        "search" in kws and "elastic" in kws and "için" not in kws)
+        "arama" in kws and "rapor" in kws and "için" not in kws)
 
 # ── #1: orijinal talep ayıklama (tekrar analizde korunur) ────────────────────
-onceki = "## 📌 Orijinal Talep\n\nfree-text search isteniyor\n\n---\n\n## 🤖 Teknik Analiz (Analyst Agent)\n\neski analiz"
-kontrol("orijinal talep tekrar analizde korunur", jk._orijinal_talep_ayikla(onceki) == "free-text search isteniyor")
+onceki = "## 📌 Orijinal Talep\n\nyeni bir alan isteniyor\n\n---\n\n## 🤖 Teknik Analiz (Analyst Agent)\n\neski analiz"
+kontrol("orijinal talep tekrar analizde korunur", jk._orijinal_talep_ayikla(onceki) == "yeni bir alan isteniyor")
 
 # ── özyineleme önlemi: analiz GİRDİSİ orijinal talep (gövde değil) ────────────
 og = jk._orijinal_gorev({"key": "MBSTRADE-9", "summary": "s",
@@ -125,8 +125,8 @@ kontrol("gövdeye analiz yazılmışsa girdi = orijinal talep", og["description"
 kontrol("gövdeden analiz bölümü ayıklanır (düzelt için)",
         jk._analiz_bolumu_ayikla("## 📌 Orijinal Talep\n\nX\n\n---\n\n## 🤖 Teknik Analiz (Analyst Agent)\n\nANALİZ GÖVDESİ") == "ANALİZ GÖVDESİ")
 # Jira ADF geri-okuma: '##' başlıkları DÜŞER → marker '#'siz de eşleşmeli (gerçek hata)
-_adf = "📌 Orijinal Talep\n\nfree-text isteniyor\n\n🤖 Teknik Analiz (Analyst Agent)\n\neski analiz"
-kontrol("ADF-okuma (#'siz) orijinal ayıklama", jk._orijinal_talep_ayikla(_adf) == "free-text isteniyor")
+_adf = "📌 Orijinal Talep\n\nyeni alan isteniyor\n\n🤖 Teknik Analiz (Analyst Agent)\n\neski analiz"
+kontrol("ADF-okuma (#'siz) orijinal ayıklama", jk._orijinal_talep_ayikla(_adf) == "yeni alan isteniyor")
 kontrol("ADF-okuma (#'siz) analiz bölümü ayıklama", jk._analiz_bolumu_ayikla(_adf) == "eski analiz")
 # çift '📌 Orijinal Talep' kaz-boynu → tek orijinale iner (self-heal)
 kontrol("çift orijinal başlık self-heal",
@@ -138,7 +138,7 @@ jk._komut_uygula("analiz", "", "MBSTRADE-5", PFX, durum2)
 kontrol("analiz açık soruyu önbelleğe aldı", "Q-T-001" in durum2["son_analiz"]["MBSTRADE-5"].get("acik", ""))
 kontrol("analiz girdisi orijinal (gövde değil)", analiz_girdi[-1]["desc"] == "açıklama")
 yazilan_aciklama.clear()
-r = jk._komut_uygula("cevap", "Q-T-001: Event Name korunur", "MBSTRADE-5", PFX, durum2)
+r = jk._komut_uygula("cevap", "Q-T-001: mevcut alan korunur", "MBSTRADE-5", PFX, durum2)
 kontrol("cevap gövdeyi güncelledi", "MBSTRADE-5" in yazilan_aciklama)
 kontrol("cevap önceki soruları yakınsamaya geçirdi", "Q-T-001" in analiz_girdi[-1]["onceki"])
 kontrol("cevap → açık soru kalmadı bilgisi", "açık soru kalmadı" in r.lower())
