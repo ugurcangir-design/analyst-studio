@@ -2115,6 +2115,95 @@ def _jira_kopru_dongusu() -> None:
         time.sleep(aralik)
 
 
+# ─── Analiz yaşam döngüsü bildirimi — YEREL masaüstü (madde 4) ────────────────
+# Workflow "settled/hata" durumuna GEÇİŞTE bir kez masaüstü bildirimi. UI polling'inden
+# BAĞIMSIZ arka-plan gözlemci → kullanıcı başka işe geçse de bildirim gelir. Her analist
+# kendi makinesinde çalıştığı için bildirim yereldir (veri makineden çıkmaz).
+_son_bildirilen_analiz = {"anahtar": None}
+
+
+def _aktif_dokuman_adi() -> str:
+    try:
+        girdiler = [f for f in INPUT_DIR.iterdir() if f.is_file() and not f.name.startswith(".")]
+        if girdiler:
+            return girdiler[0].name
+    except Exception:
+        pass
+    return "Analiz"
+
+
+def _acik_soru_sayisi() -> int:
+    try:
+        from skills.sorular import parse_ve_birlestir, istatistik_hesapla
+        sorular = parse_ve_birlestir(taze_esik=_oturum_baslangic()).get("sorular", [])
+        ist = istatistik_hesapla(sorular)
+        return int(ist.get("acik", 0)) + int(ist.get("bekleniyor", 0))
+    except Exception:
+        return 0
+
+
+def _analiz_bildirim_kontrol() -> None:
+    """Workflow durumunu okur; settled/hata durumuna GEÇİŞTE bir kez bildirir (dedup)."""
+    import workflow as wf
+    from skills import bildirim
+    try:
+        ozet = wf.ozet()
+    except Exception:
+        return
+    if ozet.get("onay_bekleniyor"):
+        anahtar = "surec_onay"
+    elif ozet.get("teknik_onay_bekleniyor"):
+        anahtar = "teknik_onay"
+    elif ozet.get("hata"):
+        anahtar = f"hata:{ozet.get('durum')}"
+    else:
+        # çalışan/idle → bildirilecek durum yok; koşu bitince dedup sıfırla (sonraki analize izin)
+        if not ozet.get("calisiyor"):
+            _son_bildirilen_analiz["anahtar"] = None
+        return
+    if _son_bildirilen_analiz["anahtar"] == anahtar:
+        return   # bu duruma zaten bildirim gitti (tek sefer)
+    _son_bildirilen_analiz["anahtar"] = anahtar
+    dok = _aktif_dokuman_adi()
+    if anahtar == "surec_onay":
+        n = _acik_soru_sayisi()
+        bildirim.gonder("Süreç analizi tamamlandı",
+                        f"«{dok}» süreç analizi tamamlandı — {n} açık soru. "
+                        "Cevaplayıp devam edebilir veya teknik analiz adımına geçebilirsiniz.")
+    elif anahtar == "teknik_onay":
+        n = _acik_soru_sayisi()
+        bildirim.gonder("Teknik analiz tamamlandı",
+                        f"«{dok}» teknik analizi tamamlandı — {n} açık soru. "
+                        "İnceleyip onaylayın; Jira'da oluşturmaya hazır.")
+    else:
+        h = ""
+        try:
+            h = (ozet.get("hata_ozet") or {}).get("baslik") or ""
+        except Exception:
+            h = ""
+        bildirim.gonder("Analiz tamamlanamadı",
+                        f"«{dok}» analizi hata verdi: {h or ozet.get('hata') or 'bilinmeyen hata'}. "
+                        "Ayrıntı için uygulamayı açın.")
+
+
+def _analiz_bildirim_dongusu() -> None:
+    time.sleep(15)   # boot'u rahat bırak
+    while True:
+        try:
+            _analiz_bildirim_kontrol()
+        except Exception as e:
+            logger.debug("Analiz bildirim tur hatası: %s", e)
+        time.sleep(5)
+
+
+def _analiz_bildirim_baslat() -> None:
+    from skills import bildirim
+    if not bildirim.acik_mi():
+        return
+    threading.Thread(target=_analiz_bildirim_dongusu, daemon=True, name="analiz-bildirim").start()
+    logger.info("Analiz yaşam döngüsü bildirimleri açık (yerel masaüstü).")
+
+
 def _jira_kopru_baslat() -> None:
     from skills import jira_kopru
     a = jira_kopru.ayarlar()
@@ -4674,4 +4763,5 @@ if __name__ == "__main__":
     _oto_guncelleme_baslat()   # v2 Faz 2.5 — bildirimli otomatik güncelleme (AUTO_UPDATE=false ile kapatılır)
     _disk_temizlik_baslat()    # v2 Faz 3 — zamanlanmış disk temizliği (DISK_TEMIZLIK=false ile kapatılır)
     _jira_kopru_baslat()       # Jira Köprüsü — komutlu yorum polling (JIRA_KOPRU=false ile KAPALI, vars.)
+    _analiz_bildirim_baslat()  # Analiz bitti/hata → yerel masaüstü bildirimi (BILDIRIM=false ile kapatılır)
     app.run(host=host, port=port, debug=False)
