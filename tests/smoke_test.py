@@ -21,6 +21,9 @@ os.environ.setdefault("AUTH_ENABLED", "false")
 os.environ.setdefault("JIRA_KOPRU", "false")       # köprü döngüsünü başlatma + durum testi deterministik
 os.environ.setdefault("JIRA_KOPRU_PROJELER", "")   # makinenin .env'i (JIRA_KOPRU=true) test sonucunu etkilemesin
 
+import skills.jira_kopru as _jk_mod                # noqa: E402
+_jk_mod._kopru_config = lambda: {}                # seed'lenen jira_kopru.json'u yok say → .env deterministik (KAPALI)
+
 import skills.base as base                         # noqa: E402
 _tmp = Path(tempfile.mkdtemp())
 base.OUTPUT_DIR = _tmp                             # revizyon depolaması geçici dizine

@@ -53,6 +53,7 @@ jk._iliskili_task_onerileri = lambda md, gorev: [
 jk._proje_bilgi = lambda proje, cloud_id: {"task_id": "10001", "story_id": "10002"}
 jk._cloud_id = lambda: "cloud-x"
 jk._canli_gorev_baglam = lambda gorev: None   # live-app config'e bağlı kalma (offline)
+jk._kopru_config = lambda: {}                 # test: json config yok → .env yedeği (deterministik)
 
 
 def _sahte_issue_olustur(summary, adf, type_id, proje, cloud_id, parent_key=None):
@@ -201,5 +202,22 @@ kontrol("başarılı tur → bagli True, son_hata None", jk.saglik()["bagli"] is
 jk.saglik_guncelle(False, "401 Unauthorized")
 kontrol("hata → bagli False + son_hata dolu", jk.saglik()["bagli"] is False and "401" in (jk.saglik()["son_hata"] or ""))
 kontrol("son_durum 'saglik' alanı içerir", "saglik" in jk.son_durum())
+
+# ── #1: config json-birincil (analist .env yazmadan güncelleme ile) ───────────
+jk._kopru_config = lambda: {"aktif": True, "projeler": ["mbs", "abc"], "yazar_allowlist": []}
+for k in ("JIRA_KOPRU", "JIRA_KOPRU_PROJELER", "JIRA_KOPRU_YAZAR_ALLOWLIST"):
+    os.environ.pop(k, None)
+a = jk.ayarlar()
+kontrol("json config → aktif True (.env olmadan)", a["aktif"] is True)
+kontrol("json projeler → upper + liste", a["projeler"] == ["MBS", "ABC"])
+kontrol("json boş allowlist → [] (self-scope)", a["yazar_allowlist"] == [])
+jk._kopru_config = lambda: {"aktif": False}
+os.environ["JIRA_KOPRU"] = "true"
+kontrol("json aktif:false → .env'e DÜŞMEZ (False korunur)", jk.ayarlar()["aktif"] is False)
+jk._kopru_config = lambda: {}     # json yok → .env yedeği
+os.environ["JIRA_KOPRU"] = "true"
+os.environ["JIRA_KOPRU_PROJELER"] = "xyz"
+a = jk.ayarlar()
+kontrol(".env yedek (json yok) → aktif True + projeler", a["aktif"] is True and a["projeler"] == ["XYZ"])
 
 print(f"\nJIRA KÖPRÜSÜ TESTLERİ GEÇTİ ({basari} kontrol)")

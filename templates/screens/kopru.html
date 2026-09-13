@@ -135,6 +135,7 @@
             </div>
             <div class="kopru-eylem">
               <button class="btn btn-outline btn-sm" onclick="kopruIs('analiz','${k.key}')">↻ Yeniden Analiz</button>
+              <button class="btn btn-outline btn-sm" onclick="kopruIs('guncelle','${k.key}')" title="Son analizi task açıklamasına yeniden yazar (taze ise ek maliyetsiz)">⟳ Task Güncelle</button>
               <button class="btn btn-outline btn-sm" onclick="kopruIs('iliskili-ac','${k.key}')">＋ İlişkili Aç</button>
               ${taslak ? `<span class="kopru-eylem-sep"></span>${taslak}` : ''}
             </div>

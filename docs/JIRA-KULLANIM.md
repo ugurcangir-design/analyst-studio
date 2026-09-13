@@ -16,20 +16,20 @@
 
 ---
 
-## Kurulum (bir kez)
+## Kurulum — analist HİÇBİR ŞEY yazmaz
 
-1. `.env` içinde:
-   ```
-   JIRA_KOPRU=true
-   JIRA_KOPRU_PROJELER=MBSTRADE        # taranacak proje(ler), virgülle
-   # JIRA_KOPRU_YAZAR_ALLOWLIST=...    # BOŞ BIRAK → agent kendi Jira hesabına kilitlenir (önerilen)
-   ```
-2. **Güncelleme → Yeniden Başlat.**
-3. Jira Köprüsü ekranında **"Jira bağlı · son tarama HH:MM"** yazısını gör → hazırsın.
+Jira Köprüsü **güncelleme (Güncelle/pull) ile açık gelir** — `.env` düzenlemenize gerek yok.
+Varsayılan: köprü **açık**, proje **MBSTRADE**, yetki **kendi Jira hesabınıza** kilitli (self-scope).
 
-> `JIRA_KOPRU_YAZAR_ALLOWLIST` boş bırakılırsa agent, bağlı olduğun Jira kimliğine otomatik
-> kilitlenir (self-scope) → yalnız **senin** komutların işlenir. Elle accountId listesi girmek
-> yalnız tek merkezi agent'ın tüm ekibe hizmet ettiği kurulum içindir.
+1. **Güncelleme → Yeniden Başlat** (varsa güncel sürümü çeker).
+2. Jira'ya OAuth ile bağlan (Ayarlar → Atlassian) — zaten bağlıysanız atlayın.
+3. Jira Köprüsü ekranında **"Jira bağlı · son tarama HH:MM"** yazısını görün → hazırsınız.
+
+> **Ayar değiştirmek (opsiyonel, owner):** proje eklemek/çıkarmak veya köprüyü kapatmak için
+> `.env` DEĞİL, `reference/jira_kopru.json` dosyasını düzenleyip Yeniden Başlat. (Bu dosya güncelleme
+> ile gelir, git'te izlenmez.) `yazar_allowlist` boş kalırsa agent kendi Jira hesabınıza kilitlenir →
+> yalnız **sizin** komutlarınız işlenir; elle accountId listesi yalnız tek merkezi agent tüm ekibe
+> hizmet ettiğinde gerekir.
 
 ---
 

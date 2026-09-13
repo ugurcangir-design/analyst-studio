@@ -494,7 +494,7 @@ def _runtime_config_seed() -> None:
     """Makineye özel çalışma-zamanı config dosyaları (context_filter/prompts/sources)
     git'te İZLENMEZ — pull çakışmasını önler. Eksiklerse .example varsayılanından
     oluşturulur. Böylece taze klon + güncelleme sonrası ekip varsayılanları korunur."""
-    for ad in ("context_filter.json", "prompts.json", "sources.json", "kod_kaynagi.json", "analiz_mcp.json"):
+    for ad in ("context_filter.json", "prompts.json", "sources.json", "kod_kaynagi.json", "analiz_mcp.json", "jira_kopru.json"):
         gercek = REF_DIR / ad
         ornek = REF_DIR / f"{ad}.example"
         if not gercek.exists() and ornek.exists():
@@ -2092,6 +2092,27 @@ def disk_temizle():
 # Task yorumuna `/analyst_agent analiz` yazılır → app JQL taramasıyla bulur,
 # analiz eder, sonucu Jira yorumu olarak yazar. Inbound/webhook GEREKMEZ.
 # Varsayılan KAPALI: JIRA_KOPRU=false. Owner .env'de açar; owner-gate endpoint'ler.
+_KOPRU_BILDIRIM_METIN = {
+    "analiz": "analiz edildi — sonuç ve açık sorular Jira'da",
+    "cevap": "cevaplar işlendi — analiz güncellendi",
+    "duzelt": "ilgili kısım düzeltildi",
+    "guncelle": "task açıklaması güncellendi",
+    "iliskili-ac": "ilişkili task önerileri hazır (onay bekliyor)",
+    "onayla": "ilişkili task açıldı",
+    "iptal": "taslak iptal edildi",
+}
+
+
+def _kopru_komut_bildir(key: str, komut: str, ok: bool = True, hata: str | None = None) -> None:
+    """Jira köprüsünde bir komut işlendiğinde YEREL bildirim (İstek 2: hem lokal hem Jira kanalı).
+    Hem yorum-kanalı döngüsü hem UI-kanalı iş çalıştırıcısı çağırır."""
+    from skills import bildirim
+    if ok:
+        bildirim.gonder("Jira köprüsü", f"«{key}» {_KOPRU_BILDIRIM_METIN.get(komut, komut + ' tamamlandı')}.")
+    else:
+        bildirim.gonder("Jira köprüsü — hata", f"«{key}» {komut} işlenemedi: {hata or 'bilinmeyen'}.")
+
+
 def _jira_kopru_dongusu() -> None:
     from skills import bildirim, jira_kopru
     time.sleep(100)   # boot + güncelleme + disk kontrolünü rahat bırak
@@ -2114,10 +2135,14 @@ def _jira_kopru_dongusu() -> None:
             if n:
                 logger.info("Jira Köprüsü: %s komut işlendi (%s task tarandı).",
                             n, ozet.get("taranan_task"))
-            # AÇILIŞ CATCH-UP: agent kapalıyken girilmiş (kendi) komutlar ilk turda işlendiyse bildir.
+            # AÇILIŞ CATCH-UP: agent kapalıyken girilmiş (kendi) komutlar ilk turda işlendiyse özet bildir.
             if ilk_tur and n:
                 bildirim.gonder("Jira köprüsü — çevrimdışı komutlar",
                                 f"Siz çevrimdışıyken girilen {n} komut işlendi.")
+            elif n:
+                # STEADY-STATE: yorumla girilen her komut işlenince YEREL bildirim (İstek 2).
+                for _it in (ozet.get("islenen") or []):
+                    _kopru_komut_bildir(_it.get("key"), _it.get("komut"))
             ilk_tur = False
         except Exception as e:
             logger.warning("Jira Köprüsü tur hatası: %s", e)
@@ -2275,9 +2300,11 @@ def _kopru_is_calistir(job_id: str) -> None:
         job["durum"] = "bitti" if r.get("ok") else "hata"
         if not r.get("ok"):
             job["hata"] = r.get("error")
+        _kopru_komut_bildir(job["key"], job["komut"], ok=r.get("ok", False), hata=r.get("error"))
     except Exception as e:
         job["durum"] = "hata"
         job["hata"] = str(e)
+        _kopru_komut_bildir(job.get("key", "?"), job.get("komut", "?"), ok=False, hata=str(e))
 
 
 @app.route("/api/jira-kopru/liste", methods=["GET"])

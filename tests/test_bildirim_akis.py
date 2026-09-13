@@ -72,4 +72,13 @@ durum(calisiyor=False, hata="alt süreç çöktü", durum="surec_analizi_hata")
 app._analiz_bildirim_kontrol()
 kontrol("hata → bildirim (4)", len(_cagrilar) == 4 and _cagrilar[3][0] == "Analiz tamamlanamadı")
 
+# ── #2: Jira köprü komut bildirimi (yorum + UI kanalı ortak helper) ───────────
+_cagrilar.clear()
+app._kopru_komut_bildir("MBS-1", "analiz")
+kontrol("köprü analiz → yerel bildirim", len(_cagrilar) == 1 and "MBS-1" in _cagrilar[0][1] and "analiz" in _cagrilar[0][1].lower())
+app._kopru_komut_bildir("MBS-2", "guncelle")
+kontrol("köprü güncelle → bildirim", "güncellendi" in _cagrilar[1][1])
+app._kopru_komut_bildir("MBS-3", "duzelt", ok=False, hata="401 yetki")
+kontrol("köprü hata → hata bildirimi", _cagrilar[2][0] == "Jira köprüsü — hata" and "401" in _cagrilar[2][1])
+
 print(f"\nBİLDİRİM AKIŞ TESTLERİ GEÇTİ ({basari} kontrol)")

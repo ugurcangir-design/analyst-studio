@@ -84,17 +84,47 @@ def _bool(v: str) -> bool:
     return str(v).strip().lower() in ("1", "true", "yes", "evet", "on")
 
 
+def _kopru_config() -> dict:
+    """Çalışma-zamanı köprü config'i: `reference/jira_kopru.json` (git'te İZLENMEZ; `.example`'dan
+    boot'ta seed edilir — analistler .env'e YAZMADAN güncelleme ile ekip varsayılanını alır).
+    Yoksa {} → `.env` yedeğine düşülür."""
+    try:
+        p = BASE_DIR / "reference" / "jira_kopru.json"
+        if p.exists():
+            return json.loads(p.read_text(encoding="utf-8")) or {}
+    except Exception:
+        pass
+    return {}
+
+
+def _liste_coz(ham) -> list[str]:
+    if isinstance(ham, list):
+        return [str(x).strip() for x in ham if str(x).strip()]
+    return [x.strip() for x in str(ham or "").split(",") if x.strip()]
+
+
 def ayarlar() -> dict:
-    """Köprü yapılandırması (.env). Owner makinesinde açılır; varsayılan KAPALI."""
-    projeler = [p.strip().upper() for p in os.getenv("JIRA_KOPRU_PROJELER", "").split(",") if p.strip()]
-    izinli = [a.strip() for a in os.getenv("JIRA_KOPRU_YAZAR_ALLOWLIST", "").split(",") if a.strip()]
+    """Köprü yapılandırması. Öncelik: `reference/jira_kopru.json` (güncelleme ile gelen ekip
+    varsayılanı — analist .env yazmaz) > `.env` (yedek/eski) > kod varsayılanı. Self-scope
+    sayesinde `yazar_allowlist` boş olabilir (agent kendi hesabına kilitlenir)."""
+    cfg = _kopru_config()
+
+    def s(cfg_key: str, env_key: str, default):
+        v = cfg.get(cfg_key)
+        if v not in (None, "", [], {}):   # boş liste/dize = "set edilmemiş" → .env'e düş (False korunur)
+            return v
+        e = os.getenv(env_key)
+        return e if (e is not None and e != "") else default
+
+    projeler = [p.upper() for p in _liste_coz(s("projeler", "JIRA_KOPRU_PROJELER", ""))]
+    izinli = _liste_coz(s("yazar_allowlist", "JIRA_KOPRU_YAZAR_ALLOWLIST", ""))
     return {
-        "aktif": _bool(os.getenv("JIRA_KOPRU", "false")),
-        "aralik_sn": max(20, int(os.getenv("JIRA_KOPRU_ARALIK", "60") or 60)),
-        "pencere_dk": max(5, int(os.getenv("JIRA_KOPRU_PENCERE_DK", "120") or 120)),
+        "aktif": _bool(s("aktif", "JIRA_KOPRU", "false")),
+        "aralik_sn": max(20, int(s("aralik_sn", "JIRA_KOPRU_ARALIK", 60) or 60)),
+        "pencere_dk": max(5, int(s("pencere_dk", "JIRA_KOPRU_PENCERE_DK", 120) or 120)),
         "projeler": projeler,
-        "komut": os.getenv("JIRA_KOPRU_KOMUT", "/analyst_agent").strip() or "/analyst_agent",
-        "yazar_allowlist": izinli,   # yalnız accountId; BOŞ = FAIL-CLOSED (yorum komutları işlenmez)
+        "komut": str(s("komut", "JIRA_KOPRU_KOMUT", "/analyst_agent")).strip() or "/analyst_agent",
+        "yazar_allowlist": izinli,   # yalnız accountId; BOŞ → self-scope (kendi kimliği)
     }
 
 

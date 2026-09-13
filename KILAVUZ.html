@@ -1792,10 +1792,12 @@ pip install -r requirements.txt   # gerekirse</code></pre>
       <li>Agent'ı olmayan biri komut yazarsa <strong>hiçbir şey olmaz</strong> — yorum Jira'da düz bir giriş olarak kalır.</li>
     </ul>
 
-    <h3>Kurulum</h3>
-    <p><code>.env</code>: <code>JIRA_KOPRU=true</code> + <code>JIRA_KOPRU_PROJELER=MBSTRADE</code> → <strong>Yeniden Başlat</strong>.
-      <code>JIRA_KOPRU_YAZAR_ALLOWLIST</code> boş bırakılırsa agent kendi Jira kimliğine otomatik kilitlenir
-      (self-scope; önerilen). Jira Köprüsü ekranında <strong>"Jira bağlı · son tarama HH:MM"</strong> yazısı hazır olduğunu gösterir.</p>
+    <h3>Kurulum — hiçbir şey yazmanıza gerek yok</h3>
+    <p>Köprü <strong>güncelleme ile açık gelir</strong> (<code>.env</code> düzenlemeniz gerekmez): varsayılan
+      <em>açık</em>, proje <em>MBSTRADE</em>, yetki <em>kendi Jira hesabınıza</em> kilitli (self-scope).
+      <strong>Güncelle → Yeniden Başlat</strong> yeterli; Jira Köprüsü ekranında
+      <strong>"Jira bağlı · son tarama HH:MM"</strong> yazısı hazır olduğunu gösterir. Ayar değiştirmek (owner):
+      <code>reference/jira_kopru.json</code> (<code>.env</code> değil) → Yeniden Başlat.</p>
 
     <h3>Komutlar</h3>
     <table style="width:100%; border-collapse:collapse; font-size:13px; margin:8px 0;">

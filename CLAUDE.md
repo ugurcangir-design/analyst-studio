@@ -159,8 +159,11 @@ Tüm v2 geliştirmesi burada, ayrı portta (`PORT=5003 ./start.sh`) yapılır. A
 - **Jira Köprüsü (Jira'yı web-chat gibi kullan):** `skills/jira_kopru.py` + `_jira_kopru_dongusu` (app.py).
   Analist bir Jira task'ının YORUMUNA `/analyst_agent <komut>` yazar → app **polling** (JQL taraması,
   inbound/webhook YOK — lokal + OAuth) ile bulur, işler, sonucu Jira **yorumu** olarak geri yazar
-  (`jira_yorum_ekle`, canonical `atlassian_post` + `markdown_to_adf`). **Varsayılan KAPALI**
-  (`JIRA_KOPRU=false`; owner açar), owner-gate `/api/jira-kopru/durum|tara`.
+  (`jira_yorum_ekle`, canonical `atlassian_post` + `markdown_to_adf`). **Yapılandırma (`ayarlar()`):
+  öncelik `reference/jira_kopru.json` (git'te İZLENMEZ; `.example`'dan boot'ta `_runtime_config_seed` ile
+  seed — analistler `.env` YAZMAZ, güncelleme/pull ile ekip varsayılanını alır) > `.env` (yedek/eski) > kod
+  varsayılanı; boş liste/dize "set edilmemiş" sayılır (False korunur). `.example` VARSAYILANI: `aktif:true` +
+  `projeler:["MBSTRADE"]` → güncelleme sonrası analistlerde otomatik açık (self-scope ile güvenli).** owner-gate `/api/jira-kopru/durum|tara`.
   **Komutlar:** `analiz [talimat]` → `_bridge_uret` (→`gorev_getir`+`gorev_analiz_et`) sonucu **task
   GÖVDESİNE (açıklama) yazar** (`_govdeye_yaz`: `## 📌 Orijinal Talep` + orijinal KORUNUR + `## 🤖 Teknik
   Analiz`; tekrar analizde `_orijinal_talep_ayikla` orijinali korur — analiz GİRDİSİ hep orijinal talep,
@@ -186,8 +189,9 @@ Tüm v2 geliştirmesi burada, ayrı portta (`PORT=5003 ./start.sh`) yapılır. A
   **Durum göstergesi:** `saglik_guncelle`/`saglik()` (runtime, süreç-içi) → `son_durum`/`liste` `saglik{bagli,son_hata,kontrol}`;
   `kopru.html` "Jira bağlı · son tarama HH:MM" / "⚠ bağlantı yok". Env: `JIRA_KOPRU_PROJELER` (zorunlu) / `_ARALIK` /
   `_PENCERE_DK` / `_KOMUT`. **Agent UI kanalı** (2. kanal):
-  `screens/kopru.html` (nav "Jira Köprüsü", owner) — açık sorular arayüzde de görünür, oradan cevaplanıp analiz
-  sürdürülür; Jira yorumu ile AYNI beyin (`jira_kopru.ui_komut`→`_komut_uygula`+`jira_yorum_ekle`, `_TUR_LOCK`);
+  `screens/kopru.html` (nav "Jira Köprüsü", owner) — açık sorular arayüzde görünür + **tüm işlemler UI'da**
+  (analiz · cevap · düzelt · **güncelle** (Task Güncelle) · ilişkili-aç · onayla · iptal → `kopruIs(komut,key)`);
+  Jira yorumu ile AYNI beyin (`jira_kopru.ui_komut`→`_komut_uygula`+`jira_yorum_ekle`, `_TUR_LOCK`);
   `GET /api/jira-kopru/liste` + arka plan iş `POST /api/jira-kopru/is`→`GET /api/jira-kopru/is/<id>` (`_kopru_isler`).
   Test: `tests/test_jira_kopru.py` (offline durum-makinesi, 0 token). Tam uç dökümü → `docs/ENDPOINTS.md` "Jira Köprüsü".
   **Ekip/kullanıcı hızlı rehberi + SSS → `docs/JIRA-KULLANIM.md`; uygulama-içi kılavuz `KILAVUZ.html`
@@ -197,8 +201,10 @@ Tüm v2 geliştirmesi burada, ayrı portta (`PORT=5003 ./start.sh`) yapılır. A
   AppleScript kaçışı; base.py IMPORT ETMEZ). **Analiz yaşam döngüsü:** `app._analiz_bildirim_dongusu` (UI polling'inden
   BAĞIMSIZ arka plan gözlemci) workflow `onay_bekleniyor`/`teknik_onay_bekleniyor`/`hata` durumuna GEÇİŞTE **bir kez**
   (dedup) yerel bildirim — "«doküman» süreç/teknik analizi tamamlandı — N açık soru…". Her analist kendi makinesinde →
-  yerel (veri çıkmaz). **Köprü:** Jira bağlantı hatası → bildirim (bir kez); açılış catch-up → çevrimdışı komutlar
-  işlenince bildirim. Test: `tests/test_bildirim.py` (kaçış/redaksiyon/no-op) + `tests/test_bildirim_akis.py` (geçiş+dedup).
+  yerel (veri çıkmaz). **Köprü (İstek 2 — hem lokal hem Jira kanalı):** her komut işlenince yerel bildirim
+  (`_kopru_komut_bildir` — yorum-kanalı döngüsü steady-state + UI-kanalı `_kopru_is_calistir` ortak); Jira
+  bağlantı hatası → bildirim (bir kez); açılış catch-up → çevrimdışı komutlar işlenince özet bildirim.
+  Test: `tests/test_bildirim.py` (kaçış/redaksiyon/no-op) + `tests/test_bildirim_akis.py` (analiz geçiş+dedup + köprü komut bildirimi).
 
 ## Komutlar
 - Kurulum: `bash setup.sh` · Başlat: `./start.sh` (veya Analyst Studio.app)
@@ -226,7 +232,7 @@ sıfırlanma saati `/api/cli/durum` header göstergesinde görünür (`cli_durum
 
 ## Hard kurallar
 1. **Türkçe** yaz (print/yorum/hata); teknik terimler İngilizce kalır.
-2. Asla commit etme: `.env` (chmod 600) + makineye özel `reference/{context_filter,prompts,sources}.json` (gitignore'da; `*.json.example` izlenir, açılışta `_runtime_config_seed()` ile seed).
+2. Asla commit etme: `.env` (chmod 600) + makineye özel `reference/{context_filter,prompts,sources,kod_kaynagi,analiz_mcp,jira_kopru}.json` (gitignore'da; `*.json.example` izlenir, açılışta `_runtime_config_seed()` ile seed).
 3. Atlassian helper → her zaman `skills/atlassian.py`'den import (duplicate tanım yok).
 4. Yeni output dosyası → `IZIN_VERILEN_CIKTILAR` (app.py). Yeni Jira field → `jira_agent.py` + `skills/jira_tasks.py`.
 5. Prompt önceliği: ekrandaki **Özel Prompt** (`context_filter.json → ozel_prompt`, analiz-bazlı, varsayılanın YERİNE geçer) > `reference/prompts.json` (kalıcı override) > `VARSAYILAN_PROMPTLAR` (base.py).
