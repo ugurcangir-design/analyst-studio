@@ -2093,8 +2093,10 @@ def disk_temizle():
 # analiz eder, sonucu Jira yorumu olarak yazar. Inbound/webhook GEREKMEZ.
 # Varsayılan KAPALI: JIRA_KOPRU=false. Owner .env'de açar; owner-gate endpoint'ler.
 def _jira_kopru_dongusu() -> None:
-    from skills import jira_kopru
+    from skills import bildirim, jira_kopru
     time.sleep(100)   # boot + güncelleme + disk kontrolünü rahat bırak
+    ilk_tur = True            # ilk BAŞARILI tur = açılış catch-up (çevrimdışı komutlar)
+    hata_bildirildi = False   # bağlantı-hatası bildirimi bir kez; başarılı turda resetlenir
     while True:
         try:
             ayar = jira_kopru.ayarlar()
@@ -2106,11 +2108,23 @@ def _jira_kopru_dongusu() -> None:
                 continue
             # Pencere = aralığı rahatça kapsasın (kaçan yorum olmasın).
             ozet = jira_kopru.tek_tur(pencere_dk=max(ayar["pencere_dk"], (aralik // 60) + 5))
-            if ozet.get("islenen"):
+            hata_bildirildi = False   # başarılı tur → bağlantı yeniden kuruldu say
+            n = len(ozet.get("islenen") or []) if isinstance(ozet, dict) else 0
+            if n:
                 logger.info("Jira Köprüsü: %s komut işlendi (%s task tarandı).",
-                            len(ozet["islenen"]), ozet.get("taranan_task"))
+                            n, ozet.get("taranan_task"))
+            # AÇILIŞ CATCH-UP: agent kapalıyken girilmiş (kendi) komutlar ilk turda işlendiyse bildir.
+            if ilk_tur and n:
+                bildirim.gonder("Jira köprüsü — çevrimdışı komutlar",
+                                f"Siz çevrimdışıyken girilen {n} komut işlendi.")
+            ilk_tur = False
         except Exception as e:
             logger.warning("Jira Köprüsü tur hatası: %s", e)
+            # Bağlantı/OAuth hatası → Jira'ya yazamayız; kullanıcıyı YEREL bildirimle uyar (bir kez).
+            if not hata_bildirildi:
+                hata_bildirildi = True
+                bildirim.gonder("Jira köprüsü — bağlantı sorunu",
+                                f"Komutlar işlenemiyor: {str(e)[:120]}. Jira bağlantısını yenileyin.")
             aralik = 60
         time.sleep(aralik)
 
