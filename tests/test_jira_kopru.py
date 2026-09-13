@@ -178,4 +178,21 @@ kontrol("yetkili yazarın komutu işlendi", len(_ozet["islenen"]) == 1 and _ozet
 kontrol("yetkisiz komut 'atlanan'a sayıldı", _ozet["atlanan"] >= 1)
 kontrol("yetkisiz yorum işlenen-id'ye eklenmedi", "c1" not in _durum_bellek.get("islenen", {}))
 
+# ── Self-scope (madde 2): elle allowlist yoksa agent kendi myself.accountId'ine kilitlenir ──
+jk._owner_id_cache["id"] = None
+jk.atlassian_get = lambda path, cloud_id=None: {"accountId": "owner-123"} if "myself" in path else {}
+kontrol("elle allowlist varsa o kullanılır (override)", jk._etkin_allowlist({"yazar_allowlist": ["a", "b"]}, "cx") == ["a", "b"])
+jk._owner_id_cache["id"] = None
+kontrol("allowlist boş → self-scope (owner accountId)", jk._etkin_allowlist({"yazar_allowlist": []}, "cx") == ["owner-123"])
+kontrol("owner accountId önbelleğe alındı", jk._owner_id_cache["id"] == "owner-123")
+
+
+def _myself_patlar(path, cloud_id=None):
+    raise RuntimeError("401 yetki")
+
+
+jk._owner_id_cache["id"] = None
+jk.atlassian_get = _myself_patlar
+kontrol("myself alınamazsa fail-closed ([])", jk._etkin_allowlist({"yazar_allowlist": []}, "cx") == [])
+
 print(f"\nJIRA KÖPRÜSÜ TESTLERİ GEÇTİ ({basari} kontrol)")

@@ -29,6 +29,7 @@ oturur; Jira'ya yorum yazma canonical atlassian_post üzerindendir.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import threading
@@ -49,6 +50,8 @@ from .jira_gorevleri import (
 )
 from .jira_tasks import _issue_olustur, _proje_bilgi   # canonical OAuth issue create
 from jira_agent import markdown_to_adf  # ADF: teknik analiz task'ı formatı
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DURUM_DOSYA = BASE_DIR / "output" / "jira-kopru" / "durum.json"
@@ -208,6 +211,36 @@ def _yazar_izinli(yorum: dict, izinliler: list[str]) -> bool:
     if not izinliler:
         return False
     return yorum.get("hesap", "") in izinliler
+
+
+# ── Self-scope (madde 2): per-user kurulumda agent, elle allowlist verilmemişse KENDİ Jira
+#    kimliğine (myself.accountId) otomatik kilitlenir → analist yalnız KENDİ komutlarını işler,
+#    başka analistlerinkine dokunmaz (çakışma yok). Alınamazsa fail-closed korunur.
+_owner_id_cache: dict = {"id": None}
+
+
+def _owner_account_id(cloud_id: str) -> str | None:
+    """Agent'ın bağlı olduğu Jira hesabının accountId'i. Bir kez çözülüp önbelleğe alınır."""
+    if _owner_id_cache["id"]:
+        return _owner_id_cache["id"]
+    try:
+        me = atlassian_get("/rest/api/3/myself", cloud_id=cloud_id) or {}
+        aid = me.get("accountId")
+        if aid:
+            _owner_id_cache["id"] = aid
+            return aid
+    except Exception as e:
+        logger.warning("Jira 'myself' alınamadı (self-scope): %s", e)
+    return None
+
+
+def _etkin_allowlist(ayar: dict, cloud_id: str) -> list[str]:
+    """Yetki eşleşmesinde kullanılacak etkin liste: elle `JIRA_KOPRU_YAZAR_ALLOWLIST` varsa onu
+    (merkezi/çok-kullanıcılı kurulum), yoksa self-scope (owner accountId). Hiçbiri yoksa [] → fail-closed."""
+    if ayar["yazar_allowlist"]:
+        return ayar["yazar_allowlist"]
+    aid = _owner_account_id(cloud_id)
+    return [aid] if aid else []
 
 
 def _yardim_metni(prefix: str) -> str:
@@ -605,14 +638,16 @@ def _tek_tur_ic(pencere_dk: int | None = None) -> dict:
     ayar = ayarlar()
     if not ayar["projeler"]:
         return {"ok": False, "error": "JIRA_KOPRU_PROJELER tanımlı değil (.env)."}
-    # GÜVENLİK — FAIL-CLOSED: allowlist BOŞ iken YORUM kanalı komutları İŞLENMEZ. Aksi halde
-    # projedeki herhangi bir kullanıcı analiz/task-açma tetikleyip kendi taslağını onaylayabilir.
-    # Owner UI kanalı (admin_gerekli) etkilenmez. Owner .env'de accountId ile allowlist tanımlamalı.
-    if not ayar["yazar_allowlist"]:
-        return {"ok": False, "fail_closed": True,
-                "error": "JIRA_KOPRU_YAZAR_ALLOWLIST boş — güvenlik gereği yorum komutları işlenmez "
-                         "(fail-closed). Yetkili analistlerin Jira accountId'lerini ekleyin."}
     cloud_id = _cloud_id()   # Jira bağlı değilse net RuntimeError
+    # GÜVENLİK — FAIL-CLOSED + SELF-SCOPE: etkin allowlist = elle `JIRA_KOPRU_YAZAR_ALLOWLIST`,
+    # yoksa agent'ın KENDİ Jira kimliği (myself.accountId → yalnız kendi komutlarını işler; per-user
+    # kurulumda çakışmasız). Hiçbiri belirlenemezse yorum kanalı komutları İŞLENMEZ (fail-closed).
+    # Owner UI kanalı (admin_gerekli) etkilenmez.
+    etkin_allowlist = _etkin_allowlist(ayar, cloud_id)
+    if not etkin_allowlist:
+        return {"ok": False, "fail_closed": True,
+                "error": "Yetki belirlenemedi: JIRA_KOPRU_YAZAR_ALLOWLIST boş ve Jira kimliği (myself) "
+                         "alınamadı — güvenlik gereği yorum komutları işlenmez (fail-closed)."}
     pencere = pencere_dk or ayar["pencere_dk"]
     prefix = ayar["komut"]
     durum = _durum_yukle()
@@ -654,7 +689,7 @@ def _tek_tur_ic(pencere_dk: int | None = None) -> dict:
             if not coz:
                 continue  # komut değil (kendi 🤖 yanıtlarımız da buraya düşer)
             komut, arg = coz
-            if not _yazar_izinli(y, ayar["yazar_allowlist"]):
+            if not _yazar_izinli(y, etkin_allowlist):
                 # İSTEK 1 — TAM SESSİZLİK: entegrasyonu olmayan / yetkisiz yazara Jira'ya YANIT
                 # YAZILMAZ ve işlenen-id'ye EKLENMEZ (başka analistin kendi agent'ı, kendi durum
                 # dosyasında, kendi komutunu işleyebilsin). Yorum düz bir Jira girdisi olarak kalır;
