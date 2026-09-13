@@ -1,8 +1,11 @@
-# Jira Köprüsü Yetki Davranışı & Bildirimler — Tasarım ve Uygulama Planı
+# Jira Köprüsü Yetki Davranışı & Bildirimler — Tasarım ve Uygulama
 
-> **Durum: TASARIM / PLAN — henüz UYGULANMADI.** Bu doküman ekip testi öncesi hedeflenen
-> davranışı ve maddelenmiş yapılacakları tanımlar. Kod değişikliği ayrı commit'lerle gelecek.
-> İlgili modüller: `skills/jira_kopru.py`, `app.py` (`_jira_kopru_dongusu`), `workflow.py`, `templates/index.html`.
+> **Durum: ✅ UYGULANDI (2026-09-13).** Aşağıdaki 7 madde önerilen sırayla uygulandı; her biri
+> ayrı commit + `ruff` + test ile. **Python değişiklikleri (jira_kopru, app.py, bildirim) canlı
+> olmak için Yeniden Başlat gerektirir**; UI (kopru.html rozet) template auto-reload ile canlıdır.
+> İlgili modüller: `skills/jira_kopru.py`, `skills/bildirim.py` (YENİ), `app.py`
+> (`_jira_kopru_dongusu`, `_analiz_bildirim_dongusu`), `templates/screens/kopru.html`.
+> Testler: `test_jira_kopru` (44), `test_bildirim` (10), `test_bildirim_akis` (9).
 
 ---
 
