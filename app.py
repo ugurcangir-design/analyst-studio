@@ -946,9 +946,12 @@ def guncelle():
     if _auth_aktif_mi() and not _giris_yapildi_mi():
         return jsonify({"error": "Yetkisiz"}), 403
     try:
-        # git pull
+        # git pull — EXPLICIT origin + branch (upstream takibine BAĞIMLI DEĞİL; takip
+        # bilgisi silinse bile "no tracking information" hatası vermez).
+        _dal = (subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=BASE_DIR,
+                               capture_output=True, text=True, timeout=15).stdout or "").strip() or "main"
         pull = subprocess.run(
-            ["git", "pull"], cwd=BASE_DIR, capture_output=True, text=True, timeout=60
+            ["git", "pull", "--ff-only", "origin", _dal], cwd=BASE_DIR, capture_output=True, text=True, timeout=60
         )
         cikti = (pull.stdout + pull.stderr).strip()
 
@@ -1991,7 +1994,8 @@ def _guncelleme_uygula(kaynak: str = "otomatik") -> tuple[bool, str]:
         return False, "Güncelleme zaten uygulanıyor"
     try:
         _guncelleme_durumu["uygulaniyor"] = True
-        pull = _git_calistir(["pull", "--ff-only"], timeout=120)
+        _dal = (_git_calistir(["rev-parse", "--abbrev-ref", "HEAD"]).get("stdout") or "").strip() or "main"
+        pull = _git_calistir(["pull", "--ff-only", "origin", _dal], timeout=120)
         cikti = (pull["stdout"] + "\n" + pull.get("stderr", "")).strip()
         if not pull["ok"]:
             _guncelleme_durumu.update(uygulaniyor=False, hata=cikti[:300])
