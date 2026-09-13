@@ -2109,6 +2109,7 @@ def _jira_kopru_dongusu() -> None:
             # Pencere = aralığı rahatça kapsasın (kaçan yorum olmasın).
             ozet = jira_kopru.tek_tur(pencere_dk=max(ayar["pencere_dk"], (aralik // 60) + 5))
             hata_bildirildi = False   # başarılı tur → bağlantı yeniden kuruldu say
+            jira_kopru.saglik_guncelle(True)   # durum göstergesi: Jira'ya bağlı
             n = len(ozet.get("islenen") or []) if isinstance(ozet, dict) else 0
             if n:
                 logger.info("Jira Köprüsü: %s komut işlendi (%s task tarandı).",
@@ -2120,6 +2121,7 @@ def _jira_kopru_dongusu() -> None:
             ilk_tur = False
         except Exception as e:
             logger.warning("Jira Köprüsü tur hatası: %s", e)
+            jira_kopru.saglik_guncelle(False, str(e)[:200])   # durum göstergesi: bağlantı yok
             # Bağlantı/OAuth hatası → Jira'ya yazamayız; kullanıcıyı YEREL bildirimle uyar (bir kez).
             if not hata_bildirildi:
                 hata_bildirildi = True

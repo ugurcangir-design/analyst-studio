@@ -62,9 +62,17 @@
         const r = await fetch('/api/jira-kopru/liste');
         const d = await r.json();
         const du = document.getElementById('kopru-durum');
-        du.innerHTML = d.aktif
-          ? `<span class="i">i</span>Köprü açık · komut <code>${_kopruEsc(d.komut)}</code>. Jira yorumundan ya da buradan çalıştırabilirsiniz.`
-          : `<span class="i">!</span>Köprü KAPALI — <code>.env</code>'de <code>JIRA_KOPRU=true</code> + Yeniden Başlat. (Analizler yine burada listelenir.)`;
+        if (d.aktif){
+          const sag = d.saglik || {};
+          const sonTur = d.son_tur ? String(d.son_tur).replace('T',' ').replace('Z','') : '—';
+          let baglilik;
+          if (sag.bagli === true)       baglilik = ' · <b style="color:var(--green)">Jira bağlı</b> · son tarama ' + _kopruEsc(sonTur);
+          else if (sag.bagli === false) baglilik = ' · <b style="color:var(--red)">⚠ Jira bağlantısı yok</b>' + (sag.son_hata ? ' — ' + _kopruEsc(sag.son_hata) : '');
+          else                          baglilik = ' · <span style="color:var(--text3)">bağlantı henüz kontrol edilmedi</span>';
+          du.innerHTML = `<span class="i">i</span>Köprü açık · komut <code>${_kopruEsc(d.komut)}</code>${baglilik}`;
+        } else {
+          du.innerHTML = `<span class="i">!</span>Köprü KAPALI — <code>.env</code>'de <code>JIRA_KOPRU=true</code> + Yeniden Başlat. (Analizler yine burada listelenir.)`;
+        }
         du.className = 'ds-hint';
         if (!d.kayitlar || !d.kayitlar.length){
           el.innerHTML = '<div class="panel"><div class="panel-body ds-hint">Henüz köprü analizi yok. Yukarıdan bir task anahtarı girip <b>Analiz Et</b>’e basın, ya da Jira’da task yorumuna <code>/analyst_agent analiz</code> yazın.</div></div>';

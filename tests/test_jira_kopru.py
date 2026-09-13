@@ -195,4 +195,11 @@ jk._owner_id_cache["id"] = None
 jk.atlassian_get = _myself_patlar
 kontrol("myself alınamazsa fail-closed ([])", jk._etkin_allowlist({"yazar_allowlist": []}, "cx") == [])
 
+# ── Durum göstergesi (madde 6): saglik_guncelle → son_durum.saglik ────────────
+jk.saglik_guncelle(True)
+kontrol("başarılı tur → bagli True, son_hata None", jk.saglik()["bagli"] is True and jk.saglik()["son_hata"] is None)
+jk.saglik_guncelle(False, "401 Unauthorized")
+kontrol("hata → bagli False + son_hata dolu", jk.saglik()["bagli"] is False and "401" in (jk.saglik()["son_hata"] or ""))
+kontrol("son_durum 'saglik' alanı içerir", "saglik" in jk.son_durum())
+
 print(f"\nJIRA KÖPRÜSÜ TESTLERİ GEÇTİ ({basari} kontrol)")

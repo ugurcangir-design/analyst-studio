@@ -720,12 +720,29 @@ def _tek_tur_ic(pencere_dk: int | None = None) -> dict:
     return ozet
 
 
+# Runtime sağlık — arka plan döngüsü (app.py) her turda günceller; süreç-içi (disk değil).
+# Kullanıcı agent'ının canlı + Jira'ya bağlı olduğunu görebilsin (durum göstergesi, madde 6).
+_saglik: dict = {"bagli": None, "son_hata": None, "kontrol": None}
+
+
+def saglik_guncelle(bagli: bool, hata: str | None = None) -> None:
+    """Köprü döngüsü çağırır: başarılı tur → bagli=True; hata → bagli=False + son_hata."""
+    _saglik["bagli"] = bool(bagli)
+    _saglik["son_hata"] = (hata or None) if not bagli else None
+    _saglik["kontrol"] = _simdi()
+
+
+def saglik() -> dict:
+    return dict(_saglik)
+
+
 def son_durum() -> dict:
     """UI/endpoint için köprü durumu (0 token)."""
     d = _durum_yukle()
     return {"ayarlar": {k: v for k, v in ayarlar().items()},
             "son_tur": d.get("son_tur"), "son_ozet": d.get("son_ozet"),
-            "islenen_toplam": len(d.get("islenen", {}))}
+            "islenen_toplam": len(d.get("islenen", {})),
+            "saglik": saglik()}
 
 
 # ─── Agent UI kanalı — açık soruları arayüzden de cevapla (tek beyin, iki kanal) ──
@@ -756,7 +773,8 @@ def liste() -> dict:
             "taslak_tip": (taslaklar.get(key) or {}).get("tip", ""),
         })
     kayitlar.sort(key=lambda r: r.get("zaman", ""), reverse=True)
-    return {"ok": True, "kayitlar": kayitlar, "aktif": ayarlar()["aktif"], "komut": ayarlar()["komut"]}
+    return {"ok": True, "kayitlar": kayitlar, "aktif": ayarlar()["aktif"], "komut": ayarlar()["komut"],
+            "saglik": saglik(), "son_tur": d.get("son_tur")}
 
 
 def ui_komut(komut: str, key: str, arg: str = "") -> dict:
