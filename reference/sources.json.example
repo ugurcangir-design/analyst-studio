@@ -1,35 +1,6 @@
 {
-  "confluence_spaces": [
-    {
-      "key": "mbs2",
-      "name": "mbs2"
-    }
-  ],
-  "jira_projects": [
-    {
-      "key": "MBSTRADE",
-      "name": "MBSTRADE"
-    },
-    {
-      "key": "TERMINAL",
-      "name": "TERMINAL"
-    },
-    {
-      "key": "MBD",
-      "name": "MBD"
-    },
-    {
-      "key": "MBSOPS",
-      "name": "MBSOPS"
-    },
-    {
-      "key": "CORE",
-      "name": "CORE"
-    },
-    {
-      "key": "AUTH",
-      "name": "AUTH"
-    }
-  ],
-  "last_sync": "12/05/2026 13:40"
+  "_aciklama": "Kaynak listesi ÖRNEĞİ — ŞİRKET BİLGİSİ KONMAZ. Gerçek Confluence space / Jira proje listeniz uygulamada 'Ayarlar → Kaynaklar → Senkronla' ile yerel reference/sources.json'a yazılır (git'te İZLENMEZ). Bu .example yalnız yapı gösterir.",
+  "confluence_spaces": [],
+  "jira_projects": [],
+  "last_sync": ""
 }

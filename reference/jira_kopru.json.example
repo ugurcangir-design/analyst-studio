@@ -1,7 +1,7 @@
 {
-  "_aciklama": "Jira Köprüsü ayarları — analistler .env'e YAZMAZ; bu dosya güncelleme (git pull) ile gelir ve boot'ta reference/jira_kopru.json olarak seed edilir (git'te izlenmez). Değiştirmek için jira_kopru.json'u düzenleyip Yeniden Başlat. yazar_allowlist BOŞ bırakılırsa agent kendi Jira hesabına kilitlenir (self-scope; önerilen).",
+  "_aciklama": "Jira Köprüsü ayarları ÖRNEĞİ — ŞİRKET BİLGİSİ (proje anahtarı, accountId) KONMAZ. Boot'ta reference/jira_kopru.json olarak seed edilir (git'te İZLENMEZ). Owner 'projeler'i KENDİ makinesinde bu yerel dosyaya (veya Ayarlar'dan) yazar. yazar_allowlist BOŞ → agent kendi Jira hesabına kilitlenir (self-scope; önerilen).",
   "aktif": true,
-  "projeler": ["MBSTRADE"],
+  "projeler": [],
   "aralik_sn": 60,
   "pencere_dk": 120,
   "komut": "/analyst_agent",

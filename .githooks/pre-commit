@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+"""Gizlilik güvenlik duvarı — commit'i sır/PII/şirket bilgisi sızarsa ENGELLER.
+
+Kurulum (bir kez, repo kökünde):  git config core.hooksPath .githooks
+(setup.sh bunu otomatik yapar.) Bypass (yalnız bilinçli, istisnai):  git commit --no-verify
+
+Denetler (yalnız STAGED eklenen içerik + dosya adları):
+  1. Yasak DOSYALAR: .env, makineye özel reference/*.json (runtime), users/analist json,
+     canlı-app profili, resp*.json dump'ları.
+  2. Yasak İÇERİK: gerçek API anahtarı/token, kimlikli bağlantı dizesi, özel anahtar,
+     Jira accountId, iç ağ IP'si, kişisel e-posta.
+Amaç: analist/kurulum bilgileri YERELDE kalır; git'e sır/şirket verisi gitmez.
+"""
+import re
+import subprocess
+import sys
+
+# ── 1) Yasak dosya yolları (staged) ──────────────────────────────────────────
+YASAK_DOSYA = [
+    re.compile(r"(^|/)\.env$"),
+    re.compile(r"(^|/)\.env\.(?!example$)[^/]+$"),   # .env.local vb. (.env.example serbest)
+    re.compile(r"^reference/(context_filter|prompts|sources|kod_kaynagi|analiz_mcp|jira_kopru)\.json$"),
+    re.compile(r"(^|/)(users|analist|gorunurluk_local)\.json$"),
+    re.compile(r"(^|/)\.mcp-analiz.*\.json$"),
+    re.compile(r"(^|/)\.live-app-profile/"),
+    re.compile(r"(^|/)resp[-_A-Za-z0-9]*\.json$"),
+]
+
+# ── 2) Yasak içerik desenleri (staged eklenen satırlar) ──────────────────────
+# (ad, desen, yanlış-pozitifleri eleyen "izin" alt-deseni)
+ICERIK = [
+    ("Anthropic API anahtarı", re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}"), None),
+    ("OpenAI/genel sk- anahtarı", re.compile(r"\bsk-[A-Za-z0-9]{32,}\b"), None),
+    ("GitHub token", re.compile(r"\bghp_[A-Za-z0-9]{30,}\b"), None),
+    ("Slack token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}"), None),
+    ("AWS erişim anahtarı", re.compile(r"\bAKIA[0-9A-Z]{16}\b"), None),
+    ("Özel anahtar (PEM)", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"), None),
+    ("Kimlikli bağlantı dizesi",
+     re.compile(r"\b(postgresql|postgres|mysql|mongodb(\+srv)?|redis|amqp)://[^:@/\s]+:[^@/\s]{4,}@[^\s/]*\.[^\s/]"),
+     None),
+    ("Jira accountId", re.compile(r"\b[0-9]{6,}:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b"), None),
+    ("İç ağ IP'si", re.compile(r"\b(10\.\d{1,3}|192\.168|172\.(1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}\b"), None),
+    ("Kişisel e-posta", re.compile(r"[A-Za-z0-9._%+-]+@(gmail|hotmail|outlook|yahoo|icloud|yandex)\.com", re.I), None),
+]
+# Yanlış-pozitif bağlamları (satır bunları içeriyorsa o satır atlanır)
+IZIN_BAGLAM = re.compile(r"noreply@anthropic|example\.com|@db/|://ro:x@|localhost|127\.0\.0\.1|"
+                         r"placeholder|örnek|<[^>]+>|xxx|redakte|_DESEN|pattern|dummy|test@", re.I)
+
+
+def staged_dosyalar():
+    r = subprocess.run(["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
+                       capture_output=True, text=True)
+    return [x for x in r.stdout.splitlines() if x.strip()]
+
+
+def staged_eklenen(dosya):
+    r = subprocess.run(["git", "diff", "--cached", "-U0", "--", dosya], capture_output=True, text=True)
+    return [ln[1:] for ln in r.stdout.splitlines() if ln.startswith("+") and not ln.startswith("+++")]
+
+
+def main():
+    bulgular = []
+    for f in staged_dosyalar():
+        for yd in YASAK_DOSYA:
+            if yd.search(f):
+                bulgular.append(f"  ⛔ YASAK DOSYA: {f}  (yerelde kalmalı — .gitignore + .example kullan)")
+                break
+        # .example ve bu hook'un kendisi içerik taramasından muaf (desenleri anlatır)
+        if f.endswith(".example") or f.endswith(".githooks/pre-commit") or f == ".githooks/pre-commit":
+            continue
+        for satir in staged_eklenen(f):
+            if IZIN_BAGLAM.search(satir):
+                continue
+            for ad, desen, _ in ICERIK:
+                m = desen.search(satir)
+                if m:
+                    ornek = m.group(0)[:12] + "…"
+                    bulgular.append(f"  ⛔ {ad}: {f}  →  {ornek}")
+    if bulgular:
+        sys.stderr.write(
+            "\n🛡️  GİZLİLİK GÜVENLİK DUVARI — commit ENGELLENDİ (sır/PII/şirket bilgisi):\n\n"
+            + "\n".join(bulgular)
+            + "\n\nBu veriler git'e GİTMEMELİ — yerel dosyada (.env / reference/*.json) tutun.\n"
+              "Yanlış alarmsa (ör. gerçek sır değil):  git commit --no-verify\n\n")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

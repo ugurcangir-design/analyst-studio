@@ -52,6 +52,15 @@ EOF
 chmod +x start.sh
 
 echo ""
+echo "=== Gizlilik güvenlik duvarı (git pre-commit) etkinleştiriliyor ==="
+# Sır/PII/şirket bilgisi commit'ini engelleyen paylaşılan hook (.githooks/pre-commit).
+if [ -d .git ]; then
+  git config core.hooksPath .githooks && chmod +x .githooks/pre-commit 2>/dev/null \
+    && echo "  ✓ .githooks etkin — sır/PII commit'leri engellenecek" \
+    || echo "  (hook etkinleştirilemedi — elle: git config core.hooksPath .githooks)"
+fi
+
+echo ""
 echo "=== Masaüstü ikonu oluşturuluyor ==="
 # İkon oluşturma kurulumun kritik parçası değil — başarısız olsa bile
 # (örn. swiftc yok) kurulum tamamlanmış sayılır; ./start.sh ile çalışır.

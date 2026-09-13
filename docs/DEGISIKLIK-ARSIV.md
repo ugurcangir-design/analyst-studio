@@ -353,7 +353,7 @@ Kod/eşleştirme değişmedi — sadece hata mesajı bilgilendirici. ruff temiz.
 ## CLI 429 mesajı düzeltmesi 2 — tek sebep iddia etme, /status'a yönlendir ✅
 Kullanıcı ekran görüntüsü: 5 saatlik limit %35 (bol), haftalık %4, ama **usage credits $45.27/$48.24
 (kırmızı)**. Yani önceki "5 saatlik oturum doldu" ifadesi bu vaka için yanıltıcıydı. CLI hesabı
-doğrulandı: `eposta-gizli` = Desktop ile AYNI (hesap uyuşmazlığı yok). 429 mesajı artık tek bir
+doğrulandı: CLI hesabı = Desktop ile AYNI (hesap uyuşmazlığı yok). 429 mesajı artık tek bir
 sebep iddia etmiyor (5 saatlik / haftalık / usage-credit olabilir) ve kesin durum için Claude Code'un
 KENDİ `/status`·`/usage` görünümüne yönlendiriyor; API moduna geçiş (ANTHROPIC_API_KEY + USE_CLAUDE_CLI=
 false) alternatifi korunuyor. ruff temiz.

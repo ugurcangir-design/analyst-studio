@@ -232,7 +232,7 @@ sıfırlanma saati `/api/cli/durum` header göstergesinde görünür (`cli_durum
 
 ## Hard kurallar
 1. **Türkçe** yaz (print/yorum/hata); teknik terimler İngilizce kalır.
-2. Asla commit etme: `.env` (chmod 600) + makineye özel `reference/{context_filter,prompts,sources,kod_kaynagi,analiz_mcp,jira_kopru}.json` (gitignore'da; `*.json.example` izlenir, açılışta `_runtime_config_seed()` ile seed).
+2. Asla commit etme: `.env` (chmod 600) + makineye özel `reference/{context_filter,prompts,sources,kod_kaynagi,analiz_mcp,jira_kopru}.json` (gitignore'da; `*.json.example` izlenir, açılışta `_runtime_config_seed()` ile seed). **`*.example` dosyaları JENERİK kalır — GERÇEK şirket verisi (Jira proje anahtarı, Confluence space, accountId, URL, e-posta) KONMAZ; yapı gösterir, gerçek liste yerel `reference/*.json`'a (git'e gitmez) yazılır.** **Gizlilik güvenlik duvarı:** `.githooks/pre-commit` (setup.sh `core.hooksPath .githooks` yapar) sır/PII/şirket bilgisi (API anahtarı, kimlikli bağlantı dizesi, Jira accountId, iç IP, kişisel e-posta) + yasak dosyaların commit'ini ENGELLER; bilinçli istisna `git commit --no-verify`.
 3. Atlassian helper → her zaman `skills/atlassian.py`'den import (duplicate tanım yok).
 4. Yeni output dosyası → `IZIN_VERILEN_CIKTILAR` (app.py). Yeni Jira field → `jira_agent.py` + `skills/jira_tasks.py`.
 5. Prompt önceliği: ekrandaki **Özel Prompt** (`context_filter.json → ozel_prompt`, analiz-bazlı, varsayılanın YERİNE geçer) > `reference/prompts.json` (kalıcı override) > `VARSAYILAN_PROMPTLAR` (base.py).
