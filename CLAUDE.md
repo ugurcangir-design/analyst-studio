@@ -190,7 +190,8 @@ Tüm v2 geliştirmesi burada, ayrı portta (`PORT=5003 ./start.sh`) yapılır. A
   sürdürülür; Jira yorumu ile AYNI beyin (`jira_kopru.ui_komut`→`_komut_uygula`+`jira_yorum_ekle`, `_TUR_LOCK`);
   `GET /api/jira-kopru/liste` + arka plan iş `POST /api/jira-kopru/is`→`GET /api/jira-kopru/is/<id>` (`_kopru_isler`).
   Test: `tests/test_jira_kopru.py` (offline durum-makinesi, 0 token). Tam uç dökümü → `docs/ENDPOINTS.md` "Jira Köprüsü".
-  **Tasarım/davranış + bildirim planı → `docs/KOPRU-VE-BILDIRIMLER.md`.**
+  **Tasarım/davranış + bildirim planı → `docs/KOPRU-VE-BILDIRIMLER.md`; ekip/kullanıcı hızlı rehberi + SSS
+  → `docs/JIRA-KULLANIM.md`; uygulama-içi kılavuz `KILAVUZ.html` §18 (Jira Köprüsü) + §19 (Bildirimler).**
 - **Bildirimler (`skills/bildirim.py` — YEREL masaüstü):** `gonder(baslik, metin[, alt])` → macOS `osascript display
   notification` (0 bağımlılık, 0 token, best-effort — hata YUTAR; `BILDIRIM=false`/macOS-değil → no-op; redaksiyon +
   AppleScript kaçışı; base.py IMPORT ETMEZ). **Analiz yaşam döngüsü:** `app._analiz_bildirim_dongusu` (UI polling'inden

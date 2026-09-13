@@ -220,6 +220,8 @@
       <a href="#bakim"     class="h1">15. Güncelleme &amp; Bakım</a>
       <a href="#sorun"     class="h1">16. Sorun Giderme</a>
       <a href="#sss"       class="h1">17. SSS</a>
+      <a href="#jira-kopru" class="h1">18. Jira Köprüsü</a>
+      <a href="#bildirim"  class="h1">19. Bildirimler</a>
     </nav>
   </aside>
 
@@ -1774,10 +1776,77 @@ pip install -r requirements.txt   # gerekirse</code></pre>
     </p>
 
     <h4>Bir hata buldum / iyileştirme önerim var</h4>
-    <p>Ekibinize bildirin. Geliştirici GitHub'da <code>ugurcangir-design/Analysys_Agent</code> deposunda issue açabilir.</p>
+    <p>Ekibinize bildirin. Geliştirici GitHub'da <code>ugurcangir-design/analyst-studio</code> deposunda issue açabilir.</p>
+
+    <h2 id="jira-kopru">18. Jira Köprüsü (yorumla analiz)</h2>
+    <p>
+      Jira'yı web-chat gibi kullanın: bir task'ın <strong>yorum</strong> satırına
+      <code>/analyst_agent &lt;komut&gt;</code> yazın; agent task'ı analiz edip sonucu Jira'ya
+      geri yazsın. Hızlı ekip referansı: <code>docs/JIRA-KULLANIM.md</code>.
+    </p>
+
+    <h3>Model — herkes kendi agent'ını çalıştırır</h3>
+    <ul>
+      <li>Her analist <strong>kendi bilgisayarında kendi agent'ını</strong> (kendi Jira hesabıyla) çalıştırır.</li>
+      <li>Bir agent <strong>yalnız kendi sahibinin</strong> komutlarını işler; başkasının komutu o agent için görünmez.</li>
+      <li>Agent'ı olmayan biri komut yazarsa <strong>hiçbir şey olmaz</strong> — yorum Jira'da düz bir giriş olarak kalır.</li>
+    </ul>
+
+    <h3>Kurulum</h3>
+    <p><code>.env</code>: <code>JIRA_KOPRU=true</code> + <code>JIRA_KOPRU_PROJELER=MBSTRADE</code> → <strong>Yeniden Başlat</strong>.
+      <code>JIRA_KOPRU_YAZAR_ALLOWLIST</code> boş bırakılırsa agent kendi Jira kimliğine otomatik kilitlenir
+      (self-scope; önerilen). Jira Köprüsü ekranında <strong>"Jira bağlı · son tarama HH:MM"</strong> yazısı hazır olduğunu gösterir.</p>
+
+    <h3>Komutlar</h3>
+    <table style="width:100%; border-collapse:collapse; font-size:13px; margin:8px 0;">
+      <thead><tr>
+        <th style="text-align:left; padding:6px 8px; border-bottom:2px solid var(--border);">Komut</th>
+        <th style="text-align:left; padding:6px 8px; border-bottom:2px solid var(--border);">Ne yapar</th>
+      </tr></thead>
+      <tbody>
+        <tr><td style="padding:6px 8px; border-bottom:1px solid var(--border);"><code>analiz</code></td><td style="padding:6px 8px; border-bottom:1px solid var(--border);">Task'ı teknik analiz eder → sonucu <strong>task açıklamasına</strong> yazar (orijinal talep korunur); açık sorular ayrı yorum.</td></tr>
+        <tr><td style="padding:6px 8px; border-bottom:1px solid var(--border);"><code>analiz &lt;talimat&gt;</code></td><td style="padding:6px 8px; border-bottom:1px solid var(--border);">Talimatlı analiz (örn. <em>sadece BE</em>).</td></tr>
+        <tr><td style="padding:6px 8px; border-bottom:1px solid var(--border);"><code>cevap &lt;cevaplar&gt;</code></td><td style="padding:6px 8px; border-bottom:1px solid var(--border);">Açık sorulara cevap → analiz yeniden üretilir, sorular yakınsar.</td></tr>
+        <tr><td style="padding:6px 8px; border-bottom:1px solid var(--border);"><code>düzelt &lt;talimat&gt;</code></td><td style="padding:6px 8px; border-bottom:1px solid var(--border);">Yalnız ilgili kısmı düzeltir.</td></tr>
+        <tr><td style="padding:6px 8px; border-bottom:1px solid var(--border);"><code>güncelle</code></td><td style="padding:6px 8px; border-bottom:1px solid var(--border);">Son analizi gövdeye yeniden yazar (taze ise 0-token).</td></tr>
+        <tr><td style="padding:6px 8px; border-bottom:1px solid var(--border);"><code>ilişkili-aç</code></td><td style="padding:6px 8px; border-bottom:1px solid var(--border);">İlişkili YENİ task <strong>önerir (taslak)</strong> — henüz açmaz.</td></tr>
+        <tr><td style="padding:6px 8px; border-bottom:1px solid var(--border);"><code>onayla</code></td><td style="padding:6px 8px; border-bottom:1px solid var(--border);">Bekleyen taslağı uygular → Jira'da açar + bağlar.</td></tr>
+        <tr><td style="padding:6px 8px; border-bottom:1px solid var(--border);"><code>iptal</code> / <code>yardım</code></td><td style="padding:6px 8px; border-bottom:1px solid var(--border);">Taslağı iptal eder / komut listesini yazar.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Akış — hangi adımda ne olur</h3>
+    <ol>
+      <li>Task yorumuna <code>/analyst_agent analiz</code> yaz.</li>
+      <li>Agent ~60 sn'de bir tarar (polling), komutu bulur.</li>
+      <li>Analiz üretir (CLI + canlı gözlem + task anahtar kelimeleriyle RAG) — birkaç dakika sürebilir.</li>
+      <li>Sonuç <strong>task açıklamasına</strong> yazılır: <code>## 📌 Orijinal Talep</code> (korunur) + <code>## 🤖 Teknik Analiz</code>.</li>
+      <li>Açık sorular ayrı <strong>yorum</strong> olarak gelir (Q-T-001…).</li>
+      <li><code>cevap</code> ile yanıtla → analiz güncellenir, sorular azalır.</li>
+      <li>Gerekirse <code>ilişkili-aç</code> → <code>onayla</code> ile ilişkili task aç.</li>
+      <li>Analiz bitince <strong>masaüstü bildirimi</strong> alırsın (Bölüm 19).</li>
+    </ol>
+    <p>Aynı işi uygulama içi <strong>Jira Köprüsü</strong> ekranından da yapabilirsin (aynı beyin) —
+      açık soruları oradan tek tek cevaplayıp "Cevapla &amp; Devam Et" diyebilirsin.</p>
+
+    <h4>Komut yazdım ama yanıt gelmedi?</h4>
+    <p>En olası sebepler: agent'ın kapalı · komut senin hesabından değil · proje listede değil ·
+      yorum çok eski (pencere dışı) · Jira bağlantısı kopuk. Ayrıntı + tüm SSS: <code>docs/JIRA-KULLANIM.md</code>.</p>
+
+    <h2 id="bildirim">19. Bildirimler</h2>
+    <p>Analizi başlatıp başka işe geçtiğinizde, iş bitince <strong>kendi bilgisayarınızda</strong> yerel
+      bir masaüstü bildirimi alırsınız (macOS). Bildirimler yereldir — veri makineden çıkmaz.</p>
+    <ul>
+      <li><strong>Süreç/teknik analiz tamamlandı</strong> → "«doküman» süreç analizi tamamlandı — N açık soru. Cevaplayıp devam edebilir veya teknik analize geçebilirsiniz."</li>
+      <li><strong>Analiz hata verdi</strong> → kısa hata mesajı.</li>
+      <li><strong>Jira bağlantısı koptu</strong> → köprü komutları işlenemiyor uyarısı.</li>
+      <li><strong>Agent kapalıyken komut girdiysen</strong> → agent açılınca "çevrimdışıyken N komut işlendi".</li>
+    </ul>
+    <p>Kapatmak için <code>.env</code> <code>BILDIRIM=false</code>. <strong>Sınır:</strong> agent tamamen
+      kapalıyken anlık bildirim gönderilemez (kapalı program yazamaz) — açılışta telafi edilir.</p>
 
     <div style="margin-top:64px; padding-top:24px; border-top:1px solid var(--border); font-size:12px; color:var(--text3); text-align:center;">
-      <strong>Analyst Studio</strong> · v2026.09 · Kullanıcı Kılavuzu<br>
+      <strong>Analyst Studio</strong> · v2026.09 · Kullanıcı Kılavuzu · Jira Köprüsü &amp; Bildirimler<br>
       Bu doküman <code>KILAVUZ.html</code> dosyasıdır; depo köküne kayıtlıdır
     </div>
   </main>
