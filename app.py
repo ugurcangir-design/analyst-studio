@@ -1,5 +1,5 @@
 """
-Flask web sunucusu — Analyst Studio (port 5002)
+Flask web sunucusu — Analyst Studio v2 (varsayılan port 5003; v1 = 5002, ayrı dizin/süreç)
 """
 
 import os
@@ -4780,7 +4780,7 @@ def _baslangic_guvenlik_kontrol(host: str, auth_aktif: bool) -> bool:
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5002))
+    port = int(os.getenv("PORT", 5003))   # v2 VARSAYILAN 5003 — v1 (5002) ile ASLA çakışmasın (ayrışma garantisi)
     host = os.getenv("HOST", "127.0.0.1")  # Default: yalnız yerel; LAN için .env'de HOST=0.0.0.0
 
     if not _baslangic_guvenlik_kontrol(host, _auth_aktif_mi()):

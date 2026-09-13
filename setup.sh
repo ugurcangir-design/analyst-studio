@@ -69,4 +69,4 @@ bash create_app.sh || echo "  (Masaüstü ikonu atlandı — ./start.sh ile baş
 echo ""
 echo "=== Kurulum tamamlandı ==="
 echo "Masaüstündeki 'Analyst Studio' uygulamasına çift tıklayarak başlatabilirsiniz."
-echo "Alternatif: ./start.sh ile terminalden çalıştırın → http://localhost:5002"
+echo "Alternatif: ./start.sh ile terminalden çalıştırın → http://localhost:5003"

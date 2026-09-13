@@ -1,7 +1,7 @@
 # brd-analyst-agent (Analyst Studio) — Claude Code Context
 
 macOS masaüstü uygulaması. BRD/süreç dokümanı → RAG destekli analiz → Jira Epic/Story/Subtask.
-Flask + Python **3.10+** (`str|None`), tarayıcı SPA `http://localhost:5002`.
+Flask + Python **3.10+** (`str|None`), tarayıcı SPA `http://localhost:5003` (v2; v1 = 5002, ayrı dizin/süreç).
 İki akış: **Süreç → Teknik → Jira** (ana, FE/BE ayrımı) · **BRD → Kapsam**.
 
 ## ⚠️ Bu çalışma alanı = Analyst Studio v2 (AYRI repo · dal `main` · port **5003**)
