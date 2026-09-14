@@ -80,6 +80,10 @@ reference/analiz_mcp.json
 reference/jira_kopru.json
 .mcp-analiz.json
 
+# Owner konsol kilidi (Kullanım Raporu + Yetki ekranları) — SADECE owner makinesinde true;
+# git'e gitmez, .env'e konmaz (kopyalanan .env sızmasın), .example'dan false seed edilir.
+reference/owner_konsol.json
+
 # create_app.sh tarafından üretilen makineye-özel başlatıcı (yol+port içerir)
 _start.sh
 output/.gozlem-durum.json

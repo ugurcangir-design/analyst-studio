@@ -1,0 +1,4 @@
+{
+  "_aciklama": "Owner konsolu kilidi — SADECE owner'ın makinesinde 'true' olur. Bu dosya git'te İZLENMEZ (gitignore) ve .example'dan false seed edilir; güncelleme sonrası owner HARİCİNDEKİ tüm agent'larda Kullanım Raporu + Yetki ekranları KAPALI kalır. Owner kendi makinesinde bu dosyayı acar ve owner_konsol'u true yapar. .env'e KONMAZ (kopyalanan .env sizmasin diye).",
+  "owner_konsol": false
+}

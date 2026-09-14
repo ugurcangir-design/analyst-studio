@@ -230,27 +230,39 @@ def _auth_aktif_mi() -> bool:
     return os.getenv("AUTH_ENABLED", "false").lower() in ("1", "true", "yes")
 
 
-def _usage_yetkili_mi() -> bool:
-    """Kullanım (telemetri) dashboard'unu yalnız OWNER görür.
+OWNER_KONSOL_PATH = REF_DIR / "owner_konsol.json"
 
-    AUTH'tan BAĞIMSIZ ayrı bayrak: yalnız owner'ın .env'inde **OWNER_KONSOL=true** olur.
-    Analist build'lerinde bu bayrak yoktur → sekme gizli + endpoint 403.
-    NOT: Eski `USAGE_DASHBOARD` bayrağı ARTIK OKUNMAZ — analist makinelerine yanlışlıkla kopyalanan
-    owner `.env`'i bu ekranları açıyordu; bayrak yenilendi ki kopyalanan eski değer bir işe yaramasın.
-    Owner'lar `.env`'lerinde `OWNER_KONSOL=true` satırını eklemelidir."""
-    return os.getenv("OWNER_KONSOL", "false").lower() in ("1", "true", "yes")
+
+def _owner_konsol_aktif() -> bool:
+    """Owner konsolu (Kullanım Raporu + Yetki ekranları) YALNIZ owner'ın makinesinde açıktır.
+
+    Kilit **gitignore'lu yerel işaret dosyasındadır** (`reference/owner_konsol.json` →
+    `{"owner_konsol": true}`), `.env`'de DEĞİL. Sebep: `.env` bir analiste kopyalanırsa eski
+    `OWNER_KONSOL` bayrağı bu ekranları açıyordu (gözlemlenen sızıntı). İşaret dosyası git'e
+    gitmez, `.env` paylaşımıyla taşınmaz ve `.example`'dan **false** seed edilir → güncelleme
+    sonrası owner HARİCİNDEKİ tüm agent'larda KAPALI. Owner kendi makinesinde bu dosyayı
+    `true` yapar (tek seferlik, UI'da açığa çıkmaz). Eski `OWNER_KONSOL`/`YETKI_PANELI` env
+    bayrakları ARTIK OKUNMAZ (kopyalanan .env işe yaramasın)."""
+    try:
+        if OWNER_KONSOL_PATH.exists():
+            veri = json.loads(OWNER_KONSOL_PATH.read_text(encoding="utf-8"))
+            return bool(veri.get("owner_konsol", False))
+    except Exception:
+        pass
+    return False
+
+
+def _usage_yetkili_mi() -> bool:
+    """Kullanım (telemetri) dashboard'unu yalnız OWNER görür → owner konsol işaretine bağlı."""
+    return _owner_konsol_aktif()
 
 
 def _yetki_paneli_mi() -> bool:
-    """Yetki ekranı (görünürlük yönetimi) yalnız OWNER kurulumunda görünür.
+    """Yetki ekranı (görünürlük yönetimi) yalnız OWNER kurulumunda görünür → owner konsol işareti.
 
-    Kendi bilgisayarına kuran analist AUTH kapalı olduğu için teknik olarak 'owner'dır — bu yüzden
-    rol yetmez; `OWNER_KONSOL` gibi AUTH'tan BAĞIMSIZ bayrak gerekir. `YETKI_PANELI` verilmezse
-    `OWNER_KONSOL`'a düşer (analist build'inde ikisi de yok)."""
-    v = os.getenv("YETKI_PANELI")
-    if v is None:
-        return _usage_yetkili_mi()
-    return v.lower() in ("1", "true", "yes")
+    Kendi bilgisayarına kuran analist AUTH kapalı olduğu için teknik olarak 'owner'dır; bu yüzden
+    rol yetmez, ayrı işaret gerekir (analistlerde yok)."""
+    return _owner_konsol_aktif()
 
 
 def yetki_gerekli(fn):
@@ -496,7 +508,7 @@ def _runtime_config_seed() -> None:
     """Makineye özel çalışma-zamanı config dosyaları (context_filter/prompts/sources)
     git'te İZLENMEZ — pull çakışmasını önler. Eksiklerse .example varsayılanından
     oluşturulur. Böylece taze klon + güncelleme sonrası ekip varsayılanları korunur."""
-    for ad in ("context_filter.json", "prompts.json", "sources.json", "kod_kaynagi.json", "analiz_mcp.json", "jira_kopru.json"):
+    for ad in ("context_filter.json", "prompts.json", "sources.json", "kod_kaynagi.json", "analiz_mcp.json", "jira_kopru.json", "owner_konsol.json"):
         gercek = REF_DIR / ad
         ornek = REF_DIR / f"{ad}.example"
         if not gercek.exists() and ornek.exists():

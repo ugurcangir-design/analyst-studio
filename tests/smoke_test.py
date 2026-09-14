@@ -147,12 +147,15 @@ kontrol("hatalar: bilinmeyen → ilk satır başlık, traceback atıldı", _bil[
 kontrol("hatalar: None → None", _ht.insanlastir(None) is None)
 kontrol("workflow-state hata_ozet alanı", "hata_ozet" in json_al(istemci.get("/api/workflow-state")))
 
-# Yetki paneli: bayrak kapalıyken (analist kurulumu) 403 + nav gizli; bayrak açılınca katalog gelir.
-# (Owner makinesinde .env USAGE_DASHBOARD=true olabilir → açıkça kapat.)
-os.environ["YETKI_PANELI"] = "false"
-kontrol("gorunurluk bayrak kapalı → 403 (analist kurulumu)", istemci.get("/api/gorunurluk").status_code == 403)
-kontrol("auth/me yetki_admin=false", json_al(istemci.get("/api/auth/me")).get("yetki_admin") is False)
-os.environ["YETKI_PANELI"] = "true"
+# Owner konsolu (Kullanım Raporu + Yetki) kilidi artık gitignore'lu yerel dosyada
+# (reference/owner_konsol.json), .env DEĞİL → _owner_konsol_aktif ile aç/kapat.
+# Kapalıyken (analist kurulumu) 403 + nav gizli; açılınca katalog gelir.
+_oka_gercek = uygulama._owner_konsol_aktif   # gerçek fonksiyonu sakla (env-ignored testi için)
+uygulama._owner_konsol_aktif = lambda: False
+kontrol("owner konsol kapalı → gorunurluk 403 (analist kurulumu)", istemci.get("/api/gorunurluk").status_code == 403)
+kontrol("owner konsol kapalı → auth/me yetki_admin=false", json_al(istemci.get("/api/auth/me")).get("yetki_admin") is False)
+kontrol("owner konsol kapalı → auth/me usage_admin=false", json_al(istemci.get("/api/auth/me")).get("usage_admin") is False)
+uygulama._owner_konsol_aktif = lambda: True
 # Görev analizi düzelt endpoint'i — girdi doğrulaması (AI/Jira'ya gitmeden 400)
 kontrol("gorev/duzelt geçersiz görev → 400",
         istemci.post("/api/jira/gorev/duzelt", json={"markdown": "x", "talimat": "y"}, headers=ORIGIN).status_code == 400)
@@ -173,14 +176,28 @@ kontrol("gorev/is/durdur bilinmeyen → 404",
         istemci.post("/api/jira/gorev/is/durdur", json={"job": "yok123"}, headers=ORIGIN).status_code == 404)
 
 g = json_al(istemci.get("/api/gorunurluk"))
-kontrol("gorunurluk katalog (YETKI_PANELI=true)", g.get("ok") and len(g.get("katalog", [])) >= 10)
+kontrol("gorunurluk katalog (owner konsol açık)", g.get("ok") and len(g.get("katalog", [])) >= 10)
 _katalog_idler = {k["id"] for k in g.get("katalog", [])}
 kontrol("gorunurluk katalog: 'kod' (Kod Kaynağı) analiste kapatılabilir", "kod" in _katalog_idler)
 kontrol("gorunurluk katalog: 'kopru' (Jira Köprüsü) analiste kapatılabilir", "kopru" in _katalog_idler)
 # Katalogdaki her analist-ekranı için nav-<id> var (tutarlılık — yeni ekran eklenince katalog güncel kalsın)
 kontrol("gorunurluk katalog: tüm ekran id'leri gerçek ('endpoints' dolu)",
         all(k.get("endpoints") for k in g.get("katalog", [])))
-kontrol("auth/me yetki_admin=true", json_al(istemci.get("/api/auth/me")).get("yetki_admin") is True)
+kontrol("owner konsol açık → auth/me yetki_admin=true", json_al(istemci.get("/api/auth/me")).get("yetki_admin") is True)
+# GÜVENLİK: kopyalanan .env'deki eski OWNER_KONSOL/YETKI_PANELI env bayrakları ARTIK OKUNMAZ.
+# Gerçek _owner_konsol_aktif'i, işaret dosyası YOKKEN env set ederek dene → yine False olmalı.
+import pathlib  # noqa: E402
+uygulama._owner_konsol_aktif = _oka_gercek
+_oka_path = uygulama.OWNER_KONSOL_PATH
+uygulama.OWNER_KONSOL_PATH = pathlib.Path("/nonexistent-xyz/owner_konsol.json")
+os.environ["OWNER_KONSOL"] = "true"
+os.environ["YETKI_PANELI"] = "true"
+kontrol("owner konsol: env OWNER_KONSOL/YETKI_PANELI OKUNMAZ (işaret dosyası yoksa kapalı)",
+        uygulama._owner_konsol_aktif() is False)
+uygulama.OWNER_KONSOL_PATH = _oka_path
+os.environ.pop("OWNER_KONSOL", None)
+os.environ.pop("YETKI_PANELI", None)
+uygulama._owner_konsol_aktif = lambda: True   # kalan testler owner modunda sürsün
 
 u = json_al(istemci.get("/api/guncelleme/durum"))
 kontrol("guncelleme/durum ok (fetch yok)", u.get("ok") and "yeni_surum" in u)
