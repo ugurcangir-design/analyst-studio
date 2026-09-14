@@ -3731,6 +3731,7 @@ python cli.py ui ~/export.zip</pre>
             <div style="flex:1">
               <div class="section-title">Mevcut Sürüm</div>
               <div id="version-info" style="font-size:11px;color:var(--text3);font-family:'Geist Mono',monospace;margin-top:6px"></div>
+              <div id="update-tani" style="font-size:10px;color:var(--text3);font-family:'Geist Mono',monospace;margin-top:3px;opacity:.75" title="Yerel/uzak commit + ileri-geri farkı (tanı)"></div>
             </div>
             <div style="display:flex;gap:8px;margin-top:2px">
               <button class="btn btn-outline btn-sm" id="update-btn" onclick="guncellemeYap()" style="white-space:nowrap">
@@ -8148,6 +8149,13 @@ async function versiyonYukle() {
     const g = await (await fetch('/api/guncelleme/durum?kontrol=1')).json();
     const blok = document.getElementById('update-iraksama');
     if (blok) blok.style.display = g && g.iraksama ? '' : 'none';
+    // Tanı satırı (yerel vs uzak commit + ileri/geri) — sorun sürerse paylaşmak için
+    const tani = document.getElementById('update-tani');
+    if (tani && g) {
+      tani.textContent = `yerel ${g.head || '?'} · uzak ${g.uzak_head || '?'}`
+        + ` · ileri ${g.ahead ?? '?'} / geri ${g.behind ?? '?'}`
+        + (g.iraksama ? ' · IRAKSAMA' : '');
+    }
   } catch {}
 }
 

@@ -1993,14 +1993,14 @@ def _guncelleme_kontrol(fetch: bool = True) -> dict:
             pass
     kirli = _git_calistir(["status", "--porcelain", "--untracked-files=no"])
     yerel_degisiklik = bool(kirli["ok"] and kirli["stdout"].strip())
-    # IRAKSAMA tespiti: HEAD, origin/dal'ın atası DEĞİLSE fast-forward İMKANSIZ.
-    # Tipik neden: eski klon + uzakta geçmiş yeniden yazımı (git filter-repo/force-push)
-    # → yerel commit'ler artık uzakta yok, `pull --ff-only` başarısız. `ahead` yanıltıcı
-    # ("push edilmemiş commit" değil, ıraksamış eski geçmiş).
-    # merge-base --is-ancestor: çıkış 0 = HEAD atadır (ff mümkün), 1 = değil (ıraksama)
-    ata = _git_calistir(["merge-base", "--is-ancestor", "HEAD", f"origin/{dal}"])
-    ff_mumkun = ata["ok"]
-    iraksama = bool(behind > 0 and not ff_mumkun)
+    # IRAKSAMA = STANDART "diverged" tanımı: yerelin uzakta OLMAYAN commit'i (ahead>0)
+    # VE uzağın yerelde olmayan commit'i (behind>0) aynı anda varsa. Tipik neden: eski
+    # klon + uzakta geçmiş yeniden yazımı (git filter-repo/force-push) → `pull --ff-only`
+    # imkânsız. YALNIZ 'geride' olan (ahead=0) makine ıraksak DEĞİL, düz ff pull çalışır —
+    # bu yüzden ahead>0 şartı false-positive'i (ör. merge-base ref hatası) önler.
+    iraksama = bool(ahead > 0 and behind > 0)
+    head_h = (_git_calistir(["rev-parse", "--short", "HEAD"]).get("stdout") or "")[:12]
+    uzak_h = (_git_calistir(["rev-parse", "--short", f"origin/{dal}"]).get("stdout") or "")[:12]
     uzak = None
     degisiklikler: list[str] = []
     if behind:
@@ -2023,7 +2023,8 @@ def _guncelleme_kontrol(fetch: bool = True) -> dict:
         engel = "push edilmemiş yerel commit var — otomatik pull kapalı"
     d.update(yeni_surum=behind > 0, behind=behind, ahead=ahead, uzak=uzak, dal=dal,
              degisiklikler=degisiklikler, engel=engel, iraksama=iraksama,
-             yerel_degisiklik=yerel_degisiklik, son_kontrol=time.time(), hata=None)
+             yerel_degisiklik=yerel_degisiklik, head=head_h, uzak_head=uzak_h,
+             son_kontrol=time.time(), hata=None)
     return d
 
 
@@ -2458,18 +2459,18 @@ def guncelleme_simdi():
 
 @app.route("/api/guncelleme/sifirla", methods=["POST"])
 def guncelleme_sifirla():
-    """IRAKSAMA kurtarma: yerel geçmiş uzak ile ıraksamışsa (eski klon + geçmiş
-    yenileme) `git reset --hard origin/<dal>` ile uzak sürüme EŞİTLER + restart.
-    YALNIZ ıraksama tespit edilince ve tracked ağaç TEMİZKEN çalışır (izlenmeyen
+    """Uzak sürümle EŞİTLE: `git reset --hard origin/<dal>` + restart. Iraksama
+    (eski klon + geçmiş yenileme) VE 'sadece geride' durumlarını da kapsar — yerel
+    uzaktan farklıysa uzağa çeker. YALNIZ tracked ağaç TEMİZKEN çalışır (izlenmeyen
     .env / reference/*.json korunur — reset onlara dokunmaz). Kaydedilmemiş tracked
     değişiklik varsa reddeder (veri kaybı önlemi)."""
     d = _guncelleme_kontrol(fetch=True)
-    if not d.get("iraksama"):
-        return jsonify({"ok": False, "error": "Iraksama yok — bu işlem yalnız uzakla ıraksamış "
-                        "yerel geçmişte gerekir. Normal 'Güncelle'yi kullanın."}), 409
     if d.get("yerel_degisiklik"):
         return jsonify({"ok": False, "error": "Kaydedilmemiş yerel değişiklik var — sıfırlama iptal "
                         "edildi (veri kaybı önlemi). Değişiklikleri saklayıp tekrar deneyin."}), 409
+    # Uzaktan farklı bir şey yoksa (ne ıraksama ne geri ne ileri) yapacak iş yok
+    if not (d.get("iraksama") or d.get("behind") or d.get("ahead")):
+        return jsonify({"ok": False, "error": "Zaten uzak sürümle aynısınız — eşitlemeye gerek yok."}), 409
     neden = _mesgul_mu()
     if neden:
         return jsonify({"ok": False, "error": f"Şu an {neden}; bitince tekrar deneyin."}), 409
