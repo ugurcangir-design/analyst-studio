@@ -218,7 +218,11 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   `/preview` `talimat` ile). Sonra **ÖNİZLEME ekranı** (`#febe-preview-view`): `d.plan` özeti + task listesi
   (seç/düzenle). Beğenmezse **"◂ Bölmeyi değiştir"** (`febePromptaDon`) ile prompt ekranına dönüp talimatı
   değiştirir → yeniden böler (yinelemeli). `_gorevler_uret(talimat)` talimatı prompt'a EN YÜKSEK ÖNCELİK
-  olarak enjekte eder. Onaylayınca (`febeOnayla`) seçilenler Task olarak açılır. `jira_fe_be_uret` teknik-analiz.md'yi (TL;DR +
+  olarak enjekte eder. Onaylayınca (`febeOnayla`) seçilenler Task olarak açılır. **İkinci giriş noktası —
+  Çıktı Dosyaları:** teknik-analiz.md görüntülenirken Jira satırında **"FE/BE Task Aç"** butonu (`jira-febe-btn`
+  → `febeModalAc`) aynı prompt-önce akışı açar; yanındaki **"Hiyerarşik (Epic/Story)"** butonu klasik
+  `jira_tasks.py` hiyerarşi akışını (alternatif) açar. `febeOnayla`'nın workflow-bitirme çağrısı teknik-onay
+  dışındaki durumda 409 döner (yakalanır, no-op) → Çıktı ekranından açmak güvenli. `jira_fe_be_uret` teknik-analiz.md'yi (TL;DR +
   Canlı Gözlem çıkarılmış) AI ile DÜZ FE/BE görev listesine böler (`<fe_be_gorevler>` JSON: her görev
   `{id, katman:FE|BE, summary, description, acceptance_criteria, bagimli_be:[BE-id…]}`). `_gorevleri_normalize`
   katmanı FE/BE'ye indirger (`_katman_indirge`: Frontend→FE, Backend→BE, varsayılan BE) + hayalet bağımlılığı

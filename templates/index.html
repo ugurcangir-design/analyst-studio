@@ -3173,8 +3173,13 @@ function temaDegistir() {
         <div class="jira-hierarchy-row" id="jira-hierarchy-row" style="display:none">
           <svg class="ico" style="color:var(--text3)"><use href="#i-ticket"/></svg>
           <span class="mono-meta" style="white-space:nowrap">Jira:</span>
-          <button class="btn btn-outline btn-xs" id="jira-hierarchy-btn" onclick="jiraHiyerarsiOlustur()">
-            <svg class="ico"><use href="#i-arrow-right"/></svg> Hiyerarşik Task Oluştur
+          <button class="btn btn-primary btn-xs" id="jira-febe-btn" onclick="febeModalAc('teknik-analiz.md')"
+                  title="Önce prompt: kaç task / nasıl bölünsün — sonra FE/BE Task açılır (süreç akışıyla aynı)">
+            <svg class="ico"><use href="#i-ticket"/></svg> FE/BE Task Aç
+          </button>
+          <button class="btn btn-outline btn-xs" id="jira-hierarchy-btn" onclick="jiraHiyerarsiOlustur()"
+                  title="Klasik Epic / Story / Subtask hiyerarşisi (alternatif)">
+            Hiyerarşik (Epic/Story)
           </button>
           <span class="jira-hierarchy-result" id="jira-hierarchy-result"></span>
         </div>
