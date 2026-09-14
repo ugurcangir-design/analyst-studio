@@ -6,6 +6,29 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## Jira görev açma yenileme + Yetki tamamlama (SON) ✅
+- **[K: kaynak] kanıt etiketleri Jira'ya gitmez** (`765f49d`): agent'ın `[K: BRD §3]` /
+  `[K: Canlı UI:/route]` / `[K: Analist cevabı]` gibi izlenebilirlik etiketleri analiz dosyalarında +
+  UI çiplerinde DURUR, Jira'ya yazılan task'ta YER ALMAZ (`base.kanit_etiketlerini_temizle`; iki yazım
+  sınırında — gövde `gorev_jiraya_yaz` = köprü + ana app, yorum `jira_yorum_ekle`). Yalnız Jira'ya giden
+  kopya temizlenir. Test: `test_jira_kopru` (+8).
+- **Süreç onayı → FE/BE düz Task bölme + BE→FE Blocks** (`08b247d`): teknik analiz onaylanınca, tek
+  monolitik Task yerine analiz **FE ve BE görevlerine** bölünür; hepsi **görev(Task) tipinde** açılır ve
+  ilişkili BE→FE task'lar **Blocks** bağıyla bağlanır (BE bitmeden FE yapılamaz). Analist önce **önizleme
+  modalında** görür, seçip düzenleyerek onaylar. Yeni: `skills/jira_fe_be.py` (`jira_fe_be_uret` önizleme +
+  `jira_fe_be_olustur` Task aç + `_blocks_bagla`; `_katman_indirge` FE/BE'ye indirger, hayalet bağımlılık
+  düşer). Uçlar: `POST /api/jira/fe-be/preview|create`. UI: `#febe-modal` + `teknikOnaylaFeBe`. Eski
+  Epic/Story/Subtask hiyerarşi akışı (`jira_tasks.py`, `/api/jira/hierarchy/*`) ayrı, dokunulmadı.
+- **Yetki katalogu tamamlandı — Kod Kaynağı + Jira Köprüsü analiste aç/kapa** (`6ff4558`): analist-facing
+  olup katalogda olmayan tek ekran `kod` idi → eklendi. `kopru` (Jira Köprüsü) kullanıcı kararıyla owner-only
+  iken **analist-erişimli** yapıldı (5 uçtan `@admin_gerekli` kaldırıldı; kontrol artık katalog-tabanlı
+  `gorunurluk_kontrol`; bridge self-scope kendi Jira kimliğine kilitli) + katalog'a eklendi → owner Yetki'den
+  gizleyebilir. nav-kopru varsayılan görünür.
+- **Düzeltme: teknik onay → FE/BE sorusu poll'de kaybolmuyor** (`4645f5a`): `updateUI` polling'i (state hâlâ
+  `teknik_onay_bekleniyor` iken) FE/BE Task sorusunu her turda kapatıp inceleme ekranına döndürüyordu →
+  analist FE/BE akışına geçemiyordu. `_teknikJiraSoruAcik` bayrağı + `teknikOnayGeri()`/'◂ Geri' butonu ile
+  giderildi. Ray/İş Akışı adım etiketleri yeni akışa göre güncellendi ('Jira Task (FE/BE)').
+
 ## P1 iyileştirmeler — devam ediyor
 - **A — Token/maliyet paneli** ✅: Kullanım Raporu artık madde 2'de toplanan token verisini gösterir.
   `#ku-ozet`'e **Token / Maliyet** kart grubu (girdi/çıktı/cache okuma token + tahmini maliyet USD;

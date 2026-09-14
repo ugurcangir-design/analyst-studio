@@ -196,7 +196,7 @@
       <a href="#a-teknik"  class="h2">6.3 Teknik analiz</a>
       <a href="#a-delta"   class="h2">6.4 CR / Delta analizi</a>
       <a href="#a-mockup"  class="h2">6.5 HTML prototip</a>
-      <a href="#a-jira"    class="h2">6.6 Jira (FE/BE seçim)</a>
+      <a href="#a-jira"    class="h2">6.6 Jira'da FE/BE Task açma</a>
       <a href="#a-gorevler" class="h2">6.7 Task Analizi (triyaj)</a>
       <a href="#a-backlog" class="h2">6.8 UAT Mutabakat</a>
       <a href="#akis-brd"  class="h1">7. BRD Akışı</a>
@@ -735,65 +735,73 @@ Doküman yükle <span class="arr">→</span> Süreç Analizi <span class="arr">�
       <p><span class="pill new">Yeni</span> <strong>Canlı uygulamayı baz alır.</strong> Bağlam Filtresi'nde <em>Canlı Uygulama (Chrome MCP)</em> URL'i (ve alt URL'ler) tanımlıysa, prototip önce o ekran(lar)ı <strong>Chrome MCP ile gezip gözlemler</strong> → gerçek uygulamanın <strong>tasarım dilini</strong> (palet, tipografi, spacing) ve <strong>component desenlerini</strong> (sidebar/nav, tablo, form, buton, modal, tab, chip) çıkarır; prototip bunlara <strong>birebir uyar</strong>. Ayrıca <strong>tüm component'ler çalışır</strong>: navigasyon ekran değiştirir, formlar submit'te doğrulama + sonuç gösterir, tablolar örnek veriyle dolar, modal'lar açılıp kapanır. URL yoksa makul bir varsayılan tasarımla üretir (fallback).</p>
     </div>
 
-    <h3 id="a-jira">6.6 Jira görev hiyerarşisi — FE/BE seçimi <span class="pill new">Yeni</span></h3>
+    <h3 id="a-jira">6.6 Jira'da FE/BE Task açma <span class="pill new">Yeni</span></h3>
     <p>
-      Teknik analiz onaylandıktan sonra Çıktılar sekmesinde <code>teknik-analiz.md</code>
-      seçili iken <strong>Hiyerarşik Task Oluştur</strong> butonu görünür.
+      Teknik analiz onaylandıktan sonra ana akışta analizi <strong>FE ve BE görevlerine</strong>
+      bölüp Jira'da <strong>Task (görev) tipinde</strong> açarsın. İlişkili task'lar
+      <strong>BE → FE Blocks</strong> bağıyla bağlanır (BE bitmeden FE yapılamaz). Epic/Story/Subtask
+      hiyerarşisi <em>açılmaz</em> — düz, bağımsız Task'lar.
     </p>
 
     <div class="step">
       <div class="num">1</div>
-      <h4>AI önizleme üretir</h4>
-      <p>Buton tıklandığında AI:</p>
+      <h4>Teknik onayında "Evet — FE/BE Task'larını Öner"</h4>
+      <p>Adım 5 (Analist onayı — teknik) → <strong>Onayla</strong> → çıkan soruda
+        <strong>Evet — FE/BE Task'larını Öner</strong>. AI teknik analizi okuyup:</p>
       <ul>
-        <li>Bölüm 17 İş Kırılımı'nı okur</li>
-        <li>1 Epic + 3-7 Story + 2-4 Subtask/Story hiyerarşisi önerir</li>
-        <li>Her öğeyi FE / BE / FE+BE / Genel olarak sınıflar</li>
+        <li>İşi bağımsız <strong>FE görevleri</strong> ve <strong>BE görevleri</strong>ne böler (örn. 2 FE + 2 BE)</li>
+        <li>Her FE görevi için, ihtiyaç duyduğu <strong>BE görev(ler)ini</strong> (bağımlılık) işaretler</li>
       </ul>
-      <p>Bu adımda Jira'ya <strong>hiçbir şey yazılmaz</strong> — sadece öneri üretilir.</p>
+      <p>Bu adımda Jira'ya <strong>hiçbir şey yazılmaz</strong> — sadece öneri üretilir.
+        (Yanlışlıkla bastıysan <strong>◂ Geri</strong> ile inceleme ekranına dönebilirsin;
+        <strong>Hayır, Atla</strong> ise Jira'sız tamamlar.)</p>
     </div>
 
     <div class="step">
       <div class="num">2</div>
       <h4>Önizleme modalında seçim yap</h4>
-      <p>Açılan modalda hiyerarşiyi ağaç olarak görürsün. Her satırda:</p>
+      <p>Açılan modalda her satır ayrı bir <strong>Task</strong>'tır. Her satırda:</p>
       <ul>
         <li>Checkbox (seç / kaldır)</li>
-        <li>Tip etiketi: Epic / Story / Subtask</li>
-        <li><strong>Katman rozeti:</strong> <span class="pill fe">FE</span> <span class="pill be">BE</span> <span class="pill febe">FE+BE</span></li>
+        <li><strong>Katman rozeti:</strong> <span class="pill be">BE</span> <span class="pill fe">FE</span></li>
         <li>Başlık alanı — yerinde düzenlenebilir</li>
+        <li>FE satırının altında <strong style="color:#c48a12">⛔ şu BE bitmeden yapılamaz: …</strong> bağımlılık satırı</li>
       </ul>
-      <p><strong>Akıllı kaskad:</strong></p>
-      <ul>
-        <li>Epic'i kapatırsan tüm alt öğeler kapanır</li>
-        <li>Story'i kapatırsan altındaki subtask'lar kapanır</li>
-        <li>Bir Subtask seçersen parent Story ve Epic otomatik seçilir</li>
-      </ul>
-      <p><strong>Senaryolar:</strong></p>
+      <p><strong>Akıllı bağımlılık:</strong> Bir BE görevini seçimden çıkarırsan, o BE'ye bağlı
+        FE'lerin bağı otomatik düşer — yani <em>açılmayacak</em> bir task'a bağ kurulmaz. (Hem arayüz
+        hem sunucu bu filtreyi uygular.)</p>
       <table>
         <tr><th>Durum</th><th>Yapılacak</th></tr>
         <tr>
-          <td>Tek task yeterli</td>
-          <td>Sadece Epic'i bırak, diğerlerinin işaretini kaldır → "Devam Et" → 1 issue açılır</td>
+          <td>Hepsini aç</td>
+          <td>Tümünü seçili bırak → "Jira'da Task Aç" → hepsi açılır + ilişkiler bağlanır</td>
         </tr>
         <tr>
-          <td>Tam hiyerarşi</td>
-          <td>Hepsini seçili bırak → bütün ağaç Jira'da açılır</td>
+          <td>Sadece BE</td>
+          <td>FE'lerin işaretini kaldır → yalnız BE task'ları açılır (bağ olmaz)</td>
         </tr>
         <tr>
-          <td>Kısmi (seçmeli)</td>
-          <td>İstediğin Epic/Story/Subtask'ları seç → sadece seçilenler açılır</td>
+          <td>Kısmi</td>
+          <td>İstediğin FE/BE'leri seç → yalnız seçilenler açılır, seçili olanlar arası bağ kurulur</td>
         </tr>
       </table>
     </div>
 
     <div class="step">
       <div class="num">3</div>
-      <h4>Devam Et — Jira'da Oluştur</h4>
-      <p>Buton aktif olduğunda (en az bir öğe seçili) bas. AI seçtiklerini Jira'da sırayla açar; her başarılı issue'nun key'ini gösterir (örn. <code>PROJ-123</code>).</p>
+      <h4>Devam Et — Jira'da Task Aç</h4>
+      <p>En az bir görev seçiliyken bas. Sırayla: önce <strong>BE</strong> task'ları (blocker), sonra
+        <strong>FE</strong> task'ları açılır (hepsi <em>Task</em> tipinde); ardından ilişkili
+        <strong>BE → FE Blocks</strong> bağları kurulur. Açılan her task'ın key'i + katmanı gösterilir
+        (örn. <code>PROJ-123 [BE]</code>). İşlem bitince adım <strong>Tamamlandı</strong>'ya geçer.</p>
       <div class="box info">
-        <strong>Proje issue type yoksa</strong>
-        Projede Epic veya Story tipi yoksa modal uyarı verir; o öğeler <em>Task</em> tipi olarak açılır (fallback).
+        <strong>Projede "Blocks" link tipi yoksa</strong>
+        Task'lar yine açılır; yalnız bağ kurulamaz ve bir uyarı gösterilir (nadir; çoğu Jira'da vardır).
+      </div>
+      <div class="box tip">
+        <strong>Alternatif — Epic/Story/Subtask hiyerarşisi</strong>
+        Klasik hiyerarşik yapı isteyen ekipler için Çıktılar sekmesinde <code>teknik-analiz.md</code>
+        seçiliyken <strong>Hiyerarşik Task Oluştur</strong> akışı (Epic + Story + Subtask) hâlâ durur.
       </div>
     </div>
 
