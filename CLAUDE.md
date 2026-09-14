@@ -232,7 +232,12 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   (`_proje_bilgi.task_id`, Epic/Story/Subtask YOK), BE'ler ÖNCE açılır, sonra FE'ler; `bagimli_be` haritasına
   göre **BE→FE Blocks bağı** (`_blocks_bagla`: outwardIssue=BE bloklar, inwardIssue=FE bloklanan; link tipi
   `_blocks_link_tipi` runtime'da doğrulanır, yoksa `link_uyari` ile atlanır). Bağ YALNIZ ikisi de seçilen
-  görevler arası (UI + backend çift-filtre). Endpoint: `POST /api/jira/fe-be/preview` + `/create` (owner-gate
+  görevler arası (UI + backend çift-filtre). **Task içeriği (KENDİ KENDİNE YETERLİ):** prompt description'ın
+  ÖZET değil, geliştiricinin BAŞKA belgeye bakmadan uygulayabileceği GERÇEK teknik detay (BE: endpoint+metod,
+  request/response alanları, DB, validasyon, hata kodları; FE: ekran/bileşen, etkileşim, veri kaynağı, UX)
+  MARKDOWN olarak yazmasını ister (`MAX_TOKENS_FE_BE`=8000). Task gövdesi `_gorev_govde_adf` ile **markdown→ADF**
+  (`markdown_to_adf`; alt başlık/madde/kod render olur, düz paragraf değil) + "### Kabul Kriterleri"; UI önizleme
+  panelinde de `marked.parse` ile render (Jira'daki gibi). Endpoint: `POST /api/jira/fe-be/preview` + `/create` (owner-gate
   değil; `_jira_baglanti_eksik` kapısı). Eski tek-monolitik-Task yolu (`jira_agent.main` / `/api/approve-teknik`)
   hâlâ DURUYOR ama süreç ekranı artık FE/BE akışını kullanır. Epic/Story/Subtask hiyerarşi akışı
   (`jira_tasks.py`, `/api/jira/hierarchy/*`) ayrı ve dokunulmadı. Test: `smoke_test` (giriş doğrulama +

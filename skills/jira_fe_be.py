@@ -23,10 +23,10 @@ from .base import (
     yonetici_ozetini_cikar, canli_gozlem_kapsamini_cikar,
 )
 from .atlassian import env_oku, atlassian_get, atlassian_post
-from .jira_tasks import _proje_bilgi, _issue_olustur, _hikaye_adf
+from .jira_tasks import _proje_bilgi, _issue_olustur, _hikaye_adf, _adf_doc
 
 
-MAX_TOKENS_FE_BE = 4_000
+MAX_TOKENS_FE_BE = 8_000   # zengin/uygulanabilir description'lar için (özet değil detay)
 
 # BE→FE bağımlılığı için Jira link tipi. Projede tam ad farklı olabilir
 # (nadiren); _blocks_link_tipi runtime'da doğrular, yoksa buna düşer.
@@ -57,11 +57,22 @@ her BE'ye bağlama. BE görevlerinin `bagimli_be`'si genelde boştur.
 # KURALLAR
 - Görev sayısı işin gerektirdiği kadar (tipik 2-8). Yapay bölme YOK.
 - Başlıklar kısa ve eylem odaklı (örn. "Sipariş listesi endpoint'i", "Sipariş ekranı formu").
-- description: ne yapılacağı + teknik analizdeki ilgili bölüme/ID'ye atıf.
 - Her görev için 2-6 acceptance_criteria (test edilebilir kabul kriteri).
 - id'ler BENZERSİZ: FE görevleri FE-1, FE-2…; BE görevleri BE-1, BE-2…
 - Tüm metinler Türkçe; teknik terimler (API, endpoint vb.) İngilizce kalabilir.
 - `[K: kaynak]` kanıt etiketi KOYMA (bunlar Jira'ya gitmez).
+
+# description — EN ÖNEMLİ KURAL (task içeriği bu alandan gelir)
+Geliştirici bu task'ı açıp **BAŞKA belgeye bakmadan** uygulayabilmeli. Teknik analizdeki
+İLGİLİ içeriği bu göreve TAŞI; "Bkz. §X" özet/referansıyla YETİNME — asıl detayı yaz.
+Katmanına göre şunları AÇIKÇA içersin:
+- **BE:** etkilenen endpoint(ler) (HTTP metodu + yol), request/response alanları (isim + tip),
+  query/path parametreleri, DB değişiklikleri (tablo/alan/migration), iş kuralları + validasyon,
+  hata durumları (ör. 409/400 + errorCode). Varsa örnek istek/yanıt.
+- **FE:** ekran/bileşen adı, kolonlar/alanlar, kullanıcı etkileşimleri (buton/popup/filtre akışı),
+  state/veri kaynağı (hangi BE endpoint'i), validasyon ve UX kuralları, boş/hata durumları.
+Markdown KULLAN (alt başlık `###`, madde `-`, satır-içi `kod`) — düz tek paragraf DEĞİL, yapılandır.
+Kısa özet değil, UYGULANABİLİR ve KENDİ KENDİNE YETERLİ detay olsun.
 
 # ÇIKTI FORMATI
 Yanıtı SADECE aşağıdaki XML+JSON formatında ver:
@@ -263,6 +274,27 @@ def _blocks_bagla(be_key: str, fe_key: str, tip_adi: str, cloud_id: str) -> bool
     return True
 
 
+# ─── Task Gövdesi (Açıklama + Kabul Kriterleri → ADF) ────────────────────────
+
+def _gorev_govde_adf(desc: str, acceptance_criteria: list) -> dict:
+    """Task gövdesini MARKDOWN → ADF ile üretir → açıklamadaki yapı (alt başlık,
+    madde, `kod`) Jira'da düzgün render olur (düz paragraf değil). markdown_to_adf
+    başarısızsa `_hikaye_adf` (paragraf tabanlı) fallback."""
+    ac = [str(c).strip() for c in (acceptance_criteria or []) if str(c).strip()]
+    md = (desc or "").strip()
+    if ac:
+        md += "\n\n### Kabul Kriterleri\n" + "\n".join(f"- {c}" for c in ac)
+    md = md.strip()
+    try:
+        from jira_agent import markdown_to_adf
+        icerik = markdown_to_adf(md)
+        if icerik:
+            return _adf_doc(icerik)
+    except Exception as e:
+        print(f"  ⚠ markdown_to_adf başarısız, paragraf fallback: {e}")
+    return _hikaye_adf(desc, ac)
+
+
 # ─── Oluşturma: Seçilen FE/BE görevlerini Task olarak aç + Blocks bağla ──────
 
 def jira_fe_be_olustur(secim: dict, confluence_url: str | None = None) -> dict:
@@ -309,7 +341,7 @@ def jira_fe_be_olustur(secim: dict, confluence_url: str | None = None) -> dict:
         ac      = g.get("acceptance_criteria", []) or []
         if confluence_url:
             desc = (desc + f"\n\nAnaliz dokümanı: {confluence_url}").strip()
-        adf = _hikaye_adf(desc, ac)
+        adf = _gorev_govde_adf(desc, ac)
         key = _issue_olustur(
             summary=summary, description_adf=adf, issue_type_id=task_id,
             project_key=project_key, cloud_id=cloud_id,

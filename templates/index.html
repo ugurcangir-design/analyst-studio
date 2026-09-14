@@ -7392,7 +7392,11 @@ function febeModalDoldur(d) {
     const ac = (g.acceptance_criteria || []).filter(x => (x||'').trim());
     let icerik = '';
     if ((g.description||'').trim()) {
-      icerik += `<div style="margin-bottom:6px"><strong>Açıklama:</strong><br>${escHtml(g.description).replace(/\n/g,'<br>')}</div>`;
+      // Açıklama markdown olabilir (### / - / `kod`) → Jira'daki gibi render et
+      const dhtml = (typeof marked !== 'undefined')
+        ? marked.parse(g.description)
+        : escHtml(g.description).replace(/\n/g,'<br>');
+      icerik += `<div style="margin-bottom:6px"><strong>Açıklama:</strong><div class="md-body" style="margin-top:2px">${dhtml}</div></div>`;
     }
     if (ac.length) {
       icerik += `<div><strong>Kabul Kriterleri:</strong><ul style="margin:4px 0 0;padding-left:18px">`
