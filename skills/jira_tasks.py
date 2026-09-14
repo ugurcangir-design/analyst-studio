@@ -54,6 +54,26 @@ def _gorev_adf(description: str) -> dict:
     return _adf_doc(content or [_p(description or "(açıklama yok)")])
 
 
+def _gorev_govde_adf(desc: str, acceptance_criteria: list) -> dict:
+    """Task gövdesini MARKDOWN → ADF ile üretir → açıklamadaki ZORUNLU ŞABLON başlıkları
+    (### Amaç, ### Etkilenen Endpoint'ler … ) + `### Kabul Kriterleri` Jira'da düzgün render
+    olur (düz paragraf değil). TÜM task açma yolları (FE/BE düz + Epic/Story hiyerarşi) kullanır.
+    markdown_to_adf başarısızsa `_hikaye_adf` (paragraf tabanlı) fallback."""
+    ac = [str(c).strip() for c in (acceptance_criteria or []) if str(c).strip()]
+    md = (desc or "").strip()
+    if ac:
+        md += "\n\n### Kabul Kriterleri\n" + "\n".join(f"- {c}" for c in ac)
+    md = md.strip()
+    try:
+        from jira_agent import markdown_to_adf
+        icerik = markdown_to_adf(md)
+        if icerik:
+            return _adf_doc(icerik)
+    except Exception as e:
+        print(f"  ⚠ markdown_to_adf başarısız, paragraf fallback: {e}")
+    return _hikaye_adf(desc, ac)
+
+
 # ─── Proje Tip Tespiti ────────────────────────────────────────────────────────
 
 # Issue type adları Jira dil ayarına göre YERELLEŞİR (TR projelerinde İngilizce
@@ -370,7 +390,7 @@ def jira_hiyerarsi_olustur(hierarchy: dict, confluence_url: str | None = None) -
         story_summary = _katman_prefix(story.get("katman"), (story.get("summary") or f"Story {i}").strip())
         story_desc    = story.get("description", "")
         story_ac      = story.get("acceptance_criteria", []) or []
-        story_adf     = _hikaye_adf(story_desc, story_ac)
+        story_adf     = _gorev_govde_adf(story_desc, story_ac)   # zorunlu şablon + markdown→ADF
 
         print(f"  Story {i}/{len(stories_data)}: {story_summary[:60]}...")
         story_key = _issue_olustur(
@@ -388,7 +408,7 @@ def jira_hiyerarsi_olustur(hierarchy: dict, confluence_url: str | None = None) -
             # subtask katmanı yoksa story katmanına düş (alt görev genelde aynı katman)
             sub_summary = _katman_prefix(sub.get("katman") or story.get("katman"),
                                          (sub.get("summary") or "Subtask").strip())
-            sub_adf     = _gorev_adf(sub.get("description", ""))
+            sub_adf     = _gorev_govde_adf(sub.get("description", ""), sub.get("acceptance_criteria", []))
             sub_key = _issue_olustur(
                 summary=sub_summary,
                 description_adf=sub_adf,

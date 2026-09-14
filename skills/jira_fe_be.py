@@ -26,9 +26,8 @@ from .atlassian import env_oku, atlassian_get, atlassian_post
 from .jira_tasks import (
     _proje_bilgi,
     _issue_olustur,
-    _hikaye_adf,
-    _adf_doc,
     _katman_prefix,
+    _gorev_govde_adf,
 )
 
 
@@ -289,27 +288,6 @@ def _blocks_bagla(be_key: str, fe_key: str, tip_adi: str, cloud_id: str) -> bool
     }
     atlassian_post("/rest/api/3/issueLink", body=body, cloud_id=cloud_id)
     return True
-
-
-# ─── Task Gövdesi (Açıklama + Kabul Kriterleri → ADF) ────────────────────────
-
-def _gorev_govde_adf(desc: str, acceptance_criteria: list) -> dict:
-    """Task gövdesini MARKDOWN → ADF ile üretir → açıklamadaki yapı (alt başlık,
-    madde, `kod`) Jira'da düzgün render olur (düz paragraf değil). markdown_to_adf
-    başarısızsa `_hikaye_adf` (paragraf tabanlı) fallback."""
-    ac = [str(c).strip() for c in (acceptance_criteria or []) if str(c).strip()]
-    md = (desc or "").strip()
-    if ac:
-        md += "\n\n### Kabul Kriterleri\n" + "\n".join(f"- {c}" for c in ac)
-    md = md.strip()
-    try:
-        from jira_agent import markdown_to_adf
-        icerik = markdown_to_adf(md)
-        if icerik:
-            return _adf_doc(icerik)
-    except Exception as e:
-        print(f"  ⚠ markdown_to_adf başarısız, paragraf fallback: {e}")
-    return _hikaye_adf(desc, ac)
 
 
 # ─── Oluşturma: Seçilen FE/BE görevlerini Task olarak aç + Blocks bağla ──────

@@ -216,8 +216,11 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   analist "kaç task / nasıl bölünsün" yazar (`#febe-talimat` textarea; ör. "sadece 2 task: 1 FE + 1 BE",
   "ekran bazlı böl", "ödeme ve sipariş olarak ayır"; boş = doğal kırılım) → **"Task'lara Böl"** (`febeBol` →
   `/preview` `talimat` ile). Sonra **ÖNİZLEME ekranı** (`#febe-preview-view`): `d.plan` özeti + task listesi
-  (seç/düzenle) + **task içerik önizlemesi** (her satırda "İçeriği gör" `febeDetayAcKapa` → Jira gövdesine
-  gidecek **Açıklama + Kabul Kriterleri** açılır; üstte "Tüm içerikleri göster/gizle" `febeTumIcerikTgl`).
+  (seç/düzenle) + her satırda **"🔍 Görüntüle"** (`febeGoruntule`) → **tam-sayfa task görüntüleyici**
+  (`#task-viewer-modal` / `taskViewerAc`): Jira'ya gidecek TAM gövde (başlık FE-/BE- önekli + şablon
+  açıklaması + Kabul Kriterleri) `marked.parse` ile Jira'daki gibi render. Aynı görüntüleyici Epic/Story
+  hiyerarşi modalında da (`jiraNodeGoruntule`, `_jiraNodeHTML`'e "Görüntüle" butonu) → TÜM task açma
+  ekranlarında ortak tam-içerik önizleme.
   Beğenmezse **"◂ Bölmeyi değiştir"** (`febePromptaDon`) ile prompt ekranına dönüp talimatı
   değiştirir → yeniden böler (yinelemeli). `_gorevler_uret(talimat)` talimatı prompt'a EN YÜKSEK ÖNCELİK
   olarak enjekte eder. Onaylayınca (`febeOnayla`) seçilenler Task olarak açılır. **İkinci giriş noktası —
@@ -249,7 +252,9 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   (`jira_kopru`) → açılan task'lar başlıktan ayrışır. Endpoint: `POST /api/jira/fe-be/preview` + `/create` (owner-gate
   değil; `_jira_baglanti_eksik` kapısı). Eski tek-monolitik-Task yolu (`jira_agent.main` / `/api/approve-teknik`)
   hâlâ DURUYOR ama süreç ekranı artık FE/BE akışını kullanır. Epic/Story/Subtask hiyerarşi akışı
-  (`jira_tasks.py`, `/api/jira/hierarchy/*`) ayrı ve dokunulmadı. Test: `smoke_test` (giriş doğrulama +
+  (`jira_tasks.py`, `/api/jira/hierarchy/*`) ayrı; **o da AYNI zorunlu şablonu** kullanır (base.py
+  `jira_tasks` promptu story/subtask description'ı şablon başlıklarıyla üretir; `jira_hiyerarsi_olustur`
+  story+subtask gövdesini ortak `jira_tasks._gorev_govde_adf` = markdown→ADF ile yazar). Test: `smoke_test` (giriş doğrulama +
   normalize + katman). **`bagimli_be` yönü: FE, ihtiyaç duyduğu BE'ye bağımlı (BE 'blocks' FE).**
 - **Bildirimler (`skills/bildirim.py` — YEREL masaüstü):** `gonder(baslik, metin[, alt])` → macOS `osascript display
   notification` (0 bağımlılık, 0 token, best-effort — hata YUTAR; `BILDIRIM=false`/macOS-değil → no-op; redaksiyon +

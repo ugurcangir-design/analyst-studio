@@ -1137,8 +1137,23 @@ Her Story ve Subtask bir KATMAN etiketi taşır: FE, BE, FE+BE veya Genel.
 - Her Story için 2-4 Subtask: somut, ölçülebilir geliştirme adımları
 - Her Story için 5-15 acceptance_criteria: test edilebilir kabul kriteri
 - Story/Subtask başlıkları kısa ve eylem odaklı (örn. "siparis tablosu oluştur")
-- Açıklamalar teknik analizdeki ilgili bölüme/ID'ye atıfta bulunsun
 - Tüm metinler Türkçe; teknik terimler (API, endpoint vb.) İngilizce kalabilir
+
+# ZORUNLU TASK ŞABLONU — Story ve Subtask description'ı (task içeriği bu alandan gelir)
+Geliştirici task'ı açıp BAŞKA belgeye bakmadan uygulayabilmeli. Her Story/Subtask `description`'ını
+AŞAĞIDAKİ SABİT ŞABLONLA, tam bu markdown `###` başlıklarıyla ve BU SIRAYLA yaz. Her başlığı teknik
+analizin İLGİLİ bölümünden DOLDUR (asıl detay — "Bkz. §X" özeti YETMEZ). Bir başlık o görev için
+GEÇERSİZSE o başlığı HİÇ YAZMA (atla). "Kabul Kriterleri"ni description'a YAZMA — `acceptance_criteria`'da:
+### Amaç
+### Kapsam / Kapsam Dışı
+### Etkilenen Endpoint'ler (API)
+### Ekran / Bileşen Kırılımı
+### İş Mantığı & Kurallar
+### Etkileşim & Akış
+### Veri / DB Değişiklikleri
+### Hata Yönetimi & Boş Durumlar
+### Rol / Yetki
+### Bağımlılıklar & Riskler
 
 # ÇIKTI FORMATI
 Yanıtı SADECE aşağıdaki XML+JSON formatında ver:
@@ -1154,7 +1169,7 @@ Yanıtı SADECE aşağıdaki XML+JSON formatında ver:
       "katman": "FE | BE | FE+BE | Genel",
       "acceptance_criteria": ["...", "..."],
       "subtasks": [
-        {"summary": "...", "description": "...", "katman": "FE | BE | Genel"}
+        {"summary": "...", "description": "...", "katman": "FE | BE | Genel", "acceptance_criteria": ["..."]}
       ]
     }
   ]

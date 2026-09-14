@@ -3351,14 +3351,12 @@ function temaDegistir() {
         <!-- ══ 2. DURUM: ÖNİZLEME — oluşan task'lar (Jira'ya yazmadan önce) ══ -->
         <div id="febe-preview-view" style="display:none">
           <div id="febe-plan" style="padding:11px 18px;background:rgba(99,102,241,.10);border-bottom:1px solid var(--border);font-size:13px;color:var(--text);line-height:1.5"></div>
-          <div style="padding:8px 18px;background:var(--surface2);font-size:11.5px;color:var(--text2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <span>💡 Her satır ayrı bir <strong>Task</strong>.
+          <div style="padding:8px 18px;background:var(--surface2);font-size:11.5px;color:var(--text2);border-bottom:1px solid var(--border)">
+            💡 Her satır ayrı bir <strong>Task</strong>.
             <span class="jira-node-katman be" style="margin:0 4px">BE</span> Backend ·
             <span class="jira-node-katman fe" style="margin:0 4px">FE</span> Frontend ·
-            <strong style="color:var(--yellow)">⛔ bloklar</strong> = BE bitmeden FE yapılamaz.</span>
-            <span style="flex:1"></span>
-            <button type="button" id="febe-tumicerik-btn" onclick="febeTumIcerikTgl(this)" data-acik="0"
-                    style="background:none;border:1px solid var(--border);border-radius:5px;color:var(--accent);cursor:pointer;font-size:11px;padding:3px 8px;white-space:nowrap">Tüm içerikleri göster</button>
+            <strong style="color:var(--yellow)">⛔ bloklar</strong> = BE bitmeden FE yapılamaz ·
+            <strong>🔍 Görüntüle</strong> = task'ın tam içeriğini aç.
           </div>
           <div class="jira-modal-body" id="febe-modal-body"></div>
         </div>
@@ -3379,6 +3377,25 @@ function temaDegistir() {
           <button class="btn btn-primary btn-sm" id="febe-modal-onay" onclick="febeOnayla()" style="display:none">
             Onayla — Jira'da Task Aç
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Task içerik görüntüleyici — TAM SAYFA (tüm task açma ekranlarından) -->
+    <div class="jira-modal" id="task-viewer-modal" onclick="if(event.target===this)taskViewerKapat()" style="z-index:60">
+      <div class="jira-modal-box" style="max-width:920px;width:94vw;height:90vh;max-height:90vh">
+        <div class="jira-modal-head">
+          <svg class="ico" style="color:var(--text3)"><use href="#i-file-text"/></svg>
+          <span class="jira-modal-title" id="task-viewer-baslik">Task Önizleme</span>
+          <button class="jira-modal-close" onclick="taskViewerKapat()" title="Kapat">&times;</button>
+        </div>
+        <div style="padding:6px 18px;background:var(--surface2);font-size:11.5px;color:var(--text2);border-bottom:1px solid var(--border)">
+          Jira'ya açılacak task'ın <strong>tam içeriği</strong> (başlık + açıklama + kabul kriterleri) — aynen bu şekilde oluşturulur.
+        </div>
+        <div class="jira-modal-body" id="task-viewer-govde" style="flex:1;overflow-y:auto"></div>
+        <div class="jira-modal-foot">
+          <span style="flex:1;font-size:11.5px;color:var(--text3)" id="task-viewer-alt"></span>
+          <button class="btn btn-primary btn-sm" onclick="taskViewerKapat()">Kapat</button>
         </div>
       </div>
     </div>
@@ -7032,6 +7049,8 @@ function _jiraNodeHTML(tip, id, tipEtiket, deger, katman) {
     ${_jiraKatmanRozet(katman)}
     <input type="text" class="jira-node-input" data-jira-txt="${id}" value="${safe}"
            placeholder="${tipEtiket} başlığı">
+    <button type="button" onclick="jiraNodeGoruntule('${id}')" title="Task'ın tam içeriğini görüntüle"
+            style="background:none;border:1px solid var(--border);border-radius:5px;color:var(--accent);cursor:pointer;font-size:11px;padding:2px 8px;white-space:nowrap;flex:0 0 auto">🔍 Görüntüle</button>
   </div>`;
 }
 
@@ -7390,62 +7409,20 @@ function febeModalDoldur(d) {
       const adlar = bagli.map(b => escHtml(baslikMap[b])).join(', ');
       dep = `<div class="febe-dep">⛔ şu BE bitmeden yapılamaz: <strong>${adlar}</strong></div>`;
     }
-    // İÇERİK — Jira task gövdesine gidecek açıklama + kabul kriterleri (analist önce görsün)
-    const ac = (g.acceptance_criteria || []).filter(x => (x||'').trim());
-    let icerik = '';
-    if ((g.description||'').trim()) {
-      // Açıklama markdown olabilir (### / - / `kod`) → Jira'daki gibi render et
-      const dhtml = (typeof marked !== 'undefined')
-        ? marked.parse(g.description)
-        : escHtml(g.description).replace(/\n/g,'<br>');
-      icerik += `<div style="margin-bottom:6px"><strong>Açıklama:</strong><div class="md-body" style="margin-top:2px">${dhtml}</div></div>`;
-    }
-    if (ac.length) {
-      icerik += `<div><strong>Kabul Kriterleri:</strong><ul style="margin:4px 0 0;padding-left:18px">`
-        + ac.map(c => `<li>${escHtml(c)}</li>`).join('') + `</ul></div>`;
-    }
-    if (!icerik) icerik = '<span style="color:var(--text3)">(AI içerik üretmedi — başlıkla açılır)</span>';
     html += `<div class="jira-node" data-febe="${g.id}" style="flex-wrap:wrap">
       <input type="checkbox" checked data-febe-cb="${g.id}" onchange="febeRefresh()">
       ${_febeIdEtiket(g)}
       <div style="flex:1;min-width:0">
         <input type="text" class="jira-node-input" data-febe-txt="${g.id}" value="${safe}" placeholder="Görev başlığı" style="width:100%">
         ${dep}
-        <button type="button" class="febe-detay-tgl" data-febe-tgl="${g.id}" onclick="febeDetayAcKapa('${g.id}')"
-                style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:11.5px;padding:3px 0;margin-top:2px">▸ İçeriği gör (Jira'ya gidecek)</button>
-        <div class="febe-detay" id="febe-detay-${g.id}" style="display:none;margin-top:4px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-size:12px;line-height:1.5;color:var(--text2)">${icerik}</div>
+        <button type="button" onclick="febeGoruntule('${g.id}')"
+                style="background:none;border:1px solid var(--border);border-radius:5px;color:var(--accent);cursor:pointer;font-size:11.5px;padding:3px 9px;margin-top:3px">🔍 Görüntüle (tam içerik)</button>
       </div>
     </div>`;
   });
   body.innerHTML = html || '<div style="padding:16px;color:var(--text3)">AI görev üretemedi.</div>';
   body.style.pointerEvents = ''; body.style.opacity = '';
-  const tgl = document.getElementById('febe-tumicerik-btn');  // yeni bölmede içerikler kapalı başlar
-  if (tgl) { tgl.dataset.acik = '0'; tgl.textContent = 'Tüm içerikleri göster'; }
   febeRefresh();
-}
-
-// Task içerik panelini aç/kapat (açıklama + kabul kriterleri — Jira'ya gitmeden önce)
-function febeDetayAcKapa(id) {
-  const p = document.getElementById('febe-detay-' + id);
-  const t = document.querySelector(`[data-febe-tgl="${id}"]`);
-  if (!p) return;
-  const acik = p.style.display !== 'none';
-  p.style.display = acik ? 'none' : '';
-  if (t) t.textContent = (acik ? '▸' : '▾') + ' İçeriği gör (Jira\'ya gidecek)';
-}
-
-// Tüm içerik panellerini aç/kapat (modal üstündeki "tümünü göster")
-function febeTumIcerik(goster) {
-  document.querySelectorAll('.febe-detay').forEach(p => { p.style.display = goster ? '' : 'none'; });
-  document.querySelectorAll('.febe-detay-tgl').forEach(t => {
-    t.textContent = (goster ? '▾' : '▸') + ' İçeriği gör (Jira\'ya gidecek)';
-  });
-}
-function febeTumIcerikTgl(btn) {
-  const goster = btn.dataset.acik !== '1';
-  febeTumIcerik(goster);
-  btn.dataset.acik = goster ? '1' : '0';
-  btn.textContent = goster ? 'Tüm içerikleri gizle' : 'Tüm içerikleri göster';
 }
 
 function febeRefresh() {
@@ -7547,6 +7524,66 @@ function febeModalKapat() {
   if (body) { body.style.pointerEvents = ''; body.style.opacity = ''; }
   _febeOnizleme = null;
   _febeView('prompt');
+}
+
+// ─── Task içerik görüntüleyici (TAM SAYFA) — tüm task açma ekranlarından ──────
+// Jira'ya açılacak task'ın TAM gövdesini (açıklama + kabul kriterleri) marked ile render eder.
+function _taskGovdeMd(desc, ac) {
+  let md = (desc || '').trim();
+  const list = (ac || []).map(x => String(x||'').trim()).filter(Boolean);
+  if (list.length) md += '\n\n### Kabul Kriterleri\n' + list.map(c => '- ' + c).join('\n');
+  return md.trim();
+}
+function taskViewerAc(baslik, desc, ac, alt) {
+  document.getElementById('task-viewer-baslik').textContent = baslik || 'Task Önizleme';
+  const md = _taskGovdeMd(desc, ac);
+  const html = (typeof marked !== 'undefined')
+    ? marked.parse(md || '_(bu görev için içerik üretilmedi)_')
+    : escHtml(md).replace(/\n/g,'<br>');
+  document.getElementById('task-viewer-govde').innerHTML =
+    '<div class="md-body" style="padding:14px 18px">' + html + '</div>';
+  document.getElementById('task-viewer-alt').textContent = alt || '';
+  document.getElementById('task-viewer-modal').classList.add('visible');
+}
+function taskViewerKapat() { document.getElementById('task-viewer-modal').classList.remove('visible'); }
+
+// Başlık öneki (backend _katman_prefix ile aynı davranış — görüntüleyicide de FE-/BE- görünsün)
+function _katmanOnekJs(katman, summary) {
+  const s = (summary || '').trim();
+  const k = String(katman || '').toUpperCase().replace(/\s/g,'');
+  let pre = null;
+  if (k === 'FE+BE' || k === 'FEBE') pre = 'FE+BE';
+  else if (k.startsWith('FE')) pre = 'FE';
+  else if (k.startsWith('BE')) pre = 'BE';
+  if (!pre) return s;
+  if (new RegExp('^' + pre + '\\s*[-–—:]\\s*', 'i').test(s)) return s;
+  return pre + ' - ' + s;
+}
+
+// FE/BE önizlemedeki bir görevi tam-sayfa görüntüle (id ile _febeOnizleme'den bulur)
+function febeGoruntule(id) {
+  const g = (_febeOnizleme && _febeOnizleme.gorevler || []).find(x => x.id === id);
+  if (!g) return;
+  const txt = document.querySelector(`[data-febe-txt="${id}"]`);
+  const baslik = _katmanOnekJs(g.katman, txt ? txt.value : g.summary || '');
+  taskViewerAc(baslik, g.description, g.acceptance_criteria, 'Katman: ' + (g.katman||'—'));
+}
+
+// Epic/Story hiyerarşi modalındaki bir düğümü tam-sayfa görüntüle
+function jiraNodeGoruntule(id) {
+  const h = (_jiraOnizleme && _jiraOnizleme.hierarchy) || {};
+  let baslik = '', desc = '', ac = [], alt = '';
+  if (id === 'e') { baslik = h.epic_summary || ''; desc = h.epic_description || ''; alt = 'Epic'; }
+  else {
+    const m = String(id).match(/^s(\d+)(?:-b(\d+))?$/);
+    if (!m) return;
+    const s = (h.stories || [])[+m[1]]; if (!s) return;
+    if (m[2] === undefined) { baslik = _katmanOnekJs(s.katman, s.summary); desc = s.description || ''; ac = s.acceptance_criteria || []; alt = 'Story · ' + (s.katman||'—'); }
+    else { const sub = (s.subtasks || [])[+m[2]]; if (!sub) return; baslik = _katmanOnekJs(sub.katman || s.katman, sub.summary); desc = sub.description || ''; ac = sub.acceptance_criteria || []; alt = 'Subtask · ' + (sub.katman||s.katman||'—'); }
+  }
+  const txt = document.querySelector(`[data-jira-txt="${id}"]`);
+  if (txt && txt.value.trim()) baslik = txt.value.trim();
+  taskViewerAc(baslik, desc, ac, alt);
 }
 
 // ─── Soru Defteri ─────────────────────────────────────────────────────────────
