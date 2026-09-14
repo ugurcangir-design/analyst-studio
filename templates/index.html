@@ -3245,6 +3245,7 @@ function temaDegistir() {
             </button>
             <span class="ipucu" tabindex="0" data-ipucu="Bu buton, yazdığınız cevap/varsayımları AI'a iletip ilgili analiz bölümlerini günceller. AI cevabı ana metne yerleştirir ve soruyu Açık Sorular'dan çıkarır. Diğer bölümler değişmez. Süre: 30-90 sn.">?</span>
             <span class="sayac" id="sorular-sayac"></span>
+            <span id="sorular-uygula-durum" style="display:none;font-size:12px;margin-left:12px;font-weight:500"></span>
           </div>
           <div id="sorular-liste"></div>
         </div>
@@ -7238,9 +7239,19 @@ function sorularListele() {
   sayac.textContent = `${gosterilen.length} / ${tum.length} soru`;
 
   if (gosterilen.length === 0) {
-    liste.innerHTML = `<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px">
-      ${tum.length === 0 ? 'Henüz soru yok. Bir analiz çalıştırdıktan sonra "Tara" butonuna basın.' : 'Bu filtreyle eşleşen soru yok.'}
-    </div>`;
+    const ist = _sorularCache.istatistik || {};
+    let mesaj;
+    if (tum.length === 0) {
+      mesaj = 'Henüz soru yok. Bir analiz çalıştırdıktan sonra "Tara" butonuna basın.';
+    } else if (filtre === 'aktif' && (ist.uygulanmamis || 0) > 0) {
+      // Cevaplananlar "aktif" filtresinden çıkar → liste boş görünür; analiste net söyle.
+      mesaj = `✓ Açık soru kalmadı — tümü cevaplandı.<br><span style="color:var(--yellow)">${ist.uygulanmamis} cevap henüz analize işlenmedi</span> → aşağıdaki <b>Cevapları Uygula</b> butonuna basın.`;
+    } else if (filtre === 'aktif') {
+      mesaj = '✓ Açık soru kalmadı — tüm cevaplar analize işlendi.';
+    } else {
+      mesaj = 'Bu filtreyle eşleşen soru yok.';
+    }
+    liste.innerHTML = `<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px;line-height:1.7">${mesaj}</div>`;
     return;
   }
 
@@ -7385,8 +7396,11 @@ async function soruDurumDegistir(buton, yeniDurum) {
 
 async function sorularUygula() {
   const btn = document.getElementById('btn-cevaplari-uygula');
-  const sayi = parseInt(document.getElementById('btn-uygula-sayac').textContent || '0', 10);
-  if (!sayi) { toast('Uygulanacak cevap yok', 'info'); return; }
+  const durumEl = document.getElementById('sorular-uygula-durum');
+  // Sayıyı BAYAT badge yerine TAZE server durumundan al (yanlış "N" gösterme).
+  await sorularYukleVeListele();
+  const sayi = (_sorularCache.istatistik || {}).uygulanmamis || 0;
+  if (!sayi) { toast('Uygulanacak cevap yok — tüm cevaplar zaten işlenmiş.', 'info'); return; }
   if (!confirm(
     `${sayi} adet cevap/varsayım analiz dosyalarına işlenecek.\n\n` +
     `AI etkilenen bölümleri yeniden üretecek. Bu işlem 30-90 saniye sürebilir. ` +
@@ -7396,6 +7410,9 @@ async function sorularUygula() {
   btn.disabled = true;
   const eskiMetin = btn.innerHTML;
   btn.innerHTML = '<svg class="ico"><use href="#i-refresh"/></svg> Uygulanıyor...';
+  // KALICI başladı/bitti göstergesi — analist işlemin başladığını/bittiğini net görür (toast geçici).
+  if (durumEl) { durumEl.style.display = ''; durumEl.style.color = 'var(--yellow)';
+                 durumEl.innerHTML = '⏳ Cevaplar analize işleniyor…'; }
 
   try {
     // İş ARKA PLANDA yürür (sunucu istek thread'ini tutmaz) — başlat + durum sorgula.
@@ -7403,22 +7420,40 @@ async function sorularUygula() {
       method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({})
     });
     const d = await r.json();
-    if (!d.ok) { toast('Uygulama başlatılamadı: ' + (d.error || ''), 'error'); return; }
-    if (!d.baslatildi) { toast(d.mesaj || 'Uygulanacak cevap yok', 'info'); return; }
+    if (!d.ok) {
+      toast('Uygulama başlatılamadı: ' + (d.error || ''), 'error');
+      if (durumEl) { durumEl.style.color = 'var(--red)'; durumEl.innerHTML = '✗ Başlatılamadı: ' + (d.error || ''); }
+      return;
+    }
+    if (!d.baslatildi) {
+      toast(d.mesaj || 'Uygulanacak cevap yok', 'info');
+      if (durumEl) durumEl.style.display = 'none';
+      return;
+    }
 
     const sonuc = await _sorularUygulaBekle();
     const sonuclar = sonuc.sonuclar || [];
     const basariliSayisi = sonuclar.filter(s => s.ok).length;
+    const uygulananToplam = sonuclar.reduce((a, s) => a + (s.uygulanan_sayi || 0), 0);
     const detay = sonuclar.map(s =>
       s.ok ? `  ✓ ${s.kaynak_dosya} (${s.uygulanan_sayi} soru)` : `  ✗ ${s.kaynak_dosya}: ${s.error}`
     ).join('\n');
-    toast(sonuc.mesaj || 'Tamamlandı', basariliSayisi === sonuclar.length ? 'success' : 'info');
+    const hepBasarili = sonuclar.length > 0 && basariliSayisi === sonuclar.length;
+    toast(sonuc.mesaj || 'Tamamlandı', hepBasarili ? 'success' : 'info');
     console.log('Sorular uygulandı:\n' + detay);
     await sorularYukleVeListele();
+    if (durumEl) {
+      const saat = new Date().toLocaleTimeString('tr-TR', {hour: '2-digit', minute: '2-digit'});
+      durumEl.style.color = hepBasarili ? 'var(--green)' : 'var(--yellow)';
+      durumEl.innerHTML = hepBasarili
+        ? `✓ ${uygulananToplam} cevap analize işlendi · ${saat}`
+        : `⚠ Kısmi: ${basariliSayisi}/${sonuclar.length} dosya işlendi · ${saat}`;
+    }
     const aktifTab = document.querySelector('.output-tab.active');
     if (aktifTab && aktifTab.dataset.file !== '__sorular__') outputSec(aktifTab);
   } catch (e) {
     toast('Hata: ' + e.message, 'error');
+    if (durumEl) { durumEl.style.color = 'var(--red)'; durumEl.innerHTML = '✗ Hata: ' + e.message; }
   } finally {
     btn.disabled = false;
     btn.innerHTML = eskiMetin;
@@ -7429,11 +7464,13 @@ async function sorularUygula() {
 function _sorularUygulaBekle() {
   return new Promise((resolve) => {
     const btn = document.getElementById('btn-cevaplari-uygula');
+    const durumEl = document.getElementById('sorular-uygula-durum');
     const t = setInterval(async () => {
       try {
         const d = await (await fetch('/api/sorular/uygula/durum')).json();
-        if (btn && d.calisiyor && d.toplam) {
-          btn.innerHTML = `<svg class="ico"><use href="#i-refresh"/></svg> Uygulanıyor ${d.tamamlanan}/${d.toplam}...`;
+        if (d.calisiyor && d.toplam) {
+          if (btn) btn.innerHTML = `<svg class="ico"><use href="#i-refresh"/></svg> Uygulanıyor ${d.tamamlanan}/${d.toplam}...`;
+          if (durumEl) durumEl.innerHTML = `⏳ İşleniyor ${d.tamamlanan}/${d.toplam}…`;
         }
         if (!d.calisiyor) { clearInterval(t); resolve(d); }
       } catch (e) { /* geçici hata — bir sonraki tick'te tekrar dener */ }
