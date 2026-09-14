@@ -328,7 +328,15 @@ git clone https://github.com/ugurcangir-design/analyst-studio.git
 cd analyst-studio</code></pre>
       <div class="box tip">
         <strong>İpucu</strong>
-        Bundan sonra tüm komutlar <code>~/projects/brd-analyst-agent</code> klasöründe çalıştırılacak.
+        Klonlama <code>analyst-studio</code> adında bir klasör oluşturur; bundan sonra tüm komutlar
+        <code>~/projects/analyst-studio</code> klasöründe çalıştırılacak.
+      </div>
+      <div class="box warn">
+        <strong>URL'yi tam bu şekilde kullanın</strong>
+        Klon adresi <strong><code>https://</code></strong> ile başlamalı (<code>git@</code> = SSH DEĞİL — anahtar kurulumu ister)
+        ve depo adı <strong><code>analyst-studio</code></strong> olmalı (<code>Analysys_Agent</code> eski v1 deposudur, KULLANILMAZ).
+        Depo <strong>public</strong>; doğru HTTPS adresiyle kullanıcı adı/şifre sorulmaz. Yanlış adresle klonladıysanız
+        sonraki güncellemeler <em>"Repository not found"</em> verir — bkz. <a href="#sorun">16. Sorun Giderme</a>.
       </div>
     </div>
 
@@ -446,7 +454,7 @@ chmod 600 .env</code></pre>
     <ul>
       <li><strong>Masaüstü:</strong> Analyst Studio.app'i çift tıkla.</li>
       <li><strong>Terminal:</strong>
-<pre><code>cd ~/projects/brd-analyst-agent
+<pre><code>cd ~/projects/analyst-studio
 source venv/bin/activate
 python app.py</code></pre>
       </li>
@@ -1573,7 +1581,7 @@ python manage_users.py sifre ali.veli &lt;yeni_sifre&gt;</code></pre>
     <ul>
       <li><strong>Güncelleme sayfası (önerilen):</strong> Uygulamadan menüye tıkla → <em>Güncelleme</em> → <strong>Güncellemeleri Kontrol Et</strong> → varsa <strong>Güncelle</strong>. Arka planda <code>git pull --ff-only</code> yapar.</li>
       <li><strong>Terminal:</strong>
-<pre><code>cd ~/projects/brd-analyst-agent
+<pre><code>cd ~/projects/analyst-studio
 git pull
 pip install -r requirements.txt   # gerekirse</code></pre>
       </li>
@@ -1604,6 +1612,17 @@ pip install -r requirements.txt   # gerekirse</code></pre>
       <tr>
         <td>Kurulumda "swiftc bulunamadı" / masaüstü ikonu oluşmadı</td>
         <td>Xcode Command Line Tools yok. Kurulum yine de tamamdır — <code>./start.sh</code> ile başlatın. İkon isterseniz: <code>xcode-select --install</code> → <code>bash create_app.sh</code></td>
+      </tr>
+      <tr>
+        <td>Güncelleme alınamıyor — <em>"Repository not found"</em>, <em>"Could not read from remote repository"</em> ya da GitHub <strong>kullanıcı adı/şifre</strong> soruyor</td>
+        <td>Yerel <code>origin</code> adresi yanlış (eski isim <code>Analysys_Agent</code> ve/veya SSH <code>git@</code>). Depo <strong>public</strong> — doğru HTTPS adresiyle kimlik sorulmaz. Uygulama dizininde (<code>git remote -v</code> ile yanlış adresi görürsünüz):<br>
+        <code>git remote set-url origin https://github.com/ugurcangir-design/analyst-studio.git</code><br>
+        ardından <code>git fetch origin &amp;&amp; git reset --hard origin/main</code> → uygulamayı <strong>Yeniden Başlat</strong>.
+        (Adres <code>https://</code> ile başlamalı, <code>git@</code> DEĞİL; ad <code>analyst-studio</code>, <code>Analysys_Agent</code> DEĞİL. <code>.env</code> ve <code>reference/</code> ayarları korunur.)</td>
+      </tr>
+      <tr>
+        <td>Güncelleme "push edilmemiş commit var" diyor / Güncelleme ekranında <strong>"⚠ yerel kopya uzak sürümle ıraksamış"</strong></td>
+        <td>Eski bir kopya + depo geçmişi yenilendi → düz güncelleme yapılamaz. Güncelleme ekranındaki <strong>"Uzak Sürümle Eşitle (sıfırla)"</strong> düğmesini kullanın. (Düğme yoksa — eski sürümdesiniz — terminalden: <code>git fetch origin &amp;&amp; git reset --hard origin/main</code> + Yeniden Başlat. Ayarlarınız korunur.)</td>
       </tr>
       <tr>
         <td>Kurulumda "Python 3.10 veya üzeri gerekli"</td>
