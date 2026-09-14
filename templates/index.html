@@ -394,6 +394,11 @@ html[data-theme="dark"] .theme-toggle .ico-sun { display: none; }
 .im-readouts b { color: #ffd0d0; font-weight: 500; }
 .im-note { margin-top: 20px; font-size: 11.5px; color: #a06a6a; }
 .im-actions { margin-top: 16px; display: flex; gap: 10px; justify-content: center; }
+/* HUD her zaman koyu-kırmızı zemin → buton metnini tema koyu rengine BIRAKMA; açık-renk zorla
+   (aksi halde 'Kapat — arka planda sürsün' siyah fontla okunmuyordu). */
+.im-actions .btn { color: #f6e4e4; border-color: rgba(239,68,68,.55); background: transparent; }
+.im-actions .btn:hover { color: #fff; border-color: rgba(239,68,68,.9); background: rgba(239,68,68,.14); }
+.im-actions .btn svg, .im-actions .btn .ico { color: currentColor; }
 
 /* ── Topbar ────────────────────────────────────────────────────── */
 .topbar {
