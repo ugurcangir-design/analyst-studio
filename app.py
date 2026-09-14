@@ -867,7 +867,15 @@ def _surec_calistir(mod: str) -> None:
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    # SPA kabuğu (tüm HTML+JS tek dosyada) ASLA cache'lenmesin → güncelleme sonrası
+    # tarayıcı BAYAT arayüz sunmasın ("güncelledim ama eski ekran" sınıfı sorun).
+    # TEMPLATES_AUTO_RELOAD zaten diskteki en güncel şablonu okur; bu başlık da
+    # tarayıcı katmanını kapatır.
+    resp = app.make_response(render_template("index.html"))
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 @app.route("/kilavuz")
