@@ -107,6 +107,32 @@ def _proje_bilgi(project_key: str, cloud_id: str) -> dict:
     }
 
 
+# ─── Katman Başlık Öneki (FE - / BE -) ───────────────────────────────────────
+
+_KATMAN_ONEK_DESEN = re.compile(r"^\s*(FE\+BE|FE|BE)\s*[-–—:]\s*", re.IGNORECASE)
+
+
+def _katman_prefix(katman: str, summary: str) -> str:
+    """Jira task başlığına katman öneki ekler → FE görevleri 'FE - <başlık>',
+    BE görevleri 'BE - <başlık>', FE+BE 'FE+BE - <başlık>'. Genel/bilinmeyen katman
+    → önek YOK. İdempotent: başlık zaten doğru önekliyse tekrar eklenmez. TÜM task
+    açma yolları (FE/BE düz, Epic/Story hiyerarşi, Jira Köprüsü ilişkili-aç) bunu
+    kullanır → açılan task'lar başlıktan ayrışır."""
+    s = (summary or "").strip()
+    k = str(katman or "").strip().upper().replace(" ", "")
+    if k in ("FE+BE", "FEBE"):
+        pre = "FE+BE"
+    elif k.startswith("FE"):
+        pre = "FE"
+    elif k.startswith("BE"):
+        pre = "BE"
+    else:
+        return s  # Genel / tek tip / bilinmeyen → önek yok
+    if re.match(rf"^{re.escape(pre)}\s*[-–—:]\s*", s, re.IGNORECASE):
+        return s  # zaten doğru önekli
+    return f"{pre} - {s}"
+
+
 # ─── Issue Oluşturma ──────────────────────────────────────────────────────────
 
 def _issue_olustur(
@@ -341,7 +367,7 @@ def jira_hiyerarsi_olustur(hierarchy: dict, confluence_url: str | None = None) -
     # 2. Story + Subtask'lar
     sonuclar = []
     for i, story in enumerate(stories_data, 1):
-        story_summary = (story.get("summary") or f"Story {i}").strip()
+        story_summary = _katman_prefix(story.get("katman"), (story.get("summary") or f"Story {i}").strip())
         story_desc    = story.get("description", "")
         story_ac      = story.get("acceptance_criteria", []) or []
         story_adf     = _hikaye_adf(story_desc, story_ac)
@@ -359,7 +385,9 @@ def jira_hiyerarsi_olustur(hierarchy: dict, confluence_url: str | None = None) -
 
         subtask_keys = []
         for sub in story.get("subtasks", []) or []:
-            sub_summary = (sub.get("summary") or "Subtask").strip()
+            # subtask katmanı yoksa story katmanına düş (alt görev genelde aynı katman)
+            sub_summary = _katman_prefix(sub.get("katman") or story.get("katman"),
+                                         (sub.get("summary") or "Subtask").strip())
             sub_adf     = _gorev_adf(sub.get("description", ""))
             sub_key = _issue_olustur(
                 summary=sub_summary,

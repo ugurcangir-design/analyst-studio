@@ -112,6 +112,12 @@ _fbn = _fbm._gorevleri_normalize([
 ])
 kontrol("jira_fe_be: hayalet bağımlılık düşer (BE-YOK atılır)",
         _fbn[1]["bagimli_be"] == ["BE-1"])
+# Katman başlık öneki (FE - / BE -) — tüm task açma yollarında ortak
+_jt = importlib.import_module("skills.jira_tasks")
+kontrol("katman öneki: FE → 'FE - …'", _jt._katman_prefix("FE", "Sipariş ekranı") == "FE - Sipariş ekranı")
+kontrol("katman öneki: BE → 'BE - …'", _jt._katman_prefix("BE", "Sipariş endpoint") == "BE - Sipariş endpoint")
+kontrol("katman öneki: Genel → önek yok", _jt._katman_prefix("Genel", "İş") == "İş")
+kontrol("katman öneki: idempotent (zaten önekli)", _jt._katman_prefix("FE", "FE - X") == "FE - X")
 _jkm = importlib.import_module("skills.jira_kopru")
 kontrol("jira_kopru: kendi 🤖 yanıtı komut sayılmaz (döngü koruması)",
         _jkm._komut_coz(_jkm.ROBOT_IMZA + " — Teknik Analiz", "/analyst_agent") is None)

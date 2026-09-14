@@ -7162,13 +7162,15 @@ async function jiraHiyerarsiOnayla() {
       const bTxt = document.querySelector(`[data-jira-txt="s${si}-b${bi}"]`);
       subtasks.push({
         summary: (bTxt ? bTxt.value : sub.summary || '').trim(),
-        description: sub.description || ''
+        description: sub.description || '',
+        katman: sub.katman || ''   // FE-/BE- başlık öneki için
       });
     });
     stories.push({
       summary: (sTxt ? sTxt.value : s.summary || '').trim(),
       description: s.description || '',
       acceptance_criteria: s.acceptance_criteria || [],
+      katman: s.katman || '',      // FE-/BE- başlık öneki için
       subtasks: subtasks
     });
   });

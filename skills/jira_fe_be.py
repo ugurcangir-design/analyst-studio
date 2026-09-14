@@ -23,7 +23,13 @@ from .base import (
     yonetici_ozetini_cikar, canli_gozlem_kapsamini_cikar,
 )
 from .atlassian import env_oku, atlassian_get, atlassian_post
-from .jira_tasks import _proje_bilgi, _issue_olustur, _hikaye_adf, _adf_doc
+from .jira_tasks import (
+    _proje_bilgi,
+    _issue_olustur,
+    _hikaye_adf,
+    _adf_doc,
+    _katman_prefix,
+)
 
 
 MAX_TOKENS_FE_BE = 8_000   # zengin/uygulanabilir description'lar için (özet değil detay)
@@ -73,6 +79,9 @@ Katmanına göre şunları AÇIKÇA içersin:
   state/veri kaynağı (hangi BE endpoint'i), validasyon ve UX kuralları, boş/hata durumları.
 Markdown KULLAN (alt başlık `###`, madde `-`, satır-içi `kod`) — düz tek paragraf DEĞİL, yapılandır.
 Kısa özet değil, UYGULANABİLİR ve KENDİ KENDİNE YETERLİ detay olsun.
+ÖNEMLİ: Analizde hazır "Jira Task Taslakları / Task Açıklaması" gibi ÖZET bölümü varsa onu OLDUĞU GİBİ
+KOPYALAMA (o bir özettir, "Bkz. bölüm X" der). Asıl DETAYI teknik bölümlerden SENTEZLE: API tasarımı
+(endpoint tabloları, request/response), İş Mantığı, Veri/DB, Frontend İş Kırılımı, Hata Yönetimi, Rol/Yetki.
 
 # ÇIKTI FORMATI
 Yanıtı SADECE aşağıdaki XML+JSON formatında ver:
@@ -336,7 +345,7 @@ def jira_fe_be_olustur(secim: dict, confluence_url: str | None = None) -> dict:
     for g in sirali:
         gid     = str(g.get("id", "")).strip()
         katman  = "BE" if str(g.get("katman", "")).upper().startswith("BE") else "FE"
-        summary = (g.get("summary") or f"{katman} görevi").strip()
+        summary = _katman_prefix(katman, (g.get("summary") or f"{katman} görevi").strip())
         desc    = g.get("description", "") or ""
         ac      = g.get("acceptance_criteria", []) or []
         if confluence_url:

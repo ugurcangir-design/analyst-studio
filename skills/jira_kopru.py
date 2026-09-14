@@ -49,7 +49,7 @@ from .jira_gorevleri import (
     _adf_to_text, _cloud_id, _ID_DESENI,
     gorev_getir, gorev_analiz_et, gorev_analiz_duzelt, gorev_jiraya_yaz,
 )
-from .jira_tasks import _issue_olustur, _proje_bilgi   # canonical OAuth issue create
+from .jira_tasks import _issue_olustur, _proje_bilgi, _katman_prefix   # canonical OAuth issue create
 from jira_agent import markdown_to_adf  # ADF: teknik analiz task'ı formatı
 
 logger = logging.getLogger(__name__)
@@ -611,7 +611,8 @@ def _onayla_uygula(key: str, durum: dict, prefix: str) -> str:
             try:
                 desc_md = o.get("description") or o["summary"]
                 adf = {"type": "doc", "version": 1, "content": markdown_to_adf(desc_md) or markdown_to_adf(o["summary"])}
-                yeni = _issue_olustur(o["summary"], adf, task_type_id, proje, cloud_id)
+                baslik = _katman_prefix(o.get("katman"), o["summary"])  # FE - / BE - öneki
+                yeni = _issue_olustur(baslik, adf, task_type_id, proje, cloud_id)
                 try:
                     jira_issue_link(yeni, key, "Relates")
                 except Exception as le:
