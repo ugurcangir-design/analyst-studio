@@ -2231,7 +2231,7 @@ function temaDegistir() {
       <div class="ph">
         <div class="ph-text">
           <h1>Süreç/Teknik Analiz</h1>
-          <p>Süreç dokümanını analiz et, analist onayı sonrası teknik analiz ve Jira hiyerarşisi üret.</p>
+          <p>Süreç dokümanını analiz et, analist onayı sonrası teknik analiz ve FE/BE Jira task'ları üret.</p>
         </div>
         <div class="ph-actions"><button class="btn btn-outline btn-sm gorunum-btn" onclick="gorunumDegistir()" title="Tek kolon adım rayı ↔ klasik yatay şerit + panel">Klasik görünüm</button></div>
       </div>
@@ -2266,7 +2266,7 @@ function temaDegistir() {
             <span class="step-arrow"><svg><use href="#i-chevron-right"/></svg></span>
             <div class="step" id="step-surec-4">
               <div class="step-num">4</div>
-              <div class="step-text"><span>Jira Hiyerarşi</span><small class="step-dur" id="dur-surec-4"></small></div>
+              <div class="step-text"><span>Jira Task (FE/BE)</span><small class="step-dur" id="dur-surec-4"></small></div>
             </div>
           </div>
         </div>
@@ -2414,6 +2414,7 @@ function temaDegistir() {
                 <button class="btn btn-outline btn-sm" onclick="teknikOnaylaSizJira()">
                   Hayır, Atla
                 </button>
+                <button class="btn btn-outline btn-sm" onclick="teknikOnayGeri()" title="İnceleme ekranına dön">◂ Geri</button>
               </div>
               <div class="field-sub" style="margin-top:6px">Öneriyi göreceksiniz; seçip düzenleyerek onayladıktan sonra task'lar açılır.</div>
             </div>
@@ -5821,10 +5822,16 @@ function updateUI(s) {
   if (!s.teknik_onay_bekleniyor) { const k = document.getElementById('onay-sorular-teknik'); if (k) k.dataset.dolu = ''; }
   if (s.onay_bekleniyor || s.teknik_onay_bekleniyor) _onayBaglamYukle(s.onay_bekleniyor ? 'surec' : 'teknik');
   if (s.teknik_onay_bekleniyor) {
-    const rev = document.getElementById('teknik-onay-review');
-    const jira = document.getElementById('teknik-jira-soru');
-    if (rev) rev.style.display = '';
-    if (jira) jira.style.display = 'none';
+    // FE/BE sorusu açıksa (kullanıcı 'Onayla'ya bastı) KORU — yoksa poll her turda
+    // soruyu kapatıp inceleme ekranına döndürür (state hâlâ teknik_onay_bekleniyor).
+    if (!_teknikJiraSoruAcik) {
+      const rev = document.getElementById('teknik-onay-review');
+      const jira = document.getElementById('teknik-jira-soru');
+      if (rev) rev.style.display = '';
+      if (jira) jira.style.display = 'none';
+    }
+  } else {
+    _teknikJiraSoruAcik = false;  // adımdan çıkıldı → bayrağı sıfırla (yeniden girişte inceleme)
   }
   _setVisible('surec-act-done',        isSurec && !!s.tamamlandi);
   _setVisible('surec-act-error',       isSurec && s.durum === 'hata');
@@ -5998,7 +6005,7 @@ const _RAY = {
       {t:'Analist onayı — süreç',   s:'İncele, hedefli düzelt, devam et'},
       {t:'Teknik analiz',           s:'Süreçten FE/BE teknik analiz'},
       {t:'Analist onayı — teknik',  s:'İncele, düzelt veya süreç adımına dön'},
-      {t:'Jira hiyerarşisi',        s:'Epic / Story / Subtask oluştur'},
+      {t:'Jira Task (FE/BE)',       s:'FE/BE görevlerini Task olarak aç + BE→FE bağla'},
     ],
     nodes: ['surec-act-idle','surec-act-running','surec-act-onay','surec-act-teknik-onay','surec-act-done','surec-act-error'],
     idx: {idle:0, surec_analizi_calisiyor:1, onay_bekleniyor:2, teknik_analiz_calisiyor:3,
@@ -8473,9 +8480,20 @@ function apiKeyGoster() {
 }
 
 // ─── Teknik Analiz Onay / Red ────────────────────────────────────────────────
+// Teknik onay alt-durumu: 'Onayla'ya basılınca FE/BE sorusu gösterilir. Bu bayrak
+// olmadan updateUI polling'i (state hâlâ teknik_onay_bekleniyor olduğu için) soruyu
+// hemen kapatıp inceleme ekranına döndürüyordu (FE/BE akışına geçilemiyordu).
+let _teknikJiraSoruAcik = false;
 function teknikOnaylaBasla() {
+  _teknikJiraSoruAcik = true;
   document.getElementById('teknik-onay-review').style.display = 'none';
   document.getElementById('teknik-jira-soru').style.display = '';
+}
+// FE/BE sorusundan inceleme ekranına geri dön (soruyu kapat)
+function teknikOnayGeri() {
+  _teknikJiraSoruAcik = false;
+  document.getElementById('teknik-jira-soru').style.display = 'none';
+  document.getElementById('teknik-onay-review').style.display = '';
 }
 
 async function teknikOnaylaJiraIle() {
