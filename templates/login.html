@@ -137,7 +137,11 @@ input::placeholder { color: var(--text3); }
     </div>
     <button type="submit" class="btn" id="submit-btn">Giriş Yap</button>
   </form>
+  <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border);text-align:center;font-size:10.5px;color:var(--text3);font-family:'Geist Mono',monospace">
+    © <span id="telif-yil"></span> Uğur Cangir · Tüm hakları saklıdır
+  </div>
 </div>
+<script>document.getElementById('telif-yil').textContent = new Date().getFullYear();</script>
 
 <script>
 // Tema

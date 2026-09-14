@@ -288,6 +288,13 @@ a:hover { text-decoration: underline; }
   display: flex; align-items: center; gap: 8px;
   font-size: 11.5px; color: var(--text2);
 }
+.brand-copyright {
+  padding: 6px 14px 10px; font-size: 10px; color: var(--text3);
+  font-family: 'Geist Mono', monospace; letter-spacing: .01em; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.layout.sidebar-collapsed .brand-copyright { text-align: center; padding: 6px 4px 10px; }
+.layout.sidebar-collapsed .brand-copyright .cr-full { display: none; }
 .sidebar-footer .theme-toggle {
   margin-left: auto;
   background: transparent; border: 1px solid var(--border);
@@ -2146,6 +2153,9 @@ function temaDegistir() {
         <svg class="ico ico-sun" style="width:12px;height:12px"><use href="#i-sun"/></svg>
         <svg class="ico ico-moon" style="width:12px;height:12px"><use href="#i-moon"/></svg>
       </button>
+    </div>
+    <div class="brand-copyright" title="© Uğur Cangir — Tüm hakları saklıdır">
+      <span class="cr-sym">©</span><span class="cr-full">&nbsp;<span id="brand-copyright-yil"></span> Uğur Cangir</span>
     </div>
   </aside>
 
@@ -4109,6 +4119,7 @@ function navBolumAcKapa(sec, force) {
     if (g) { try { if (localStorage.getItem('nav-collapsed-' + g) === '1') navBolumAcKapa(sec, true); } catch (e) {} }
   });
 })();
+(function _telifYili() { const y = document.getElementById('brand-copyright-yil'); if (y) y.textContent = new Date().getFullYear(); })();
 (async () => {
   try { _rolUygula(await (await fetch('/api/auth/me')).json() || {}); } catch (e) {}
   try { const a = await (await fetch('/api/analist')).json(); _analistKimligiUygula(a.ad_soyad || ''); } catch (e) {}

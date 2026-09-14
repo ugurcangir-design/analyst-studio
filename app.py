@@ -1,5 +1,8 @@
 """
 Flask web sunucusu — Analyst Studio v2 (varsayılan port 5003; v1 = 5002, ayrı dizin/süreç)
+
+Copyright (c) 2026 Uğur Cangir. Tüm hakları saklıdır.
+Analyst Studio — Uğur Cangir tarafından geliştirilmiştir.
 """
 
 import os
