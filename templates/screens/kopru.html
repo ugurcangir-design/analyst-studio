@@ -60,7 +60,18 @@
     async function kopruYukle(){
       const el = document.getElementById('kopru-liste');
       try {
-        const r = await fetch('/api/jira-kopru/liste');
+        const r = await fetch('/api/jira-kopru/liste', {headers:{'Accept':'application/json'}});
+        // Sunucu JSON yerine HTML dönebilir (eski sürüm / oturum-yenilendi / hata sayfası)
+        // → ham "Unexpected token <" yerine anlaşılır mesaj.
+        const ct = r.headers.get('content-type') || '';
+        if (!ct.includes('application/json')) {
+          el.innerHTML = '<div class="panel"><div class="panel-body ds-hint">'
+            + 'Köprü listesi alınamadı — sunucu beklenmedik yanıt verdi'
+            + (r.status ? ' (HTTP ' + r.status + ')' : '') + '. '
+            + 'Büyük olasılıkla <b>eski sürümdesiniz</b>: <b>Güncelleme → Güncelle</b> (gerekirse "Uzak Sürümle Eşitle") + <b>Yeniden Başlat</b>.'
+            + '</div></div>';
+          return;
+        }
         const d = await r.json();
         const du = document.getElementById('kopru-durum');
         if (d.aktif){
