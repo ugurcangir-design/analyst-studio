@@ -2479,7 +2479,14 @@ def guncelleme_sifirla():
     try:
         _guncelleme_durumu["uygulaniyor"] = True
         dal = (_git_calistir(["rev-parse", "--abbrev-ref", "HEAD"]).get("stdout") or "").strip() or "main"
-        _git_calistir(["fetch", "origin", "--quiet"], timeout=60)
+        # KRİTİK: fetch BAŞARISIZSA reset YAPMA — yoksa BAYAT origin/<dal> ref'ine reset
+        # ederek makineyi ESKİ commit'e geri atarız ("güncelledim ama eski sürüme döndü").
+        f = _git_calistir(["fetch", "origin", "--quiet"], timeout=60)
+        if not f["ok"]:
+            _guncelleme_durumu.update(uygulaniyor=False, hata=(f.get("stderr") or "fetch başarısız")[:300])
+            return jsonify({"ok": False, "error": "Uzaktan güncel sürüm ALINAMADI (fetch başarısız — "
+                            "remote/ağ/erişim sorunu): " + (f.get("stderr") or "")[:200]
+                            + " · Sıfırlama iptal edildi (eski sürüme dönmeyi önlemek için)."}), 502
         rs = _git_calistir(["reset", "--hard", f"origin/{dal}"], timeout=60)
         cikti = (rs["stdout"] + "\n" + rs.get("stderr", "")).strip()
         if not rs["ok"]:
