@@ -237,8 +237,12 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   request/response alanları, DB, validasyon, hata kodları; FE: ekran/bileşen, etkileşim, veri kaynağı, UX)
   MARKDOWN olarak yazmasını ister (`MAX_TOKENS_FE_BE`=8000). Task gövdesi `_gorev_govde_adf` ile **markdown→ADF**
   (`markdown_to_adf`; alt başlık/madde/kod render olur, düz paragraf değil) + "### Kabul Kriterleri"; UI önizleme
-  panelinde de `marked.parse` ile render (Jira'daki gibi); prompt hazır "Jira Task Taslakları" özetini KOPYALAMAZ,
-  teknik bölümlerden (API/iş mantığı/DB/FE kırılımı/hata) sentezler. **Başlık öneki (TÜM task açma yolları):**
+  panelinde de `marked.parse` ile render (Jira'daki gibi). **ZORUNLU TASK ŞABLONU (tek ortak, FE+BE):** prompt
+  description'ı sabit `###` başlıklarla ve BU SIRAYLA yazdırır — Amaç · Kapsam/Kapsam Dışı · Etkilenen
+  Endpoint'ler (API) · Ekran/Bileşen Kırılımı · İş Mantığı & Kurallar · Etkileşim & Akış · Veri/DB
+  Değişiklikleri · Hata Yönetimi & Boş Durumlar · Rol/Yetki · Bağımlılıklar & Riskler (+ kod tarafı sonda
+  "### Kabul Kriterleri" ekler, `acceptance_criteria`'dan). Her başlık teknik analizin ilgili bölümünden
+  DOLDURULUR, o görev için içeriksizse başlık ATLANIR; hazır "Jira Task Taslakları" özeti KOPYALANMAZ. **Başlık öneki (TÜM task açma yolları):**
   `jira_tasks._katman_prefix(katman, summary)` → FE görevleri **"FE - …"**, BE **"BE - …"**, FE+BE "FE+BE - …",
   Genel önek yok (idempotent). Uygulanır: FE/BE düz (`jira_fe_be_olustur`), Epic/Story hiyerarşi
   (`jira_hiyerarsi_olustur` story+subtask; UI `jiraHiyerarsiOnayla` `katman` taşır), Jira Köprüsü ilişkili-aç

@@ -68,20 +68,28 @@ her BE'ye bağlama. BE görevlerinin `bagimli_be`'si genelde boştur.
 - Tüm metinler Türkçe; teknik terimler (API, endpoint vb.) İngilizce kalabilir.
 - `[K: kaynak]` kanıt etiketi KOYMA (bunlar Jira'ya gitmez).
 
-# description — EN ÖNEMLİ KURAL (task içeriği bu alandan gelir)
-Geliştirici bu task'ı açıp **BAŞKA belgeye bakmadan** uygulayabilmeli. Teknik analizdeki
-İLGİLİ içeriği bu göreve TAŞI; "Bkz. §X" özet/referansıyla YETİNME — asıl detayı yaz.
-Katmanına göre şunları AÇIKÇA içersin:
-- **BE:** etkilenen endpoint(ler) (HTTP metodu + yol), request/response alanları (isim + tip),
-  query/path parametreleri, DB değişiklikleri (tablo/alan/migration), iş kuralları + validasyon,
-  hata durumları (ör. 409/400 + errorCode). Varsa örnek istek/yanıt.
-- **FE:** ekran/bileşen adı, kolonlar/alanlar, kullanıcı etkileşimleri (buton/popup/filtre akışı),
-  state/veri kaynağı (hangi BE endpoint'i), validasyon ve UX kuralları, boş/hata durumları.
-Markdown KULLAN (alt başlık `###`, madde `-`, satır-içi `kod`) — düz tek paragraf DEĞİL, yapılandır.
-Kısa özet değil, UYGULANABİLİR ve KENDİ KENDİNE YETERLİ detay olsun.
+# description — ZORUNLU TASK ŞABLONU (task içeriği bu alandan gelir)
+Geliştirici bu task'ı açıp **BAŞKA belgeye bakmadan** uygulayabilmeli. `description` alanını
+AŞAĞIDAKİ SABİT ŞABLONA göre, tam bu markdown `###` başlıklarıyla ve BU SIRAYLA yaz. Her başlığı
+teknik analizin İLGİLİ bölümünden DOLDUR (asıl detay — "Bkz. §X" özet/referansı YETMEZ). Bir başlık
+o görev için GEÇERSİZ/İÇERİKSİZSE o başlığı **HİÇ YAZMA** (atla). "Kabul Kriterleri"ni description'a
+YAZMA — ayrı `acceptance_criteria` alanına yaz.
+
+Şablon başlıkları (geçerli olanları doldur, boşları atla):
+### Amaç
+### Kapsam / Kapsam Dışı
+### Etkilenen Endpoint'ler (API)      (endpoint + HTTP metod + request/response alanları isim+tip, query/path param)
+### Ekran / Bileşen Kırılımı           (FE: ekran, kolon, bileşen, mockup)
+### İş Mantığı & Kurallar              (algoritma, validasyon, iş kuralı)
+### Etkileşim & Akış                   (FE: kullanıcı akışı — buton/popup/filtre)
+### Veri / DB Değişiklikleri           (tablo/alan/migration/enum)
+### Hata Yönetimi & Boş Durumlar       (hata kodları örn. 409/400 + errorCode; FE boş/hata durumları)
+### Rol / Yetki                        (RBAC — resource/action)
+### Bağımlılıklar & Riskler            (bağımlı task/endpoint, teknik borç)
+
 ÖNEMLİ: Analizde hazır "Jira Task Taslakları / Task Açıklaması" gibi ÖZET bölümü varsa onu OLDUĞU GİBİ
-KOPYALAMA (o bir özettir, "Bkz. bölüm X" der). Asıl DETAYI teknik bölümlerden SENTEZLE: API tasarımı
-(endpoint tabloları, request/response), İş Mantığı, Veri/DB, Frontend İş Kırılımı, Hata Yönetimi, Rol/Yetki.
+KOPYALAMA. Asıl DETAYI ilgili teknik bölümlerden (API tasarımı, İş Mantığı, Veri/DB, Frontend İş Kırılımı,
+Hata Yönetimi, Rol/Yetki, Teknik Borç/Riskler) SENTEZLE. Markdown kullan (madde `-`, satır-içi `kod`).
 
 # ÇIKTI FORMATI
 Yanıtı SADECE aşağıdaki XML+JSON formatında ver:
