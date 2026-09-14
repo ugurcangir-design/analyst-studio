@@ -1626,8 +1626,8 @@ pip install -r requirements.txt   # gerekirse</code></pre>
       </tr>
       <tr>
         <td>Terminalden güncelledim ("HEAD is now at …") ama <strong>uygulama hâlâ eski sürümü gösteriyor</strong></td>
-        <td>Muhtemelen makinede <strong>birden fazla klon</strong> var; uygulama, güncellediğinizden <em>farklı</em> klasörden çalışıyor. Tüm klonları ve sürümlerini listeleyin:<br>
-        <code>for d in ~/analyst-studio* ~/projects/analyst-studio* ~/brd-analyst-agent*; do [ -d "$d/.git" ] &amp;&amp; echo "$d → $(git -C "$d" log -1 --format='%h %ci')"; done</code><br>
+        <td>Muhtemelen makinede <strong>birden fazla klon</strong> var; uygulama, güncellediğinizden <em>farklı</em> klasörden çalışıyor. Tüm klonları ve sürümlerini listeleyin (<strong>zsh-güvenli</strong>, glob'suz — <code>for … ~/…*</code> zsh'te "no matches found" verir):<br>
+        <code>find ~ -maxdepth 4 -type d -name .git 2>/dev/null | while read g; do d="${g%/.git}"; [ -f "$d/app.py" ] &amp;&amp; [ -f "$d/workflow.py" ] &amp;&amp; echo "$d → $(git -C "$d" log -1 --format='%h %ci' 2>/dev/null)"; done</code><br>
         Eski hash'i gösteren klasöre girip orada da eşitleyin (<code>cd &lt;o klasör&gt; &amp;&amp; git fetch origin &amp;&amp; git reset --hard origin/main</code>) → Yeniden Başlat. Uygulamanın çalıştığı klasörü kesin bulmak için (uygulama açıkken): <code>lsof -nP -iTCP:5003 -sTCP:LISTEN</code> → PID → <code>lsof -p &lt;PID&gt; | grep cwd</code>. <strong>Öneri:</strong> tek klon bırakın; karışıklık biter.</td>
       </tr>
       <tr>

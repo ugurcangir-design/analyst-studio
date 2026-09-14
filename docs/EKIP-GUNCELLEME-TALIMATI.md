@@ -11,11 +11,16 @@
 
 ## 1. Uygulamanın çalıştığı klasörü bulun
 
-Terminali açın ve şunu yapıştırın (makinedeki tüm klonları + sürümlerini listeler):
+Terminali açın ve şunu yapıştırın (makinedeki tüm Analyst Studio klonlarını +
+sürümlerini listeler; **zsh-güvenli**, glob kullanmaz):
 
 ```bash
-for d in ~/analyst-studio* ~/projects/analyst-studio* ~/brd-analyst-agent* ~/Documents/analyst-studio* ~/Desktop/analyst-studio*; do [ -d "$d/.git" ] && echo "$d → $(git -C "$d" log -1 --format='%h · %ci' 2>/dev/null)"; done
+find ~ -maxdepth 4 -type d -name .git 2>/dev/null | while read g; do d="${g%/.git}"; [ -f "$d/app.py" ] && [ -f "$d/workflow.py" ] && echo "$d → $(git -C "$d" log -1 --format='%h · %ci' 2>/dev/null)"; done
 ```
+
+> Not: `for d in ~/…*` gibi glob'lu komutlar **zsh'te** (macOS varsayılanı) hiçbir
+> eşleşme olmayınca "no matches found" deyip iptal olur — yukarıdaki `find` sürümü bu
+> yüzden tercih edilir.
 
 - Tek satır çıkarsa: o klasörü kullanın.
 - Birden fazla çıkarsa: **eski tarihli** olanı da düzeltmeniz gerekir (uygulama genelde ondan çalışır).
