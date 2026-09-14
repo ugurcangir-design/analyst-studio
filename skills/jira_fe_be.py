@@ -90,11 +90,20 @@ Yanıtı SADECE aşağıdaki XML+JSON formatında ver:
 </fe_be_gorevler>"""
 
 
-def _gorevler_uret(teknik_analiz: str) -> list[dict]:
-    """teknik-analiz.md içeriğinden düz FE/BE görev listesi (JSON) üret."""
+def _gorevler_uret(teknik_analiz: str, talimat: str = "") -> list[dict]:
+    """teknik-analiz.md içeriğinden düz FE/BE görev listesi (JSON) üret.
+    `talimat`: analistin bölme yönlendirmesi (ör. 'sadece 2 task: 1 FE + 1 BE',
+    'ekran bazlı böl', 'şu konuya göre ayır'). Verilirse AI buna GÖRE böler."""
+    steer = ""
+    if (talimat or "").strip():
+        steer = ("\n\n# ANALİST TALİMATI (BÖLME YÖNLENDİRMESİ — EN YÜKSEK ÖNCELİK)\n"
+                 "Task'ları AŞAĞIDAKİ talimata GÖRE böl. Talimat kaç task / hangi ölçüt "
+                 "(sadece FE+BE, ekran bazlı, konu bazlı, adet vb.) belirtiyorsa ONA UY; "
+                 "gereksiz task açma, talimatın istediği granülerlikte kal:\n"
+                 f"«{talimat.strip()}»")
     mesajlar = [{"role": "user", "content": [
         {"type": "text",
-         "text": f"### Teknik Analiz\n\n{teknik_analiz}\n\nFE/BE görev listesini üret."}
+         "text": f"### Teknik Analiz\n\n{teknik_analiz}{steer}\n\nFE/BE görev listesini üret."}
     ]}]
     yanit = _api_cagri(_FE_BE_SISTEM, mesajlar, max_tokens=MAX_TOKENS_FE_BE)
     yanit = _metin_sikistir(yanit)
@@ -109,6 +118,18 @@ def _gorevler_uret(teknik_analiz: str) -> list[dict]:
             raise ValueError(f"AI yanıtı JSON parse edilemedi: {e}\n---\n{json_str[:500]}")
     gorevler = veri.get("gorevler", []) or []
     return _gorevleri_normalize(gorevler)
+
+
+def _plan_metni(fe: int, be: int, bagimlilik: int, talimat: str = "") -> str:
+    """Analiste gösterilecek kısa bölme planı: kaç task, kaç FE/BE, kaç bağımlılık."""
+    toplam = fe + be
+    p = f"Bu teknik analizi {toplam} task'a bölmeyi öneriyorum: {fe} FE + {be} BE"
+    if bagimlilik:
+        p += f" ({bagimlilik} BE→FE bağımlılık)"
+    p += "."
+    if (talimat or "").strip():
+        p += f" (Talimatınıza göre: «{talimat.strip()}»)"
+    return p
 
 
 def _katman_indirge(ham: str) -> str:
@@ -155,14 +176,19 @@ def _gorevleri_normalize(gorevler: list) -> list[dict]:
 
 # ─── Önizleme: AI görev listesi üret (Jira'ya yazmaz) ────────────────────────
 
-def jira_fe_be_uret(teknik_analiz_dosya: str = "teknik-analiz.md") -> dict:
+def jira_fe_be_uret(teknik_analiz_dosya: str = "teknik-analiz.md", talimat: str = "") -> dict:
     """teknik-analiz.md → düz FE/BE görev önerisi. Jira'ya HİÇBİR ŞEY YAZMAZ.
+
+    `talimat`: analistin bölme yönlendirmesi (yinelemeli 'yeniden böl' döngüsü);
+    boşsa AI işin doğal kırılımına göre böler, doluysa talimata göre.
 
     Döndürür:
     {
         "gorevler": [{id, katman, summary, description, acceptance_criteria, bagimli_be}],
         "proje": {"key": str, "task_var": bool},
-        "ozet": {"fe": N, "be": M, "bagimlilik": K}
+        "ozet": {"fe": N, "be": M, "bagimlilik": K, "toplam": T},
+        "plan": "Bu analizi T task'a bölmeyi öneriyorum: N FE + M BE …",
+        "talimat": "<uygulanan talimat>"
     }
     """
     env = env_oku()
@@ -189,8 +215,9 @@ def jira_fe_be_uret(teknik_analiz_dosya: str = "teknik-analiz.md") -> dict:
             f"Mevcut tipler: {list(proje['issue_types'].keys())}"
         )
 
-    print("  AI'dan FE/BE görev listesi üretiliyor...")
-    gorevler = _gorevler_uret(teknik_analiz)
+    talimat = (talimat or "").strip()
+    print(f"  AI'dan FE/BE görev listesi üretiliyor{' (talimatlı)' if talimat else ''}...")
+    gorevler = _gorevler_uret(teknik_analiz, talimat=talimat)
 
     fe = sum(1 for g in gorevler if g["katman"] == "FE")
     be = sum(1 for g in gorevler if g["katman"] == "BE")
@@ -199,7 +226,9 @@ def jira_fe_be_uret(teknik_analiz_dosya: str = "teknik-analiz.md") -> dict:
     return {
         "gorevler": gorevler,
         "proje": {"key": project_key, "task_var": True},
-        "ozet": {"fe": fe, "be": be, "bagimlilik": bagimlilik},
+        "ozet": {"fe": fe, "be": be, "bagimlilik": bagimlilik, "toplam": fe + be},
+        "plan": _plan_metni(fe, be, bagimlilik, talimat),
+        "talimat": talimat,
     }
 
 

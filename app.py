@@ -4082,6 +4082,7 @@ def jira_fe_be_onizleme():
     bağımlılık önerisi üretir; Jira'ya YAZMAZ. Analist seçim yapar → /create."""
     data = request.get_json(silent=True) or {}
     dosya = (data.get("dosya") or "teknik-analiz.md").strip()
+    talimat = (data.get("talimat") or "").strip()[:1000]  # analist bölme yönlendirmesi
 
     if ".." in dosya or "/" in dosya or "\\" in dosya:
         return jsonify({"ok": False, "error": "Geçersiz dosya adı"}), 400
@@ -4092,7 +4093,7 @@ def jira_fe_be_onizleme():
 
     try:
         from skills.jira_fe_be import jira_fe_be_uret
-        sonuc = jira_fe_be_uret(teknik_analiz_dosya=dosya)
+        sonuc = jira_fe_be_uret(teknik_analiz_dosya=dosya, talimat=talimat)
         return jsonify({"ok": True, **sonuc})
     except Exception as e:
         logger.error(f"Jira FE/BE önizleme hatası: {e}")

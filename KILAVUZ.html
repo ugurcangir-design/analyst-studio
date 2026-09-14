@@ -767,8 +767,17 @@ Doküman yükle <span class="arr">→</span> Süreç Analizi <span class="arr">�
 
     <div class="step">
       <div class="num">2</div>
-      <h4>Önizleme modalında seçim yap</h4>
-      <p>Açılan modalda her satır ayrı bir <strong>Task</strong>'tır. Her satırda:</p>
+      <h4>Bölme planını gör, gerekirse yönlendir</h4>
+      <p>Modalın üstünde <strong>bölme planı</strong> yazar: <em>"Bu analizi N task'a bölmeyi öneriyorum: X FE + Y BE"</em>.
+        Agent gereksiz task bölmüş olabilir — <strong>uygun değilse</strong> alttaki kutuya talimat yazıp
+        <strong>Yeniden Böl</strong>'e basın; agent son talimatınıza göre yeniden böler (istediğiniz kadar tekrarlayabilirsiniz):</p>
+      <ul>
+        <li><code>sadece 2 task: 1 FE + 1 BE</code> — adet netleştir</li>
+        <li><code>ekran bazlı böl</code> — her ekran ayrı task</li>
+        <li><code>ödeme ve sipariş olarak ayır</code> — konu/modül bazlı</li>
+      </ul>
+      <p>Boş bırakırsanız agent işin doğal kırılımını kullanır. Plan uygun olunca aşağıdan seçip onaylayın.</p>
+      <p>Modaldaki her satır ayrı bir <strong>Task</strong>'tır. Her satırda:</p>
       <ul>
         <li>Checkbox (seç / kaldır)</li>
         <li><strong>Katman rozeti:</strong> <span class="pill be">BE</span> <span class="pill fe">FE</span></li>

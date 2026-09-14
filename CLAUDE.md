@@ -211,7 +211,12 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
 - **FE/BE düz Task bölme (`skills/jira_fe_be.py` — süreç ekranı onay→Jira):** Süreç→Teknik akışında
   teknik analiz onaylanınca "Evet — FE/BE Task'larını Öner" (`teknikOnaylaFeBe`) → **önizleme modalı**
   (`#febe-modal`) açılır; workflow YALNIZ task'lar açıldıktan sonra bitirilir (auto tek-Task YOK) — iptal
-  edilirse teknik-onay adımı korunur (tekrar denenebilir / "Atla"). `jira_fe_be_uret` teknik-analiz.md'yi (TL;DR +
+  edilirse teknik-onay adımı korunur (tekrar denenebilir / "Atla"). **Yinelemeli bölme (analist kontrolü —
+  gereksiz task önlenir):** modal üstte **plan** gösterir (`d.plan`: "Bu analizi N task'a bölmeyi öneriyorum:
+  X FE + Y BE"); analist alttaki **talimat** kutusuna metin yazıp **"Yeniden Böl"** (`febeYenidenBol` →
+  `/preview` `talimat` ile) diyerek bölmeyi yönlendirir (ör. "sadece 2 task: 1 FE + 1 BE", "ekran bazlı böl",
+  "ödeme ve sipariş olarak ayır"). `_gorevler_uret(talimat)` bunu prompt'a EN YÜKSEK ÖNCELİK olarak enjekte
+  eder; her "Yeniden Böl" SON talimatla taze bölme üretir (döngü). Onaylayınca (`febeOnayla`) seçilenler açılır. `jira_fe_be_uret` teknik-analiz.md'yi (TL;DR +
   Canlı Gözlem çıkarılmış) AI ile DÜZ FE/BE görev listesine böler (`<fe_be_gorevler>` JSON: her görev
   `{id, katman:FE|BE, summary, description, acceptance_criteria, bagimli_be:[BE-id…]}`). `_gorevleri_normalize`
   katmanı FE/BE'ye indirger (`_katman_indirge`: Frontend→FE, Backend→BE, varsayılan BE) + hayalet bağımlılığı
