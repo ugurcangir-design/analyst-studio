@@ -3992,6 +3992,55 @@ def jira_hierarchy_olustur():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+# ─── Jira FE/BE Görev Bölme (düz Task + Blocks bağı) ─────────────────────────
+
+@app.route("/api/jira/fe-be/preview", methods=["POST"])
+def jira_fe_be_onizleme():
+    """1. Adım — teknik analizden düz FE/BE **görev (Task)** listesi + BE→FE
+    bağımlılık önerisi üretir; Jira'ya YAZMAZ. Analist seçim yapar → /create."""
+    data = request.get_json(silent=True) or {}
+    dosya = (data.get("dosya") or "teknik-analiz.md").strip()
+
+    if ".." in dosya or "/" in dosya or "\\" in dosya:
+        return jsonify({"ok": False, "error": "Geçersiz dosya adı"}), 400
+
+    hata = _jira_baglanti_eksik()
+    if hata:
+        return jsonify({"ok": False, "error": hata}), 400
+
+    try:
+        from skills.jira_fe_be import jira_fe_be_uret
+        sonuc = jira_fe_be_uret(teknik_analiz_dosya=dosya)
+        return jsonify({"ok": True, **sonuc})
+    except Exception as e:
+        logger.error(f"Jira FE/BE önizleme hatası: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/jira/fe-be/create", methods=["POST"])
+def jira_fe_be_olustur_route():
+    """2. Adım — Analistin seçtiği/düzenlediği FE/BE görevlerini Jira'da **Task**
+    olarak açar + ilişkili BE→FE **Blocks** bağlarını kurar."""
+    data = request.get_json(silent=True) or {}
+    secim = data.get("secim")
+    confluence_url = (data.get("confluence_url") or "").strip() or None
+
+    if not isinstance(secim, dict) or not (secim.get("gorevler") or []):
+        return jsonify({"ok": False, "error": "Geçersiz görev seçimi"}), 400
+
+    hata = _jira_baglanti_eksik()
+    if hata:
+        return jsonify({"ok": False, "error": hata}), 400
+
+    try:
+        from skills.jira_fe_be import jira_fe_be_olustur
+        sonuc = jira_fe_be_olustur(secim, confluence_url=confluence_url)
+        return jsonify({"ok": True, **sonuc})
+    except Exception as e:
+        logger.error(f"Jira FE/BE oluşturma hatası: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 # ─── Jira Görevleri (Epic/Story alt görevleri) ────────────────────────────────
 
 @app.route("/api/jira/gorevler/cek", methods=["POST"])

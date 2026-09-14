@@ -42,6 +42,8 @@ GET  /api/jira/callback            OAuth dönüş
 POST /api/jira/test                Bağlantı testi (JIRA_URL ZORUNLU DEĞİL — site otomatik algılanır)
 POST /api/jira/hierarchy/preview   AI hiyerarşi önerir (Jira'ya YAZMAZ)
 POST /api/jira/hierarchy/create    Analist seçtiklerini Jira'da açar
+POST /api/jira/fe-be/preview       Teknik analizi DÜZ FE/BE görev(Task) listesine böler + BE→FE bağımlılık önerir (Jira'ya YAZMAZ)
+POST /api/jira/fe-be/create        Seçilen FE/BE görevlerini Task olarak açar + ilişkili BE→FE Blocks bağını kurar
 POST /api/jira/gorevler/cek        FAZ 1: alt görevleri çek + YAPISAL sınıflandır (AI'sız, 0 token)
 POST /api/jira/gorevler/siniflandir FAZ 2: yeniden çek + AI ile içerikten sınıflandır (opt-in)
 POST /api/jira/gorevler/sadece-client  Yalnızca client (frontend) işlerini ayıkla (batch, opt-in, AI)

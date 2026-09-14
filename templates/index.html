@@ -913,6 +913,9 @@ html[data-theme="light"] .jira-modal { background: rgba(245,247,250,.85); }
 .jira-node-katman.be    { background: rgba(168,85,247,.18); color: #c89bf5; }
 .jira-node-katman.febe  { background: rgba(234,179,8,.16); color: #e3c04e; }
 .jira-node-katman.genel { background: var(--surface2); color: var(--text3); }
+/* FE/BE bağımlılık (Blocks) satırı — görev başlığının altında */
+.febe-dep { font-size: 11px; color: var(--yellow); margin-top: 3px; line-height: 1.4; }
+.febe-dep strong { color: var(--text2); }
 
 /* ── İpuçları (Tooltip) ───────────────────────────────────────── */
 .ipucu {
@@ -2403,15 +2406,16 @@ function temaDegistir() {
             </div>
             <!-- Jira sorusu (Onayla sonrası) -->
             <div id="teknik-jira-soru" style="display:none">
-              <div class="action-desc">Teknik analiz onaylandı. Jira'da task oluşturmak istiyor musunuz?</div>
+              <div class="action-desc">Teknik analiz onaylandı. Analizi <strong>FE ve BE görevlerine</strong> bölüp Jira'da Task açalım mı? (İlişkili BE→FE task'lar bağlanır.)</div>
               <div class="btn-group">
-                <button class="btn btn-success" onclick="teknikOnaylaJiraIle()">
-                  <svg class="ico"><use href="#i-check"/></svg> Evet, Task Oluştur
+                <button class="btn btn-success" onclick="teknikOnaylaFeBe()">
+                  <svg class="ico"><use href="#i-ticket"/></svg> Evet — FE/BE Task'larını Öner
                 </button>
                 <button class="btn btn-outline btn-sm" onclick="teknikOnaylaSizJira()">
                   Hayır, Atla
                 </button>
               </div>
+              <div class="field-sub" style="margin-top:6px">Öneriyi göreceksiniz; seçip düzenleyerek onayladıktan sonra task'lar açılır.</div>
             </div>
           </div>
 
@@ -3293,6 +3297,36 @@ function temaDegistir() {
           <button class="btn btn-outline btn-sm" id="jira-modal-iptal" onclick="jiraModalKapat()">İptal</button>
           <button class="btn btn-primary btn-sm" id="jira-modal-onay" onclick="jiraHiyerarsiOnayla()">
             Devam Et — Jira'da Oluştur
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- FE/BE düz Task önizleme modalı (süreç → teknik onay → Jira) -->
+    <div class="jira-modal" id="febe-modal" onclick="if(event.target===this)febeModalKapat()">
+      <div class="jira-modal-box">
+        <div class="jira-modal-head">
+          <svg class="ico" style="color:var(--text3)"><use href="#i-ticket"/></svg>
+          <span class="jira-modal-title">FE / BE Görev (Task) Önizleme</span>
+          <button class="jira-modal-close" onclick="febeModalKapat()" title="Kapat">&times;</button>
+        </div>
+        <div class="jira-modal-sub" id="febe-modal-sub"></div>
+        <div style="padding:8px 18px;background:var(--surface2);font-size:11.5px;color:var(--text2);border-bottom:1px solid var(--border)">
+          💡 Her satır ayrı bir <strong>Task</strong> olarak açılır.
+          <span class="jira-node-katman be" style="margin:0 4px">BE</span> Backend ·
+          <span class="jira-node-katman fe" style="margin:0 4px">FE</span> Frontend ·
+          <strong style="color:var(--yellow)">⛔ bloklar</strong> = BE bitmeden FE yapılamaz (Blocks bağı).
+        </div>
+        <div class="jira-modal-body" id="febe-modal-body"></div>
+        <div class="jira-modal-result-wrap" id="febe-modal-result-wrap" style="display:none">
+          <div class="jira-modal-result" id="febe-modal-result"></div>
+        </div>
+        <div class="jira-modal-foot">
+          <span class="jira-modal-secim" id="febe-modal-secim"></span>
+          <span style="flex:1"></span>
+          <button class="btn btn-outline btn-sm" id="febe-modal-iptal" onclick="febeModalKapat()">İptal</button>
+          <button class="btn btn-primary btn-sm" id="febe-modal-onay" onclick="febeOnayla()">
+            Devam Et — Jira'da Task Aç
           </button>
         </div>
       </div>
@@ -7134,6 +7168,198 @@ async function jiraHiyerarsiOnayla() {
 
 function jiraModalKapat() {
   document.getElementById('jira-modal').classList.remove('visible');
+}
+
+// ─── FE/BE düz Task akışı (süreç → teknik onay → Jira) ────────────────────────
+let _febeOnizleme = null;   // /fe-be/preview yanıtı
+
+// Süreç ekranı "Evet — FE/BE Task'larını Öner": önce önizleme modalını aç.
+// Workflow, task'lar GERÇEKTEN açıldıktan sonra bitirilir (febeOnayla içinde) —
+// analist iptal ederse teknik-onay adımı korunur, tekrar deneyebilir / "Atla" seçebilir.
+function teknikOnaylaFeBe() {
+  febeOnizlemeAc('teknik-analiz.md');
+}
+
+// AI'dan FE/BE görev önerisi al, modalı doldur
+async function febeOnizlemeAc(dosya) {
+  const modal = document.getElementById('febe-modal');
+  const body  = document.getElementById('febe-modal-body');
+  const sub   = document.getElementById('febe-modal-sub');
+  _febeOnizleme = null;
+  sub.textContent = 'AI, teknik analizi FE/BE görevlerine bölüyor...';
+  body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3)">⏳ Öneri hazırlanıyor…</div>';
+  document.getElementById('febe-modal-result-wrap').style.display = 'none';
+  document.getElementById('febe-modal-secim').textContent = '';
+  const onayBtn = document.getElementById('febe-modal-onay');
+  onayBtn.disabled = true; onayBtn.textContent = 'Devam Et — Jira\'da Task Aç';
+  onayBtn.onclick = febeOnayla;
+  document.getElementById('febe-modal-iptal').disabled = false;
+  modal.classList.add('visible');
+
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), 120000);
+  try {
+    const r = await fetch('/api/jira/fe-be/preview', {
+      method:'POST', signal: ctrl.signal,
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ dosya: dosya || 'teknik-analiz.md' })
+    });
+    const d = await r.json();
+    if (!d.ok) {
+      sub.innerHTML = '<span style="color:var(--red)">✗ ' + escHtml(d.error || 'Öneri üretilemedi') + '</span>';
+      body.innerHTML = '';
+      return;
+    }
+    _febeOnizleme = d;
+    febeModalDoldur(d);
+  } catch(e) {
+    sub.innerHTML = '<span style="color:var(--red)">✗ ' +
+      (e.name === 'AbortError' ? 'Zaman aşımı (120s)' : 'Bağlantı hatası') + '</span>';
+    body.innerHTML = '';
+  } finally {
+    clearTimeout(tid);
+  }
+}
+
+function _febeIdEtiket(g) {
+  const k = (g.katman || '').toUpperCase() === 'BE' ? 'be' : 'fe';
+  return `<span class="jira-node-katman ${k}">${k.toUpperCase()}</span>`;
+}
+
+// Görev id → okunur başlık (bağımlılık satırında göstermek için)
+function _febeBaslikMap(gorevler) {
+  const m = {};
+  (gorevler || []).forEach(g => { m[g.id] = g.summary || g.id; });
+  return m;
+}
+
+function febeModalDoldur(d) {
+  const body  = document.getElementById('febe-modal-body');
+  const sub   = document.getElementById('febe-modal-sub');
+  const proje = d.proje || {};
+  const ozet  = d.ozet || {};
+  const gorevler = d.gorevler || [];
+
+  sub.innerHTML = `Proje <strong>${escHtml(proje.key || '?')}</strong> — AI `
+    + `<strong>${ozet.fe||0} FE</strong> + <strong>${ozet.be||0} BE</strong> görev, `
+    + `${ozet.bagimlilik||0} bağımlılık önerdi. Açmak istediklerinizi <strong>seçin</strong>, başlıkları düzenleyebilirsiniz.`;
+
+  const baslikMap = _febeBaslikMap(gorevler);
+  // BE'ler önce, sonra FE'ler — okunur sıra
+  const sirali = gorevler.slice().sort((a,b) =>
+    ((a.katman||'').toUpperCase()==='BE'?0:1) - ((b.katman||'').toUpperCase()==='BE'?0:1));
+
+  let html = '';
+  sirali.forEach(g => {
+    const safe = (g.summary || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    const bagli = (g.bagimli_be || []).filter(b => baslikMap[b]);
+    let dep = '';
+    if (bagli.length) {
+      const adlar = bagli.map(b => escHtml(baslikMap[b])).join(', ');
+      dep = `<div class="febe-dep">⛔ şu BE bitmeden yapılamaz: <strong>${adlar}</strong></div>`;
+    }
+    html += `<div class="jira-node" data-febe="${g.id}">
+      <input type="checkbox" checked data-febe-cb="${g.id}" onchange="febeRefresh()">
+      ${_febeIdEtiket(g)}
+      <div style="flex:1">
+        <input type="text" class="jira-node-input" data-febe-txt="${g.id}" value="${safe}" placeholder="Görev başlığı" style="width:100%">
+        ${dep}
+      </div>
+    </div>`;
+  });
+  body.innerHTML = html || '<div style="padding:16px;color:var(--text3)">AI görev üretemedi.</div>';
+  body.style.pointerEvents = ''; body.style.opacity = '';
+  febeRefresh();
+}
+
+function febeRefresh() {
+  const cbs = document.querySelectorAll('[data-febe-cb]');
+  let sayim = 0;
+  cbs.forEach(cb => {
+    if (cb.checked) sayim++;
+    const txt = document.querySelector(`[data-febe-txt="${cb.dataset.febeCb}"]`);
+    if (txt) txt.disabled = !cb.checked;
+    cb.closest('.jira-node').classList.toggle('disabled', !cb.checked);
+  });
+  document.getElementById('febe-modal-secim').textContent = sayim + ' görev seçili';
+  document.getElementById('febe-modal-onay').disabled = sayim === 0;
+}
+
+// Seçilenleri topla → Jira'da Task aç + Blocks bağla
+async function febeOnayla() {
+  if (!_febeOnizleme) return;
+  const secili = new Set();
+  document.querySelectorAll('[data-febe-cb]').forEach(cb => { if (cb.checked) secili.add(cb.dataset.febeCb); });
+  if (!secili.size) { toast('En az bir görev seçin.', 'error'); return; }
+
+  const gorevler = [];
+  (_febeOnizleme.gorevler || []).forEach(g => {
+    if (!secili.has(g.id)) return;
+    const txt = document.querySelector(`[data-febe-txt="${g.id}"]`);
+    gorevler.push({
+      id: g.id, katman: g.katman,
+      summary: (txt ? txt.value : g.summary || '').trim(),
+      description: g.description || '',
+      acceptance_criteria: g.acceptance_criteria || [],
+      // yalnız seçili BE'lere bağımlılık kalsın
+      bagimli_be: (g.bagimli_be || []).filter(b => secili.has(b))
+    });
+  });
+
+  const onayBtn  = document.getElementById('febe-modal-onay');
+  const iptalBtn = document.getElementById('febe-modal-iptal');
+  const wrap     = document.getElementById('febe-modal-result-wrap');
+  const sonuc    = document.getElementById('febe-modal-result');
+  onayBtn.disabled = true; iptalBtn.disabled = true;
+  wrap.style.display = 'block';
+  sonuc.className = 'jira-modal-result';
+  sonuc.textContent = 'Jira\'da Task\'lar açılıyor + bağlar kuruluyor, lütfen bekleyin...';
+
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), 180000);
+  try {
+    const r = await fetch('/api/jira/fe-be/create', {
+      method:'POST', signal: ctrl.signal,
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ secim: { gorevler } })
+    });
+    const d = await r.json();
+    if (!d.ok) {
+      sonuc.className = 'jira-modal-result err';
+      sonuc.textContent = '✗ ' + (d.error || 'Oluşturma başarısız');
+      onayBtn.disabled = false; iptalBtn.disabled = false;
+      return;
+    }
+    const keys = (d.gorevler || []).map(g => `${g.key} [${g.katman}]`).join(', ');
+    sonuc.className = 'jira-modal-result ok';
+    sonuc.textContent = `✓ ${d.toplam} Task açıldı, ${d.link_sayisi} Blocks bağı kuruldu.\n`
+      + (keys ? keys + '\n' : '')
+      + (d.link_uyari ? '⚠ ' + d.link_uyari : '');
+
+    const body = document.getElementById('febe-modal-body');
+    body.style.pointerEvents = 'none'; body.style.opacity = '.5';
+    onayBtn.textContent = 'Kapat'; onayBtn.onclick = febeModalKapat; onayBtn.disabled = false;
+    toast(`${d.toplam} Jira Task açıldı`, 'success');
+
+    // Task'lar açıldı → workflow'u tamamla (teknik-onay adımından çık, auto tek-Task YOK).
+    // İptal edilseydi bu çalışmaz; adım korunur ve analist tekrar deneyebilirdi.
+    try {
+      const rf = await fetch('/api/approve-teknik-no-jira', {method:'POST'});
+      if (rf.ok) startPoll();
+    } catch(_) { /* workflow zaten tamamlanmış olabilir — task'lar açıldı, sorun değil */ }
+  } catch(e) {
+    sonuc.className = 'jira-modal-result err';
+    sonuc.textContent = e.name === 'AbortError'
+      ? '✗ Zaman aşımı (180s) — çok sayıda görev seçili olabilir'
+      : '✗ Bağlantı hatası';
+    onayBtn.disabled = false; iptalBtn.disabled = false;
+  } finally {
+    clearTimeout(tid);
+  }
+}
+
+function febeModalKapat() {
+  document.getElementById('febe-modal').classList.remove('visible');
 }
 
 // ─── Soru Defteri ─────────────────────────────────────────────────────────────

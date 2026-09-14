@@ -97,6 +97,21 @@ kontrol("jira-kopru/durum ok + varsayılan KAPALI",
 jkt = istemci.post("/api/jira-kopru/tara", headers=ORIGIN)
 kontrol("jira-kopru/tara projesiz → ok:False (Jira'ya gitmeden)",
         json_al(jkt).get("ok") is False and "PROJELER" in json_al(jkt).get("error", ""))
+
+# Jira FE/BE düz Task akışı — giriş doğrulama (Jira'ya gitmeden)
+fbp = istemci.post("/api/jira/fe-be/preview", json={"dosya": "../x"}, headers=ORIGIN)
+kontrol("jira/fe-be/preview geçersiz dosya → 400", fbp.status_code == 400)
+fbc = istemci.post("/api/jira/fe-be/create", json={"secim": {"gorevler": []}}, headers=ORIGIN)
+kontrol("jira/fe-be/create boş seçim → 400", fbc.status_code == 400)
+_fbm = importlib.import_module("skills.jira_fe_be")
+kontrol("jira_fe_be: katman indirgeme (Frontend→FE, Backend→BE)",
+        _fbm._katman_indirge("Frontend") == "FE" and _fbm._katman_indirge("Backend") == "BE")
+_fbn = _fbm._gorevleri_normalize([
+    {"id": "BE-1", "katman": "BE", "summary": "s", "bagimli_be": []},
+    {"id": "FE-1", "katman": "FE", "summary": "s", "bagimli_be": ["BE-1", "BE-YOK"]},
+])
+kontrol("jira_fe_be: hayalet bağımlılık düşer (BE-YOK atılır)",
+        _fbn[1]["bagimli_be"] == ["BE-1"])
 _jkm = importlib.import_module("skills.jira_kopru")
 kontrol("jira_kopru: kendi 🤖 yanıtı komut sayılmaz (döngü koruması)",
         _jkm._komut_coz(_jkm.ROBOT_IMZA + " — Teknik Analiz", "/analyst_agent") is None)

@@ -109,6 +109,29 @@ doğrulama/şeffaflık bilgisidir, gereksinim değildir. Her Jira yazma yolu iki
    (`jira_yorum_ekle` — açık sorular). Yalnız Jira'ya giden kopya temizlenir; kaynak-metin (ekran/dosya)
    dokunulmaz — köprü UI komut yanıtları da etiketleri korur (strip yerel `markdown` param'ında yapılır).
 
+### FE/BE düz Task bölme (`skills/jira_fe_be.py`) — süreç ekranı onay → Jira
+Süreç→Teknik akışında teknik analiz onaylanınca (süreç ekranı "Evet — FE/BE Task'larını Öner",
+`teknikOnaylaFeBe`) alternatif bir Jira yolu çalışır. Epic/Story/Subtask hiyerarşisinden (`jira_tasks.py`)
+FARKLI: **tüm issue'lar tek tip Task (görev)**, yapı DÜZ (üst başlık yok), FE ve BE ayrı task'lar.
+- **Önizleme** (`jira_fe_be_uret`, `/api/jira/fe-be/preview`, Jira'ya YAZMAZ): teknik-analiz.md (TL;DR +
+  Canlı Gözlem çıkarılmış) → AI `<fe_be_gorevler>` JSON. Her görev: `{id, katman:FE|BE, summary,
+  description, acceptance_criteria, bagimli_be:[BE-id…]}`. `bagimli_be` = FE'nin ihtiyaç duyduğu BE
+  görev(ler)i (BE 'blocks' FE). `_gorevleri_normalize` katmanı FE/BE'ye indirger (`_katman_indirge`:
+  Frontend→FE, Backend→BE, belirsiz→BE) + var olmayan BE id'ye bağımlılığı (hayalet) düşürür.
+- **Oluşturma** (`jira_fe_be_olustur`, `/api/jira/fe-be/create`): analistin seçtiği/düzenlediği görevleri
+  Task tipinde (`_proje_bilgi.task_id`) açar — BE'ler ÖNCE (blocker), sonra FE'ler. Sonra `bagimli_be`
+  haritasına göre **BE→FE Blocks bağı** kurar (`_blocks_bagla`: `outwardIssue=BE` bloklar,
+  `inwardIssue=FE` bloklanan). Link tipi `_blocks_link_tipi` ile runtime'da doğrulanır (ad tam "Blocks"
+  değilse 'block' outward'lı ilk tip; hiç yoksa bağ atlanır + `link_uyari`). Bağ YALNIZ ikisi de seçilen
+  görevler arasında kurulur (UI `febeOnayla` bağımlılığı seçime göre filtreler + backend `secilen_idler`
+  ile tekrar filtreler — çift güvence).
+- **UI:** `#febe-modal` (index.html; `febeOnizlemeAc`/`febeModalDoldur`/`febeRefresh`/`febeOnayla`). Süreç
+  onay butonu modalı AÇAR; task'lar GERÇEKTEN açıldıktan SONRA `febeOnayla` içinde
+  `/api/approve-teknik-no-jira` çağrılıp workflow bitirilir (auto tek-Task YOK). Analist modalı iptal
+  ederse workflow teknik-onay adımında KALIR → tekrar deneyebilir ya da "Atla" seçebilir. Eski
+  tek-monolitik-Task yolu (`jira_agent.main`, `/api/approve-teknik`) kodda DURUYOR ama süreç ekranı artık
+  bu FE/BE akışını kullanır.
+
 ## RAG Mimarisi (`skills/base.py`)
 - **Bağlam blokları:** `_ref_bloklari_olustur(ref_dosyalar)` tipine göre gruplar — `### CONFLUENCE
   DOKÜMANTASYONU` (md), `### JİRA TASK GEÇMİŞİ` (`_jira_json_to_md` kompakt md), `### API / SWAGGER
