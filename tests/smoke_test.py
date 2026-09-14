@@ -201,6 +201,14 @@ uygulama._owner_konsol_aktif = lambda: True   # kalan testler owner modunda sür
 
 u = json_al(istemci.get("/api/guncelleme/durum"))
 kontrol("guncelleme/durum ok (fetch yok)", u.get("ok") and "yeni_surum" in u)
+kontrol("guncelleme/durum iraksama alanı var", "iraksama" in u)
+# Iraksama kurtarma: ıraksama YOKKEN reset reddedilir (409) — yanlışlıkla hard-reset olmasın.
+# _guncelleme_kontrol'u ağa gitmeden (fetch) mock'la.
+_gk_gercek = uygulama._guncelleme_kontrol
+uygulama._guncelleme_kontrol = lambda fetch=True: {"iraksama": False}
+_sf = istemci.post("/api/guncelleme/sifirla", headers=ORIGIN)
+kontrol("guncelleme/sifirla ıraksama yoksa → 409", _sf.status_code == 409)
+uygulama._guncelleme_kontrol = _gk_gercek
 
 s = json_al(istemci.get("/api/saglik"))
 kontrol("saglik ok + bölümler", s.get("ok") and all(k in s for k in ("surum", "ai", "guncelleme", "workflow", "disk", "auth")))

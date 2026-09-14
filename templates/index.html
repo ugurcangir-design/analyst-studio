@@ -3732,6 +3732,19 @@ python cli.py ui ~/export.zip</pre>
             </div>
           </div>
           <div id="update-log" style="display:none;margin-top:10px;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:11px;font-family:'Geist Mono',monospace;color:var(--text2);white-space:pre-wrap;line-height:1.6"></div>
+          <!-- IRAKSAMA kurtarma: yerel geçmiş uzak ile ıraksadıysa (eski klon + geçmiş yenileme) -->
+          <div id="update-iraksama" style="display:none;margin-top:12px;padding:11px 13px;background:rgba(234,179,8,.10);border:1px solid var(--yellow);border-radius:var(--radius-sm);font-size:12.5px;line-height:1.6;color:var(--text)">
+            <strong style="color:var(--yellow)">⚠ Güncelleme alınamıyor — yerel kopya uzak sürümle ıraksamış.</strong><br>
+            Bu makine büyük olasılıkla depo geçmişi yenilenmeden ÖNCE klonlanmış; bu yüzden düz güncelleme
+            (git pull) yapılamıyor. Aşağıdaki düğme yereli uzak sürümle <strong>eşitler</strong>
+            (<code>git reset --hard origin/main</code>). <strong>.env</strong> ve <strong>reference/</strong>
+            ayarlarınız korunur (bunlar git'e dahil değil).
+            <div style="margin-top:9px">
+              <button class="btn btn-primary btn-sm" id="update-sifirla-btn" onclick="guncellemeSifirla()">
+                <svg class="ico"><use href="#i-refresh"/></svg> Uzak Sürümle Eşitle (sıfırla)
+              </button>
+            </div>
+          </div>
         </div>
         <div class="settings-section">
           <div class="section-title">Nasıl Çalışır?</div>
@@ -8119,6 +8132,50 @@ async function versiyonYukle() {
     const el = document.getElementById('version-info');
     if (el) el.textContent = d.hata ? '⚠ Git bilgisi alınamadı' : `v${d.hash} · ${d.tarih} · ${d.mesaj}`;
   } catch {}
+  // Iraksama kontrolü — yerel geçmiş uzak ile ıraksadıysa kurtarma bloğunu göster
+  try {
+    const g = await (await fetch('/api/guncelleme/durum?kontrol=1')).json();
+    const blok = document.getElementById('update-iraksama');
+    if (blok) blok.style.display = g && g.iraksama ? '' : 'none';
+  } catch {}
+}
+
+// IRAKSAMA kurtarma: git reset --hard origin/main + restart
+async function guncellemeSifirla() {
+  if (!confirm('Yerel kopya uzak sürümle eşitlenecek (git reset --hard origin/main). '
+    + 'Ayar dosyalarınız (.env, reference/) korunur. Devam edilsin mi?')) return;
+  const btn = document.getElementById('update-sifirla-btn');
+  const log = document.getElementById('update-log');
+  btn.disabled = true;
+  btn.innerHTML = '<svg class="ico"><use href="#i-refresh"/></svg> Eşitleniyor...';
+  try {
+    const r = await fetch('/api/guncelleme/sifirla', {method:'POST'});
+    const d = await r.json();
+    log.style.display = 'block';
+    if (!r.ok) {
+      log.textContent = '✗ ' + (d.error || 'Eşitleme başarısız');
+      log.style.borderColor = 'var(--red)';
+      btn.disabled = false;
+      btn.innerHTML = '<svg class="ico"><use href="#i-refresh"/></svg> Uzak Sürümle Eşitle (sıfırla)';
+      toast(d.error || 'Eşitleme başarısız', 'error');
+      return;
+    }
+    log.style.borderColor = 'var(--border)';
+    log.textContent = (d.mesaj || 'Eşitlendi') + '\n\nUygulama yeniden başlatılıyor...';
+    toast('Uzak sürümle eşitlendi, yeniden bağlanılıyor...', 'success');
+    setTimeout(() => {
+      let kalan = 6;
+      const interval = setInterval(() => {
+        btn.innerHTML = `Yeniden bağlanılıyor... (${kalan}s)`;
+        kalan--;
+        if (kalan < 0) { clearInterval(interval); window.location.reload(); }
+      }, 1000);
+    }, 3000);
+  } catch (e) {
+    toast('Bağlantı hatası: ' + e.message, 'error');
+    btn.disabled = false;
+    btn.innerHTML = '<svg class="ico"><use href="#i-refresh"/></svg> Uzak Sürümle Eşitle (sıfırla)';
+  }
 }
 
 async function guncellemeYap() {

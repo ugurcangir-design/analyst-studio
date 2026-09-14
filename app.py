@@ -1938,7 +1938,7 @@ _guncelleme_lock = threading.Lock()
 _guncelleme_durumu: dict = {
     "otomatik": AUTO_UPDATE, "yeni_surum": False, "behind": 0, "ahead": 0,
     "uzak": None, "degisiklikler": [], "engel": None, "son_kontrol": None,
-    "uygulaniyor": False, "hata": None,
+    "uygulaniyor": False, "hata": None, "iraksama": False, "yerel_degisiklik": False,
 }
 
 
@@ -1990,6 +1990,14 @@ def _guncelleme_kontrol(fetch: bool = True) -> dict:
             pass
     kirli = _git_calistir(["status", "--porcelain", "--untracked-files=no"])
     yerel_degisiklik = bool(kirli["ok"] and kirli["stdout"].strip())
+    # IRAKSAMA tespiti: HEAD, origin/dal'ın atası DEĞİLSE fast-forward İMKANSIZ.
+    # Tipik neden: eski klon + uzakta geçmiş yeniden yazımı (git filter-repo/force-push)
+    # → yerel commit'ler artık uzakta yok, `pull --ff-only` başarısız. `ahead` yanıltıcı
+    # ("push edilmemiş commit" değil, ıraksamış eski geçmiş).
+    # merge-base --is-ancestor: çıkış 0 = HEAD atadır (ff mümkün), 1 = değil (ıraksama)
+    ata = _git_calistir(["merge-base", "--is-ancestor", "HEAD", f"origin/{dal}"])
+    ff_mumkun = ata["ok"]
+    iraksama = bool(behind > 0 and not ff_mumkun)
     uzak = None
     degisiklikler: list[str] = []
     if behind:
@@ -1997,16 +2005,22 @@ def _guncelleme_kontrol(fetch: bool = True) -> dict:
         if u["ok"] and "|" in u["stdout"]:
             h, s, c = u["stdout"].split("|", 2)
             uzak = {"hash": h, "mesaj": s, "tarih": c[:19]}
-        lg = _git_calistir(["log", f"HEAD..origin/{dal}", "--pretty=format:%s", "-n", "10"])
-        if lg["ok"]:
-            degisiklikler = [x for x in lg["stdout"].splitlines() if x.strip()]
+        # Iraksamada HEAD..origin listesi çok uzun/anlamsız olabilir → yalnız ff'de göster
+        if not iraksama:
+            lg = _git_calistir(["log", f"HEAD..origin/{dal}", "--pretty=format:%s", "-n", "10"])
+            if lg["ok"]:
+                degisiklikler = [x for x in lg["stdout"].splitlines() if x.strip()]
     engel = None
-    if yerel_degisiklik:
+    if iraksama:
+        engel = ("yerel geçmiş uzak ile IRAKSADI (büyük olasılıkla eski klon + uzakta geçmiş "
+                 "yenileme) — düz güncelleme yapılamaz; 'Uzak sürümle eşitle' gerekir")
+    elif yerel_degisiklik:
         engel = "yerel değişiklik var (geliştirme makinesi) — otomatik pull kapalı"
     elif ahead:
         engel = "push edilmemiş yerel commit var — otomatik pull kapalı"
     d.update(yeni_surum=behind > 0, behind=behind, ahead=ahead, uzak=uzak, dal=dal,
-             degisiklikler=degisiklikler, engel=engel, son_kontrol=time.time(), hata=None)
+             degisiklikler=degisiklikler, engel=engel, iraksama=iraksama,
+             yerel_degisiklik=yerel_degisiklik, son_kontrol=time.time(), hata=None)
     return d
 
 
@@ -2437,6 +2451,44 @@ def guncelleme_simdi():
         return jsonify({"ok": False, "error": f"Şu an {neden}; bitince otomatik uygulanacak."}), 409
     ok, mesaj = _guncelleme_uygula("kullanıcı")
     return jsonify({"ok": ok, "guncelleme_var": True, "mesaj": mesaj, "yeniden_basliyor": ok}), (200 if ok else 500)
+
+
+@app.route("/api/guncelleme/sifirla", methods=["POST"])
+def guncelleme_sifirla():
+    """IRAKSAMA kurtarma: yerel geçmiş uzak ile ıraksamışsa (eski klon + geçmiş
+    yenileme) `git reset --hard origin/<dal>` ile uzak sürüme EŞİTLER + restart.
+    YALNIZ ıraksama tespit edilince ve tracked ağaç TEMİZKEN çalışır (izlenmeyen
+    .env / reference/*.json korunur — reset onlara dokunmaz). Kaydedilmemiş tracked
+    değişiklik varsa reddeder (veri kaybı önlemi)."""
+    d = _guncelleme_kontrol(fetch=True)
+    if not d.get("iraksama"):
+        return jsonify({"ok": False, "error": "Iraksama yok — bu işlem yalnız uzakla ıraksamış "
+                        "yerel geçmişte gerekir. Normal 'Güncelle'yi kullanın."}), 409
+    if d.get("yerel_degisiklik"):
+        return jsonify({"ok": False, "error": "Kaydedilmemiş yerel değişiklik var — sıfırlama iptal "
+                        "edildi (veri kaybı önlemi). Değişiklikleri saklayıp tekrar deneyin."}), 409
+    neden = _mesgul_mu()
+    if neden:
+        return jsonify({"ok": False, "error": f"Şu an {neden}; bitince tekrar deneyin."}), 409
+    if not _guncelleme_lock.acquire(blocking=False):
+        return jsonify({"ok": False, "error": "Güncelleme zaten uygulanıyor"}), 409
+    try:
+        _guncelleme_durumu["uygulaniyor"] = True
+        dal = (_git_calistir(["rev-parse", "--abbrev-ref", "HEAD"]).get("stdout") or "").strip() or "main"
+        _git_calistir(["fetch", "origin", "--quiet"], timeout=60)
+        rs = _git_calistir(["reset", "--hard", f"origin/{dal}"], timeout=60)
+        cikti = (rs["stdout"] + "\n" + rs.get("stderr", "")).strip()
+        if not rs["ok"]:
+            _guncelleme_durumu.update(uygulaniyor=False, hata=cikti[:300])
+            return jsonify({"ok": False, "error": cikti[:300]}), 500
+        subprocess.run([sys.executable, "-m", "pip", "install", "-r", str(BASE_DIR / "requirements.txt"), "-q"],
+                       capture_output=True, timeout=180)
+        logger.info("Iraksama sıfırlaması uygulandı → origin/%s: %s", dal, cikti[:120])
+        _yeniden_baslat_zamanla()
+        return jsonify({"ok": True, "mesaj": f"Uzak sürümle eşitlendi ({dal}). Yeniden başlatılıyor…",
+                        "yeniden_basliyor": True})
+    finally:
+        _guncelleme_lock.release()
 
 
 # ─── Sistem Sağlığı — v2 Faz 2.6 (owner-only; 0 token, deterministik) ────────
