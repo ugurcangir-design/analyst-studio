@@ -174,6 +174,12 @@ kontrol("gorev/is/durdur bilinmeyen → 404",
 
 g = json_al(istemci.get("/api/gorunurluk"))
 kontrol("gorunurluk katalog (YETKI_PANELI=true)", g.get("ok") and len(g.get("katalog", [])) >= 10)
+_katalog_idler = {k["id"] for k in g.get("katalog", [])}
+kontrol("gorunurluk katalog: 'kod' (Kod Kaynağı) analiste kapatılabilir", "kod" in _katalog_idler)
+kontrol("gorunurluk katalog: 'kopru' (Jira Köprüsü) analiste kapatılabilir", "kopru" in _katalog_idler)
+# Katalogdaki her analist-ekranı için nav-<id> var (tutarlılık — yeni ekran eklenince katalog güncel kalsın)
+kontrol("gorunurluk katalog: tüm ekran id'leri gerçek ('endpoints' dolu)",
+        all(k.get("endpoints") for k in g.get("katalog", [])))
 kontrol("auth/me yetki_admin=true", json_al(istemci.get("/api/auth/me")).get("yetki_admin") is True)
 
 u = json_al(istemci.get("/api/guncelleme/durum"))

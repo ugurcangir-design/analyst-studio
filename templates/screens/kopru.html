@@ -1,7 +1,8 @@
     <!-- EKRAN: Jira Köprüsü — açık soruları AGENT UI'ından da cevapla/analizi sürdür.
          Tek beyin, iki kanal: Jira yorumu (/analyst_agent …) ve bu ekran aynı
          backend'i (jira_kopru.ui_komut) çağırır. Uzun işler arka planda + polling.
-         Owner-only (admin_gerekli). Backend: /api/jira-kopru/liste|is|is/<id>. -->
+         Analist-erişimli (bridge self-scope ile kendi Jira kimliğine kilitli); owner
+         Yetki'den 'kopru'yu gizleyebilir. Backend: /api/jira-kopru/liste|is|is/<id>. -->
     <div class="page" id="page-kopru">
       <div class="ph">
         <div class="ph-text">

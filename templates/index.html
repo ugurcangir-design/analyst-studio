@@ -2091,7 +2091,7 @@ function temaDegistir() {
         <svg class="ico"><use href="#i-refresh"/></svg>
         <span class="nav-label">UAT Mutabakat</span>
       </div>
-      <div class="nav-item" id="nav-kopru" onclick="switchTab('kopru')" style="display:none">
+      <div class="nav-item" id="nav-kopru" onclick="switchTab('kopru')">
         <svg class="ico"><use href="#i-ticket"/></svg>
         <span class="nav-label">Jira Köprüsü</span>
       </div>
@@ -4050,7 +4050,8 @@ const _YONETIM_NAV = ['settings', 'jira-settings', 'prompts', 'update', 'kullani
 function _rolUygula(me) {
   const akRol = document.getElementById('ak-rol'); if (akRol) akRol.textContent = (me.rol === 'owner') ? 'Owner' : 'Analist';
   if (me.usage_admin) { const n = document.getElementById('nav-kullanim'); if (n) n.style.display = ''; }
-  if (me.usage_admin || me.yetki_admin) { const n = document.getElementById('nav-kopru'); if (n) n.style.display = ''; }
+  // Jira Köprüsü artık analist-erişimli (varsayılan görünür); owner Yetki'den 'kopru' gizlerse
+  // aşağıdaki me.gizli döngüsü nav-kopru'yu gizler. Owner-only özel gösterim KALDIRILDI.
   if (me.yetki_admin) { const n = document.getElementById('nav-yetki'); if (n) n.style.display = ''; }
   if (me.rol === 'owner') return;
   const sec = document.querySelector('.nav-section[data-grup="settings"]'); if (sec) sec.style.display = 'none';

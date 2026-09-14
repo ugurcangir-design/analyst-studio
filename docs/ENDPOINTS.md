@@ -194,11 +194,11 @@ GET  /api/pano     HERKES — rol-duyarlı Ana Sayfa "Sıradaki iş": rol · wor
                    onay{adim:surec|teknik|brd,etiket,dosya}|null · sorular{acik,kritik,uygulanmamis} · bekleyen_revizyon[]
 GET  /api/disk/durum   owner — {dosya_sistemi, plan{adaylar[],adet,toplam_mb} (KURU), son, zamanlama}
 POST /api/disk/temizle owner — planı uygular; analiz sürüyorsa 409. {silinen, kazanilan_mb, hata[]}
-GET  /api/jira-kopru/durum owner — {ok, ayarlar{aktif,aralik_sn,pencere_dk,projeler,komut,yazar_allowlist}, son_tur, son_ozet, islenen_toplam}
-POST /api/jira-kopru/tara  owner — elle tek tur (komutlu yeni yorumları hemen tara/işle); analiz sürüyorsa 409, projesiz ok:False. {ok, taranan_task, islenen[], atlanan, hata[]}
-GET  /api/jira-kopru/liste owner — Agent UI: köprü analizleri {ok, kayitlar[{key,zaman,acik,acik_var,taslak_var,taslak_tip}], aktif, komut}. 0 token
-POST /api/jira-kopru/is    owner — köprü komutunu arka planda çalıştır {komut,key,arg} → {job_id}; geçersiz komut/key 400 (Agent UI kanalı = jira_kopru.ui_komut, Jira'ya da yazar)
-GET  /api/jira-kopru/is/<job_id> owner — köprü işi durumu/sonucu (polling): {ok, durum(calisiyor|bitti|hata), key, komut, sonuc, hata}
+GET  /api/jira-kopru/durum analist — {ok, ayarlar{aktif,aralik_sn,pencere_dk,projeler,komut,yazar_allowlist}, son_tur, son_ozet, islenen_toplam}
+POST /api/jira-kopru/tara  analist — elle tek tur (komutlu yeni yorumları hemen tara/işle); analiz sürüyorsa 409, projesiz ok:False. {ok, taranan_task, islenen[], atlanan, hata[]}
+GET  /api/jira-kopru/liste analist — Agent UI: köprü analizleri {ok, kayitlar[{key,zaman,acik,acik_var,taslak_var,taslak_tip}], aktif, komut}. 0 token
+POST /api/jira-kopru/is    analist — köprü komutunu arka planda çalıştır {komut,key,arg} → {job_id}; geçersiz komut/key 400 (Agent UI kanalı = jira_kopru.ui_komut, Jira'ya da yazar)
+GET  /api/jira-kopru/is/<job_id> analist — köprü işi durumu/sonucu (polling): {ok, durum(calisiyor|bitti|hata), key, komut, sonuc, hata}
 ```
 **Agent UI kanalı** (`screens/kopru.html`, nav "Jira Köprüsü", owner): açık sorular arayüzde de görünür, oradan
 cevaplanıp (Cevapla&Devam) analiz sürdürülür — Jira yorumu (`/analyst_agent …`) ile **aynı beyin**

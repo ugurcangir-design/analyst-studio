@@ -294,7 +294,9 @@ GIZLENEBILIR_KATALOG = [
     {"id": "history",         "ad": "Geçmiş",               "grup": "Çıktılar", "aciklama": "Önceki oturum arşivi", "endpoints": ["/api/history"]},
     {"id": "jira-gorevler",   "ad": "Task Analizi",         "grup": "Jira",     "aciklama": "Task çekme / görev analizi / güncelleme", "endpoints": ["/api/jira/gorev"]},
     {"id": "backlog-senkron", "ad": "UAT Mutabakat",        "grup": "Jira",     "aciklama": "UAT ↔ hedef board karşılaştırma", "endpoints": ["/api/backlog"]},
+    {"id": "kopru",           "ad": "Jira Köprüsü",         "grup": "Jira",     "aciklama": "Jira'yı web-chat gibi kullan (analiz/cevap/düzelt). Bridge self-scope ile kendi kimliğine kilitli.", "endpoints": ["/api/jira-kopru"]},
     {"id": "referanslar",     "ad": "Referanslar",          "grup": "Kaynaklar","aciklama": "Confluence/Jira kaynak senkronu", "endpoints": ["/api/sources/sync"]},
+    {"id": "kod",             "ad": "Kod Kaynağı",          "grup": "Kaynaklar","aciklama": "Salt-okuma repo/dosya tarama (analiz bağlamı). Config zaten owner-only.", "endpoints": ["/api/kod"]},
     {"id": "btn-mockup-onay", "ad": "Prototip üretme",      "grup": "Aksiyon",  "aciklama": "Süreç analizinden HTML prototip (Chrome MCP)", "endpoints": ["/api/mockup/generate"]},
     {"id": "conf-publish-row","ad": "Confluence'a yayınla", "grup": "Aksiyon",  "aciklama": "Çıktıyı Confluence sayfası olarak yaz", "endpoints": ["/api/confluence/publish"]},
     {"id": "prompts",         "ad": "Sistem Promptları",    "grup": "Yönetim",  "aciklama": "Kalıcı prompt düzenleme (Yönetim grubu zaten owner-only)", "endpoints": ["/api/prompts"]},
@@ -2262,15 +2264,15 @@ def _jira_kopru_baslat() -> None:
 
 
 @app.route("/api/jira-kopru/durum", methods=["GET"])
-@admin_gerekli
 def jira_kopru_durum():
-    """Köprü durumu + ayarları (owner). Token harcamaz."""
+    """Köprü durumu + ayarları. Token harcamaz. Analist-erişimli (bridge self-scope
+    ile kendi Jira kimliğine kilitli); owner Yetki'den 'kopru'yu gizleyebilir →
+    gorunurluk_kontrol `/api/jira-kopru` yolunu sunucu tarafında engeller."""
     from skills import jira_kopru
     return jsonify({"ok": True, **jira_kopru.son_durum()})
 
 
 @app.route("/api/jira-kopru/tara", methods=["POST"])
-@admin_gerekli
 def jira_kopru_tara():
     """Elle tek tur — komutlu yeni yorumları hemen tara/işle (döngüyü beklemeden
     doğrulama için). Analiz sürüyorsa 409."""
@@ -2312,7 +2314,6 @@ def _kopru_is_calistir(job_id: str) -> None:
 
 
 @app.route("/api/jira-kopru/liste", methods=["GET"])
-@admin_gerekli
 def jira_kopru_liste():
     """Köprü analizleri (key · zaman · açık sorular · bekleyen taslak). 0 token."""
     from skills import jira_kopru
@@ -2320,7 +2321,6 @@ def jira_kopru_liste():
 
 
 @app.route("/api/jira-kopru/is", methods=["POST"])
-@admin_gerekli
 def jira_kopru_is_baslat():
     """Köprü komutunu (analiz/cevap/düzelt/güncelle/ilişkili-aç/onayla/iptal) arka planda
     çalıştırır (uzun; AI). {job_id} döner → /api/jira-kopru/is/<job_id> ile polling."""
@@ -2346,7 +2346,6 @@ def jira_kopru_is_baslat():
 
 
 @app.route("/api/jira-kopru/is/<job_id>", methods=["GET"])
-@admin_gerekli
 def jira_kopru_is_durum(job_id):
     """Köprü işi durumu/sonucu (polling)."""
     job = _kopru_isler.get(job_id)

@@ -163,7 +163,7 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   öncelik `reference/jira_kopru.json` (git'te İZLENMEZ; `.example`'dan boot'ta `_runtime_config_seed` ile
   seed — analistler `.env` YAZMAZ, güncelleme/pull ile ekip varsayılanını alır) > `.env` (yedek/eski) > kod
   varsayılanı; boş liste/dize "set edilmemiş" sayılır (False korunur). `.example` VARSAYILANI: `aktif:true` +
-  `projeler:["MBSTRADE"]` → güncelleme sonrası analistlerde otomatik açık (self-scope ile güvenli).** owner-gate `/api/jira-kopru/durum|tara`.
+  `projeler:["MBSTRADE"]` → güncelleme sonrası analistlerde otomatik açık (self-scope ile güvenli).** UI uçları (`/api/jira-kopru/durum|tara|liste|is`) **analist-erişimli** (bridge self-scope ile kendi Jira kimliğine kilitli); owner **Yetki** ekranından `kopru`'yu gizleyebilir → `gorunurluk_kontrol` `/api/jira-kopru` yolunu sunucu tarafında engeller.
   **Komutlar:** `analiz [talimat]` → `_bridge_uret` (→`gorev_getir`+`gorev_analiz_et`) sonucu **task
   GÖVDESİNE (açıklama) yazar** (`_govdeye_yaz`: `## 📌 Orijinal Talep` + orijinal KORUNUR + `## 🤖 Teknik
   Analiz`; tekrar analizde `_orijinal_talep_ayikla` orijinali korur — analiz GİRDİSİ hep orijinal talep,
@@ -189,11 +189,13 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   agent kendi Jira kimliğine (`myself.accountId`, `_owner_id_cache`) otomatik kilitlenir → per-user kurulumda
   analist yalnız KENDİ komutlarını işler, çakışma yok. Hiçbiri belirlenemezse fail-closed (işlenmez). displayName
   yetkiye sokulmaz.** **YETKİSİZ/entegrasyonsuz yazar → TAM SESSİZLİK** (Jira'ya yanıt YOK, işlenen-id'ye eklenmez;
-  yorum düz girdi olarak kalır — agent varlığı sızmaz). UI kanalı owner-gated (allowlist'ten bağımsız).
+  yorum düz girdi olarak kalır — agent varlığı sızmaz). UI kanalı **analist-erişimli** (varsayılan görünür;
+  owner **Yetki**'den `kopru`'yu gizleyebilir — `GIZLENEBILIR_KATALOG`'a eklendi; `gorunurluk_kontrol`
+  sunucu-taraf engel). Eskiden owner-only idi (v3'te açıldı — per-user bridge modeli).
   **Durum göstergesi:** `saglik_guncelle`/`saglik()` (runtime, süreç-içi) → `son_durum`/`liste` `saglik{bagli,son_hata,kontrol}`;
   `kopru.html` "Jira bağlı · son tarama HH:MM" / "⚠ bağlantı yok". Env: `JIRA_KOPRU_PROJELER` (zorunlu) / `_ARALIK` /
   `_PENCERE_DK` / `_KOMUT`. **Agent UI kanalı** (2. kanal):
-  `screens/kopru.html` (nav "Jira Köprüsü", owner) — açık sorular arayüzde görünür + **tüm işlemler UI'da**
+  `screens/kopru.html` (nav "Jira Köprüsü", **analist-erişimli**; owner Yetki'den gizleyebilir) — açık sorular arayüzde görünür + **tüm işlemler UI'da**
   (analiz · cevap · düzelt · **güncelle** (Task Güncelle) · ilişkili-aç · onayla · iptal → `kopruIs(komut,key)`);
   Jira yorumu ile AYNI beyin (`jira_kopru.ui_komut`→`_komut_uygula`+`jira_yorum_ekle`, `_TUR_LOCK`);
   `GET /api/jira-kopru/liste` + arka plan iş `POST /api/jira-kopru/is`→`GET /api/jira-kopru/is/<id>` (`_kopru_isler`).
