@@ -220,4 +220,29 @@ os.environ["JIRA_KOPRU_PROJELER"] = "xyz"
 a = jk.ayarlar()
 kontrol(".env yedek (json yok) → aktif True + projeler", a["aktif"] is True and a["projeler"] == ["XYZ"])
 
+# ── Kanıt etiketi (`[K: …]`) temizliği — Jira'ya sadece gerçek task analizi gider ──
+from skills.base import kanit_etiketlerini_temizle as _kt  # noqa: E402
+
+kontrol("kanıt: inline [K:] silinir",
+        _kt("Ekrana gider [K: Canlı UI:/route].") == "Ekrana gider.")
+kontrol("kanıt: network path etiketi silinir",
+        _kt("Endpoint [K: Network:GET /bff/x/y-z] çağrılır.") == "Endpoint çağrılır.")
+kontrol("kanıt: çoklu etiket + çift boşluk temizlenir",
+        _kt("A [K: a] B [K: b] C.") == "A B C.")
+kontrol("kanıt: markdown linki KORUNUR (K: ile başlamaz)",
+        _kt("Bak [rapor](http://x) burada.") == "Bak [rapor](http://x) burada.")
+kontrol("kanıt: etiketsiz metin değişmez",
+        _kt("Normal cümle, dokunma.") == "Normal cümle, dokunma.")
+kontrol("kanıt: boş/None güvenli", _kt("") == "" and _kt(None) is None)
+# Wiring: her iki Jira-yazım sınırı da temizleyiciyi çağırır (kaynak-düzey güvence)
+import inspect  # noqa: E402
+import skills.jira_gorevleri as _jg  # noqa: E402
+kontrol("kanıt: gorev_jiraya_yaz (gövde) temizleyiciyi çağırır",
+        "kanit_etiketlerini_temizle" in inspect.getsource(_jg.gorev_jiraya_yaz))
+# (jk.jira_yorum_ekle testte mock'landı → gerçek kaynağı modül dosyasından oku)
+_jk_kaynak = inspect.getsource(jk)
+kontrol("kanıt: jira_yorum_ekle (yorum) temizleyiciyi çağırır",
+        "def jira_yorum_ekle" in _jk_kaynak
+        and "kanit_etiketlerini_temizle(markdown)" in _jk_kaynak)
+
 print(f"\nJIRA KÖPRÜSÜ TESTLERİ GEÇTİ ({basari} kontrol)")

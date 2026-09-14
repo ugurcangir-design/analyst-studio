@@ -1728,6 +1728,32 @@ def canli_gozlem_kapsamini_cikar(markdown: str) -> str:
     return markdown
 
 
+# İnline kaynak/izlenebilirlik etiketi: `[K: BRD §3.2]`, `[K: Canlı UI:/route]`,
+# `[K: Network:GET /api/x]`, `[K: Jira:KEY-1]`, `[K: 🔍 Türetilmiş - …]`,
+# `[K: ❓ Belirsiz]`, `[K: Analist cevabı]` … Kapanışa kadar `]` içermez (tek satır).
+# Öncesindeki boşluk da yutulur ki 'kelime [K: x]' → 'kelime' olsun.
+_KANIT_ETIKET = re.compile(r"[ \t]*\[K:[^\]\n]*\]")
+
+
+def kanit_etiketlerini_temizle(markdown: str) -> str:
+    """`[K: kaynak]` kanıt/izlenebilirlik etiketlerini metinden siler.
+
+    Bu etiketler AGENT çıktısında (analiz dosyaları, ekran) kaynak izlenebilirliği
+    için durur — analistin iç doğrulama aracıdır. Ancak Jira'ya yazılan 'gerçek task
+    analizi' içinde YER ALMAZ (geliştiricinin task'ında işi yok). Yalnız Jira'ya yazan
+    yollar çağırır; analiz çıktısındaki hâli korunur (UI çipleri `_kanitCipleriIsle`).
+    """
+    if not markdown:
+        return markdown
+    temiz = _KANIT_ETIKET.sub("", markdown)
+    # Etiket kaldırınca oluşan artıklar: çift boşluk, noktalama öncesi boşluk,
+    # satır sonu öncesi boşluk temizlenir.
+    temiz = re.sub(r"[ \t]{2,}", " ", temiz)
+    temiz = re.sub(r"[ \t]+([.,;:!?])", r"\1", temiz)
+    temiz = re.sub(r"[ \t]+\n", "\n", temiz)
+    return temiz
+
+
 def _metin_kes(metin: str, limit: int, dosya_adi: str) -> str:
     if len(metin) <= limit:
         return metin

@@ -167,7 +167,11 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   **Komutlar:** `analiz [talimat]` → `_bridge_uret` (→`gorev_getir`+`gorev_analiz_et`) sonucu **task
   GÖVDESİNE (açıklama) yazar** (`_govdeye_yaz`: `## 📌 Orijinal Talep` + orijinal KORUNUR + `## 🤖 Teknik
   Analiz`; tekrar analizde `_orijinal_talep_ayikla` orijinali korur — analiz GİRDİSİ hep orijinal talep,
-  `_orijinal_gorev` ile özyineleme önlenir); açık sorular + RAG kelimeleri **yoruma** yazılır. Çıktı+açık sorular
+  `_orijinal_gorev` ile özyineleme önlenir); açık sorular + RAG kelimeleri **yoruma** yazılır. **Jira'ya
+  YAZILMAYAN:** Yönetici Özeti + Canlı Gözlem Kapsamı + **`[K: kaynak]` kanıt etiketleri**
+  (`kanit_etiketlerini_temizle`, base.py) — etiketler agent çıktısında/UI çipinde durur, Jira'ya sadece
+  gerçek task analizi gider; iki yazım sınırında da temizlenir (gövde `gorev_jiraya_yaz` = köprü+ana app,
+  yorum `jira_yorum_ekle`). Çıktı+açık sorular
   `son_analiz` önbelleğine (`_ANALIZ_TAZE_DK`=60dk) · `cevap <metin>` → açık sorulara cevap: analizi cevaplarla
   YENİDEN üretir (`onceki_sorular` ile soruları YAKINSAR), gövde güncellenir, kalan sorular yoruma · `düzelt
   <talimat>` → yalnız ilgili kısmı `gorev_analiz_duzelt` ile düzeltir · `güncelle` → son analizi gövdeye yeniden

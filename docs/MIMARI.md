@@ -100,6 +100,14 @@ doğrulama/şeffaflık bilgisidir, gereksinim değildir. Her Jira yazma yolu iki
    belirlenir (aynı ya da daha üst seviyedeki sonraki başlık; yoksa doküman sonu). Başlıktaki
    emoji ve diakritiksiz yazım ("Canli Gozlem Kapsami") da yakalanır; bölüm silinince sarkan
    `---` ayırıcı da temizlenir. Modal önizlemede analist bölümü GÖRÜR (yalnızca yazılan kopya temizlenir).
+3. **`[K: kaynak]` kanıt/izlenebilirlik etiketleri** → `kanit_etiketlerini_temizle()` (base.py).
+   İnline `[K: BRD §3]` / `[K: Canlı UI:/route]` / `[K: Network:GET /api/x]` / `[K: Analist cevabı]` /
+   `[K: 🔍 Türetilmiş - …]` / `[K: ❓ Belirsiz]` etiketleri agent'ın KAYNAK İZLENEBİLİRLİĞİ aracıdır —
+   analiz dosyalarında + UI çiplerinde (`_kanitCipleriIsle`) DURUR, ama Jira'ya yazılan **gerçek task
+   analizi** içinde YER ALMAZ (geliştiricinin task'ında işi yok). İki Jira-yazım sınırında da temizlenir:
+   gövde (`gorev_jiraya_yaz` — hem köprü `_govdeye_yaz` hem ana app "Jira'ya gönder") + yorum
+   (`jira_yorum_ekle` — açık sorular). Yalnız Jira'ya giden kopya temizlenir; kaynak-metin (ekran/dosya)
+   dokunulmaz — köprü UI komut yanıtları da etiketleri korur (strip yerel `markdown` param'ında yapılır).
 
 ## RAG Mimarisi (`skills/base.py`)
 - **Bağlam blokları:** `_ref_bloklari_olustur(ref_dosyalar)` tipine göre gruplar — `### CONFLUENCE

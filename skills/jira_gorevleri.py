@@ -22,6 +22,7 @@ from .base import (
     referans_dosyalari_hazirla, _ref_bloklari_olustur, load_context_filter,
     canli_uygulama_baglami_hazirla,
     yonetici_ozeti_olustur, yonetici_ozetini_cikar, canli_gozlem_kapsamini_cikar,
+    kanit_etiketlerini_temizle,
     ai_ara_sozleri_temizle,
     MAX_TOKENS_KISA, MAX_TOKENS_COMBINED,
 )
@@ -983,6 +984,9 @@ def gorev_jiraya_yaz(task_key: str, markdown: str, summary: str | None = None) -
     # Analiz çıktısındaki hâlleri korunur; yalnızca Jira'ya yazılan kopya temizlenir.
     markdown = yonetici_ozetini_cikar(markdown)
     markdown = canli_gozlem_kapsamini_cikar(markdown)
+    # `[K: kaynak]` kanıt/izlenebilirlik etiketleri agent çıktısında kalır ama
+    # Jira task analizinde YER ALMAZ — sadece gerçek task analizi yazılır.
+    markdown = kanit_etiketlerini_temizle(markdown)
     adf_content = markdown_to_adf(markdown)
     if not adf_content:
         # İçerik yalnızca HTML yorumu/boşluktan ibaretse ADF boş kalır — Jira 400 verir.

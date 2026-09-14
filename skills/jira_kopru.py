@@ -41,6 +41,7 @@ from .atlassian import atlassian_get, atlassian_post
 from .base import (
     canli_gozlem_kapsamini_cikar,
     canli_uygulama_baglami_hazirla,
+    kanit_etiketlerini_temizle,
     load_context_filter,
     yonetici_ozetini_cikar,
 )
@@ -160,6 +161,9 @@ def jira_yorum_ekle(key: str, markdown: str) -> bool:
     key = (key or "").strip().upper()
     if not _ID_DESENI.match(key):
         raise ValueError(f"Geçersiz Jira anahtarı: '{key}'")
+    # Açık sorular vb. yorumda `[K: …]` kanıt etiketi taşıyabilir — Jira'ya gitmez;
+    # etiketler yalnız agent çıktısında görünür (bkz. kanit_etiketlerini_temizle).
+    markdown = kanit_etiketlerini_temizle(markdown)
     icerik = markdown_to_adf(markdown)
     if not icerik:
         raise ValueError("Yorum içeriği boş (ADF üretilemedi).")
