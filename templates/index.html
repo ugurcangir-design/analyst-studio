@@ -3322,30 +3322,39 @@ function temaDegistir() {
           <button class="jira-modal-close" onclick="febeModalKapat()" title="Kapat">&times;</button>
         </div>
         <div class="jira-modal-sub" id="febe-modal-sub"></div>
-        <!-- BÖLME PLANI — kaç task, kaç FE/BE (Jira'ya yazmadan önce özet) -->
-        <div id="febe-plan" style="display:none;padding:11px 18px;background:rgba(99,102,241,.10);border-bottom:1px solid var(--border);font-size:13px;color:var(--text);line-height:1.5"></div>
-        <div style="padding:8px 18px;background:var(--surface2);font-size:11.5px;color:var(--text2);border-bottom:1px solid var(--border)">
-          💡 Her satır ayrı bir <strong>Task</strong> olarak açılır.
-          <span class="jira-node-katman be" style="margin:0 4px">BE</span> Backend ·
-          <span class="jira-node-katman fe" style="margin:0 4px">FE</span> Frontend ·
-          <strong style="color:var(--yellow)">⛔ bloklar</strong> = BE bitmeden FE yapılamaz (Blocks bağı).
-        </div>
-        <div class="jira-modal-body" id="febe-modal-body"></div>
-        <!-- YENİDEN BÖL — analist metinle bölmeyi yönlendirir (yinelemeli) -->
-        <div id="febe-steer" style="padding:10px 18px;border-top:1px solid var(--border);background:var(--surface)">
-          <label for="febe-talimat" style="display:block;font-size:12px;color:var(--text2);margin-bottom:5px">
-            Bölmeyi değiştir — nasıl bölünsün? <span style="color:var(--text3)">(örn: “sadece 2 task: 1 FE + 1 BE” · “ekran bazlı böl” · “ödeme ve sipariş olarak ayır”)</span>
+
+        <!-- ══ 1. DURUM: PROMPT — analist bölmeyi tarif eder (task'lar buna göre oluşur) ══ -->
+        <div id="febe-prompt-view" style="padding:16px 18px">
+          <label for="febe-talimat" style="display:block;font-size:13px;color:var(--text);font-weight:600;margin-bottom:6px">
+            Teknik analizi nasıl bölelim?
           </label>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input type="text" id="febe-talimat" class="field-input" style="flex:1" autocomplete="off"
-                   placeholder="Talimat yazın; boş bırakırsanız doğal kırılım kullanılır"
-                   onkeydown="if(event.key==='Enter')febeYenidenBol()">
-            <button class="btn btn-outline btn-sm" id="febe-yenidenbol-btn" onclick="febeYenidenBol()" style="white-space:nowrap">
-              <svg class="ico"><use href="#i-refresh"/></svg> Yeniden Böl
-            </button>
+          <div class="field-sub" style="margin:0 0 8px">
+            Kaç task olacağını ve neye göre bölüneceğini yazın; task'lar bu talimata göre oluşturulur.
+            Örnekler:
+            <span style="color:var(--text2)">“sadece 2 task: 1 FE + 1 BE” · “ekran bazlı böl” · “ödeme ve sipariş olarak ayır” · “her endpoint ayrı BE task”</span>
           </div>
-          <div id="febe-steer-msg" class="field-sub" style="margin-top:5px"></div>
+          <textarea id="febe-talimat" class="field-input" rows="3" autocomplete="off"
+                    style="width:100%;box-sizing:border-box;resize:vertical"
+                    placeholder="Örn: FE ve BE olarak 2 task aç; sipariş listesi ile sipariş formu ayrı olsun…"
+                    onkeydown="if(event.key==='Enter'&&(event.metaKey||event.ctrlKey))febeBol()"></textarea>
+          <div class="field-sub" style="margin-top:6px">
+            Boş bırakırsanız agent işin <strong>doğal kırılımını</strong> kullanır (önerilen bölme). ⌘/Ctrl+Enter = Böl.
+          </div>
+          <div id="febe-prompt-msg" class="field-sub" style="margin-top:6px;color:var(--red)"></div>
         </div>
+
+        <!-- ══ 2. DURUM: ÖNİZLEME — oluşan task'lar (Jira'ya yazmadan önce) ══ -->
+        <div id="febe-preview-view" style="display:none">
+          <div id="febe-plan" style="padding:11px 18px;background:rgba(99,102,241,.10);border-bottom:1px solid var(--border);font-size:13px;color:var(--text);line-height:1.5"></div>
+          <div style="padding:8px 18px;background:var(--surface2);font-size:11.5px;color:var(--text2);border-bottom:1px solid var(--border)">
+            💡 Her satır ayrı bir <strong>Task</strong> olarak açılır.
+            <span class="jira-node-katman be" style="margin:0 4px">BE</span> Backend ·
+            <span class="jira-node-katman fe" style="margin:0 4px">FE</span> Frontend ·
+            <strong style="color:var(--yellow)">⛔ bloklar</strong> = BE bitmeden FE yapılamaz (Blocks bağı).
+          </div>
+          <div class="jira-modal-body" id="febe-modal-body"></div>
+        </div>
+
         <div class="jira-modal-result-wrap" id="febe-modal-result-wrap" style="display:none">
           <div class="jira-modal-result" id="febe-modal-result"></div>
         </div>
@@ -3353,7 +3362,13 @@ function temaDegistir() {
           <span class="jira-modal-secim" id="febe-modal-secim"></span>
           <span style="flex:1"></span>
           <button class="btn btn-outline btn-sm" id="febe-modal-iptal" onclick="febeModalKapat()">İptal</button>
-          <button class="btn btn-primary btn-sm" id="febe-modal-onay" onclick="febeOnayla()">
+          <!-- Önizlemede: prompt ekranına dön (yeniden böl) -->
+          <button class="btn btn-outline btn-sm" id="febe-geri-btn" onclick="febePromptaDon()" style="display:none">◂ Bölmeyi değiştir</button>
+          <!-- Prompt durumunda: Böl · Önizlemede: Onayla -->
+          <button class="btn btn-primary btn-sm" id="febe-bol-btn" onclick="febeBol()">
+            <svg class="ico"><use href="#i-ticket"/></svg> Task'lara Böl
+          </button>
+          <button class="btn btn-primary btn-sm" id="febe-modal-onay" onclick="febeOnayla()" style="display:none">
             Onayla — Jira'da Task Aç
           </button>
         </div>
@@ -7229,41 +7244,60 @@ function jiraModalKapat() {
 // ─── FE/BE düz Task akışı (süreç → teknik onay → Jira) ────────────────────────
 let _febeOnizleme = null;   // /fe-be/preview yanıtı
 
-// Süreç ekranı "Evet — FE/BE Task'larını Öner": önce önizleme modalını aç.
-// Workflow, task'lar GERÇEKTEN açıldıktan sonra bitirilir (febeOnayla içinde) —
-// analist iptal ederse teknik-onay adımı korunur, tekrar deneyebilir / "Atla" seçebilir.
-function teknikOnaylaFeBe() {
-  febeOnizlemeAc('teknik-analiz.md');
-}
-
-let _febeDosya = 'teknik-analiz.md';   // aktif teknik analiz dosyası (yeniden böl için)
+let _febeDosya = 'teknik-analiz.md';   // aktif teknik analiz dosyası
 let _febeYukleniyor = false;
 
-// AI'dan FE/BE görev önerisi al, modalı doldur. `talimat`: analist bölme yönlendirmesi.
-async function febeOnizlemeAc(dosya, talimat) {
-  if (_febeYukleniyor) return;
-  _febeYukleniyor = true;
+// Süreç ekranı "Evet — FE/BE Task'larını Öner": önce PROMPT ekranı açılır.
+// Analist bölmeyi tarif eder → "Task'lara Böl" → önizleme. Beğenmezse prompt'a döner.
+// Workflow, task'lar GERÇEKTEN açıldıktan sonra bitirilir (febeOnayla içinde).
+function teknikOnaylaFeBe() { febeModalAc('teknik-analiz.md'); }
+
+// İki durum: 'prompt' (bölme talimatı gir) / 'preview' (oluşan task'lar)
+function _febeView(view) {
+  const prompt  = document.getElementById('febe-prompt-view');
+  const preview = document.getElementById('febe-preview-view');
+  const bolBtn  = document.getElementById('febe-bol-btn');
+  const onayBtn = document.getElementById('febe-modal-onay');
+  const geriBtn = document.getElementById('febe-geri-btn');
+  const p = view === 'prompt';
+  if (prompt)  prompt.style.display  = p ? '' : 'none';
+  if (preview) preview.style.display = p ? 'none' : '';
+  if (bolBtn)  bolBtn.style.display  = p ? '' : 'none';
+  if (onayBtn) onayBtn.style.display = p ? 'none' : '';
+  if (geriBtn) geriBtn.style.display = p ? 'none' : '';
+}
+
+// Modalı PROMPT durumunda aç (auto-split YOK — analist talimatı bekler)
+function febeModalAc(dosya) {
   _febeDosya = dosya || 'teknik-analiz.md';
-  talimat = (talimat || '').trim();
-  const modal = document.getElementById('febe-modal');
-  const body  = document.getElementById('febe-modal-body');
-  const sub   = document.getElementById('febe-modal-sub');
-  const plan  = document.getElementById('febe-plan');
-  const yenidenBtn = document.getElementById('febe-yenidenbol-btn');
   _febeOnizleme = null;
-  sub.textContent = talimat ? ('AI, talimatınıza göre yeniden bölüyor: «' + talimat + '»…')
-                            : 'AI, teknik analizi FE/BE görevlerine bölüyor...';
-  plan.style.display = 'none';
-  body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3)">⏳ Öneri hazırlanıyor…</div>';
+  const sub = document.getElementById('febe-modal-sub');
+  if (sub) sub.textContent = 'Teknik analiz bu ekrandaki talimatınıza göre FE/BE task\'larına bölünür.';
   document.getElementById('febe-modal-result-wrap').style.display = 'none';
   document.getElementById('febe-modal-secim').textContent = '';
-  const onayBtn = document.getElementById('febe-modal-onay');
-  onayBtn.disabled = true; onayBtn.textContent = 'Onayla — Jira\'da Task Aç';
-  onayBtn.onclick = febeOnayla;
   document.getElementById('febe-modal-iptal').disabled = false;
-  const steer = document.getElementById('febe-steer'); if (steer) steer.style.display = '';  // önizleme durumunda yeniden bölme açık
-  if (yenidenBtn) { yenidenBtn.disabled = true; yenidenBtn.innerHTML = '<svg class="ico"><use href="#i-refresh"/></svg> Bölünüyor…'; }
-  modal.classList.add('visible');
+  const pmsg = document.getElementById('febe-prompt-msg'); if (pmsg) pmsg.textContent = '';
+  const onayBtn = document.getElementById('febe-modal-onay'); onayBtn.disabled = false; onayBtn.textContent = 'Onayla — Jira\'da Task Aç'; onayBtn.onclick = febeOnayla;
+  _febeView('prompt');
+  document.getElementById('febe-modal').classList.add('visible');
+  const ta = document.getElementById('febe-talimat'); if (ta) setTimeout(() => ta.focus(), 60);
+}
+
+// PROMPT → önizleme: analistin talimatına göre task'ları üret
+async function febeBol() {
+  if (_febeYukleniyor) return;
+  const inp = document.getElementById('febe-talimat');
+  const talimat = (inp ? inp.value : '').trim();
+  const bolBtn = document.getElementById('febe-bol-btn');
+  _febeYukleniyor = true;
+  if (bolBtn) { bolBtn.disabled = true; bolBtn.innerHTML = '<svg class="ico"><use href="#i-refresh"/></svg> Bölünüyor…'; }
+  const sub = document.getElementById('febe-modal-sub');
+  const body = document.getElementById('febe-modal-body');
+  _febeView('preview');
+  document.getElementById('febe-plan').style.display = 'none';
+  sub.textContent = talimat ? ('AI, talimatınıza göre bölüyor: «' + talimat + '»…')
+                            : 'AI, teknik analizi FE/BE görevlerine bölüyor (doğal kırılım)…';
+  body.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3)">⏳ Task\'lar hazırlanıyor…</div>';
 
   const ctrl = new AbortController();
   const tid = setTimeout(() => ctrl.abort(), 120000);
@@ -7275,31 +7309,33 @@ async function febeOnizlemeAc(dosya, talimat) {
     });
     const d = await r.json();
     if (!d.ok) {
-      sub.innerHTML = '<span style="color:var(--red)">✗ ' + escHtml(d.error || 'Öneri üretilemedi') + '</span>';
-      body.innerHTML = '';
+      // Hata → prompt ekranına dön, mesaj göster
+      _febeView('prompt');
+      const pmsg = document.getElementById('febe-prompt-msg');
+      if (pmsg) pmsg.textContent = '✗ ' + (d.error || 'Task üretilemedi');
       return;
     }
     _febeOnizleme = d;
     febeModalDoldur(d);
   } catch(e) {
-    sub.innerHTML = '<span style="color:var(--red)">✗ ' +
-      (e.name === 'AbortError' ? 'Zaman aşımı (120s)' : 'Bağlantı hatası') + '</span>';
-    body.innerHTML = '';
+    _febeView('prompt');
+    const pmsg = document.getElementById('febe-prompt-msg');
+    if (pmsg) pmsg.textContent = '✗ ' + (e.name === 'AbortError' ? 'Zaman aşımı (120s)' : 'Bağlantı hatası');
   } finally {
     clearTimeout(tid);
     _febeYukleniyor = false;
-    if (yenidenBtn) { yenidenBtn.disabled = false; yenidenBtn.innerHTML = '<svg class="ico"><use href="#i-refresh"/></svg> Yeniden Böl'; }
+    if (bolBtn) { bolBtn.disabled = false; bolBtn.innerHTML = '<svg class="ico"><use href="#i-ticket"/></svg> Task\'lara Böl'; }
   }
 }
 
-// "Yeniden Böl" — analist talimatıyla bölmeyi tekrar üret (yinelemeli döngü)
-function febeYenidenBol() {
+// Önizlemeden PROMPT ekranına dön — analist bölme talimatını değiştirir (yinelemeli)
+function febePromptaDon() {
   if (_febeYukleniyor) return;
-  const inp = document.getElementById('febe-talimat');
-  const talimat = (inp ? inp.value : '').trim();
-  const msg = document.getElementById('febe-steer-msg');
-  if (msg) msg.textContent = talimat ? '' : 'Talimat boş — doğal kırılıma göre yeniden bölünecek.';
-  febeOnizlemeAc(_febeDosya, talimat);
+  document.getElementById('febe-modal-result-wrap').style.display = 'none';
+  const sub = document.getElementById('febe-modal-sub');
+  if (sub) sub.textContent = 'Bölme talimatını değiştirip tekrar "Task\'lara Böl"e basın.';
+  _febeView('prompt');
+  const ta = document.getElementById('febe-talimat'); if (ta) setTimeout(() => ta.focus(), 60);
 }
 
 function _febeIdEtiket(g) {
@@ -7326,9 +7362,9 @@ function febeModalDoldur(d) {
   if (plan) {
     plan.style.display = '';
     plan.innerHTML = '📋 <strong>' + escHtml(d.plan || ((ozet.toplam||gorevler.length) + ' task')) + '</strong>'
-      + '<br><span style="font-size:11.5px;color:var(--text2)">Uygun değilse aşağıya talimat yazıp <b>Yeniden Böl</b>’e basın; onaylarsanız bu task’lar Jira’da açılır.</span>';
+      + '<br><span style="font-size:11.5px;color:var(--text2)">Uygun değilse <b>◂ Bölmeyi değiştir</b> ile prompt ekranına dönün; onaylarsanız bu task’lar Jira’da açılır.</span>';
   }
-  sub.innerHTML = `Proje <strong>${escHtml(proje.key || '?')}</strong> · Açmak istediklerinizi <strong>seçin</strong>, başlıkları düzenleyebilirsiniz. Bölme uygun değilse alttan yönlendirin.`;
+  sub.innerHTML = `Proje <strong>${escHtml(proje.key || '?')}</strong> · Açmak istediklerinizi <strong>seçin</strong>, başlıkları düzenleyebilirsiniz. Bölme uygun değilse <strong>◂ Bölmeyi değiştir</strong>.`;
 
   const baslikMap = _febeBaslikMap(gorevler);
   // BE'ler önce, sonra FE'ler — okunur sıra
@@ -7396,8 +7432,9 @@ async function febeOnayla() {
   const iptalBtn = document.getElementById('febe-modal-iptal');
   const wrap     = document.getElementById('febe-modal-result-wrap');
   const sonuc    = document.getElementById('febe-modal-result');
+  const geriBtn = document.getElementById('febe-geri-btn');
   onayBtn.disabled = true; iptalBtn.disabled = true;
-  const steer = document.getElementById('febe-steer'); if (steer) steer.style.display = 'none';  // açarken yeniden bölme kapalı
+  if (geriBtn) geriBtn.disabled = true;  // açarken bölmeyi değiştirme kapalı
   wrap.style.display = 'block';
   sonuc.className = 'jira-modal-result';
   sonuc.textContent = 'Jira\'da Task\'lar açılıyor + bağlar kuruluyor, lütfen bekleyin...';
@@ -7415,7 +7452,7 @@ async function febeOnayla() {
       sonuc.className = 'jira-modal-result err';
       sonuc.textContent = '✗ ' + (d.error || 'Oluşturma başarısız');
       onayBtn.disabled = false; iptalBtn.disabled = false;
-      if (steer) steer.style.display = '';  // hata → yeniden bölmeye izin ver
+      if (geriBtn) geriBtn.disabled = false;  // hata → bölmeyi değiştirmeye izin ver
       return;
     }
     const keys = (d.gorevler || []).map(g => `${g.key} [${g.katman}]`).join(', ');
@@ -7441,7 +7478,7 @@ async function febeOnayla() {
       ? '✗ Zaman aşımı (180s) — çok sayıda görev seçili olabilir'
       : '✗ Bağlantı hatası';
     onayBtn.disabled = false; iptalBtn.disabled = false;
-    if (steer) steer.style.display = '';  // hata → yeniden bölmeye izin ver
+    if (geriBtn) geriBtn.disabled = false;  // hata → bölmeyi değiştirmeye izin ver
   } finally {
     clearTimeout(tid);
   }
@@ -7449,10 +7486,13 @@ async function febeOnayla() {
 
 function febeModalKapat() {
   document.getElementById('febe-modal').classList.remove('visible');
-  // Talimat + plan sıfırla → sonraki açılış temiz başlar
+  // Talimat + durum sıfırla → sonraki açılış temiz PROMPT ekranıyla başlar
   const inp = document.getElementById('febe-talimat'); if (inp) inp.value = '';
-  const msg = document.getElementById('febe-steer-msg'); if (msg) msg.textContent = '';
-  const plan = document.getElementById('febe-plan'); if (plan) plan.style.display = 'none';
+  const pmsg = document.getElementById('febe-prompt-msg'); if (pmsg) pmsg.textContent = '';
+  const body = document.getElementById('febe-modal-body');
+  if (body) { body.style.pointerEvents = ''; body.style.opacity = ''; }
+  _febeOnizleme = null;
+  _febeView('prompt');
 }
 
 // ─── Soru Defteri ─────────────────────────────────────────────────────────────

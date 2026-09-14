@@ -755,29 +755,27 @@ Doküman yükle <span class="arr">→</span> Süreç Analizi <span class="arr">�
       <div class="num">1</div>
       <h4>Teknik onayında "Evet — FE/BE Task'larını Öner"</h4>
       <p>Adım 5 (Analist onayı — teknik) → <strong>Onayla</strong> → çıkan soruda
-        <strong>Evet — FE/BE Task'larını Öner</strong>. AI teknik analizi okuyup:</p>
-      <ul>
-        <li>İşi bağımsız <strong>FE görevleri</strong> ve <strong>BE görevleri</strong>ne böler (örn. 2 FE + 2 BE)</li>
-        <li>Her FE görevi için, ihtiyaç duyduğu <strong>BE görev(ler)ini</strong> (bağımlılık) işaretler</li>
-      </ul>
-      <p>Bu adımda Jira'ya <strong>hiçbir şey yazılmaz</strong> — sadece öneri üretilir.
+        <strong>Evet — FE/BE Task'larını Öner</strong>. Açılan pencerede <strong>önce prompt ekranı</strong> gelir —
+        Jira'ya bu adımda <strong>hiçbir şey yazılmaz</strong>.
         (Yanlışlıkla bastıysan <strong>◂ Geri</strong> ile inceleme ekranına dönebilirsin;
         <strong>Hayır, Atla</strong> ise Jira'sız tamamlar.)</p>
     </div>
 
     <div class="step">
       <div class="num">2</div>
-      <h4>Bölme planını gör, gerekirse yönlendir</h4>
-      <p>Modalın üstünde <strong>bölme planı</strong> yazar: <em>"Bu analizi N task'a bölmeyi öneriyorum: X FE + Y BE"</em>.
-        Agent gereksiz task bölmüş olabilir — <strong>uygun değilse</strong> alttaki kutuya talimat yazıp
-        <strong>Yeniden Böl</strong>'e basın; agent son talimatınıza göre yeniden böler (istediğiniz kadar tekrarlayabilirsiniz):</p>
+      <h4>Bölmeyi tarif et — “Teknik analizi nasıl bölelim?”</h4>
+      <p><strong>Task'lar oluşmadan önce</strong>, kaç task olacağını ve neye göre bölüneceğini
+        <strong>siz yazarsınız</strong>; agent tam da bu talimata göre böler (gereksiz task açılmaz). Örnekler:</p>
       <ul>
         <li><code>sadece 2 task: 1 FE + 1 BE</code> — adet netleştir</li>
         <li><code>ekran bazlı böl</code> — her ekran ayrı task</li>
         <li><code>ödeme ve sipariş olarak ayır</code> — konu/modül bazlı</li>
+        <li><code>her endpoint ayrı BE task</code></li>
       </ul>
-      <p>Boş bırakırsanız agent işin doğal kırılımını kullanır. Plan uygun olunca aşağıdan seçip onaylayın.</p>
-      <p>Modaldaki her satır ayrı bir <strong>Task</strong>'tır. Her satırda:</p>
+      <p>Boş bırakırsanız agent işin <strong>doğal kırılımını</strong> kullanır. Yazıp <strong>Task'lara Böl</strong>'e
+        (veya ⌘/Ctrl+Enter) basın → önizleme gelir. <strong>Beğenmezseniz</strong> önizlemedeki
+        <strong>◂ Bölmeyi değiştir</strong> ile prompt ekranına dönüp talimatı değiştirin; istediğiniz kadar tekrarlayın.</p>
+      <p>Önizlemede üstte <strong>plan</strong> (“N task: X FE + Y BE”) görünür; her satır ayrı bir <strong>Task</strong>'tır. Her satırda:</p>
       <ul>
         <li>Checkbox (seç / kaldır)</li>
         <li><strong>Katman rozeti:</strong> <span class="pill be">BE</span> <span class="pill fe">FE</span></li>
