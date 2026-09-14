@@ -56,34 +56,54 @@ def _gorev_adf(description: str) -> dict:
 
 # ─── Proje Tip Tespiti ────────────────────────────────────────────────────────
 
+# Issue type adları Jira dil ayarına göre YERELLEŞİR (TR projelerinde İngilizce
+# değil): Task→"görev", Story→"hikaye", Epic→"epik", Sub-task→"alt görev".
+# Tip tespiti hem İngilizce hem Türkçe (+ diakritiksiz) adları tanımalı.
+_TIP_ESANLAM = {
+    "task":    ("task", "görev", "gorev"),
+    "story":   ("story", "hikaye", "öykü", "oyku"),
+    "epic":    ("epic", "epik"),
+    # NOT: "alt görev" TASK değil SUBTASK — 'task' eşanlamı EXACT eşleşir, alt görevi kapmaz.
+    "subtask": ("subtask", "sub-task", "sub task", "alt görev", "alt gorev", "altgörev"),
+}
+
+
+def _tip_id_bul(types: dict, anahtar: str) -> tuple[str | None, str | None]:
+    """types (ad.lower()→id) içinden verilen mantıksal tipi (task/story/epic/subtask)
+    yerel ada göre bulur. EXACT eşleşme (alt görev'i görev sanmasın). (id, ad) döner."""
+    adaylar = _TIP_ESANLAM.get(anahtar, (anahtar,))
+    for ad in adaylar:
+        if ad in types:
+            return types[ad], ad
+    return None, None
+
+
 def _proje_bilgi(project_key: str, cloud_id: str) -> dict:
     """
-    Proje issue type'larını ve stilini döndürür.
+    Proje issue type'larını ve stilini döndürür (İngilizce + Türkçe ad desteği).
     Returns: {
-        "issue_types": {"epic": "id", "story": "id", "subtask": "id", "task": "id"},
-        "has_epic": bool,
-        "has_story": bool,
-        "subtask_name": str,
+        "issue_types": {"<yerel ad>": "id", ...},
+        "has_epic": bool, "has_story": bool,
+        "subtask_id"/"subtask_name"/"epic_id"/"story_id"/"task_id",
     }
     """
     data = atlassian_get(f"/rest/api/3/project/{project_key}", cloud_id=cloud_id)
     types = {it["name"].lower(): it["id"] for it in data.get("issueTypes", [])}
 
-    # Subtask ismi projeden projeye değişir
-    subtask_name = next(
-        (n for n in types if n in ("subtask", "sub-task", "alt görev")),
-        None,
-    )
+    task_id, _         = _tip_id_bul(types, "task")
+    story_id, _        = _tip_id_bul(types, "story")
+    epic_id, _         = _tip_id_bul(types, "epic")
+    subtask_id, subtask_name = _tip_id_bul(types, "subtask")
 
     return {
         "issue_types": types,
-        "has_epic":  "epic"  in types,
-        "has_story": "story" in types,
-        "subtask_id": types.get(subtask_name) if subtask_name else None,
+        "has_epic":  epic_id is not None,
+        "has_story": story_id is not None,
+        "subtask_id": subtask_id,
         "subtask_name": subtask_name,
-        "epic_id":  types.get("epic"),
-        "story_id": types.get("story"),
-        "task_id":  types.get("task"),
+        "epic_id":  epic_id,
+        "story_id": story_id,
+        "task_id":  task_id,
     }
 
 
