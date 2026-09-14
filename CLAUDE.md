@@ -216,7 +216,9 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   analist "kaç task / nasıl bölünsün" yazar (`#febe-talimat` textarea; ör. "sadece 2 task: 1 FE + 1 BE",
   "ekran bazlı böl", "ödeme ve sipariş olarak ayır"; boş = doğal kırılım) → **"Task'lara Böl"** (`febeBol` →
   `/preview` `talimat` ile). Sonra **ÖNİZLEME ekranı** (`#febe-preview-view`): `d.plan` özeti + task listesi
-  (seç/düzenle). Beğenmezse **"◂ Bölmeyi değiştir"** (`febePromptaDon`) ile prompt ekranına dönüp talimatı
+  (seç/düzenle) + **task içerik önizlemesi** (her satırda "İçeriği gör" `febeDetayAcKapa` → Jira gövdesine
+  gidecek **Açıklama + Kabul Kriterleri** açılır; üstte "Tüm içerikleri göster/gizle" `febeTumIcerikTgl`).
+  Beğenmezse **"◂ Bölmeyi değiştir"** (`febePromptaDon`) ile prompt ekranına dönüp talimatı
   değiştirir → yeniden böler (yinelemeli). `_gorevler_uret(talimat)` talimatı prompt'a EN YÜKSEK ÖNCELİK
   olarak enjekte eder. Onaylayınca (`febeOnayla`) seçilenler Task olarak açılır. **İkinci giriş noktası —
   Çıktı Dosyaları:** teknik-analiz.md görüntülenirken Jira satırında **"FE/BE Task Aç"** butonu (`jira-febe-btn`

@@ -3351,11 +3351,14 @@ function temaDegistir() {
         <!-- ══ 2. DURUM: ÖNİZLEME — oluşan task'lar (Jira'ya yazmadan önce) ══ -->
         <div id="febe-preview-view" style="display:none">
           <div id="febe-plan" style="padding:11px 18px;background:rgba(99,102,241,.10);border-bottom:1px solid var(--border);font-size:13px;color:var(--text);line-height:1.5"></div>
-          <div style="padding:8px 18px;background:var(--surface2);font-size:11.5px;color:var(--text2);border-bottom:1px solid var(--border)">
-            💡 Her satır ayrı bir <strong>Task</strong> olarak açılır.
+          <div style="padding:8px 18px;background:var(--surface2);font-size:11.5px;color:var(--text2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span>💡 Her satır ayrı bir <strong>Task</strong>.
             <span class="jira-node-katman be" style="margin:0 4px">BE</span> Backend ·
             <span class="jira-node-katman fe" style="margin:0 4px">FE</span> Frontend ·
-            <strong style="color:var(--yellow)">⛔ bloklar</strong> = BE bitmeden FE yapılamaz (Blocks bağı).
+            <strong style="color:var(--yellow)">⛔ bloklar</strong> = BE bitmeden FE yapılamaz.</span>
+            <span style="flex:1"></span>
+            <button type="button" id="febe-tumicerik-btn" onclick="febeTumIcerikTgl(this)" data-acik="0"
+                    style="background:none;border:1px solid var(--border);border-radius:5px;color:var(--accent);cursor:pointer;font-size:11px;padding:3px 8px;white-space:nowrap">Tüm içerikleri göster</button>
           </div>
           <div class="jira-modal-body" id="febe-modal-body"></div>
         </div>
@@ -7385,18 +7388,58 @@ function febeModalDoldur(d) {
       const adlar = bagli.map(b => escHtml(baslikMap[b])).join(', ');
       dep = `<div class="febe-dep">⛔ şu BE bitmeden yapılamaz: <strong>${adlar}</strong></div>`;
     }
-    html += `<div class="jira-node" data-febe="${g.id}">
+    // İÇERİK — Jira task gövdesine gidecek açıklama + kabul kriterleri (analist önce görsün)
+    const ac = (g.acceptance_criteria || []).filter(x => (x||'').trim());
+    let icerik = '';
+    if ((g.description||'').trim()) {
+      icerik += `<div style="margin-bottom:6px"><strong>Açıklama:</strong><br>${escHtml(g.description).replace(/\n/g,'<br>')}</div>`;
+    }
+    if (ac.length) {
+      icerik += `<div><strong>Kabul Kriterleri:</strong><ul style="margin:4px 0 0;padding-left:18px">`
+        + ac.map(c => `<li>${escHtml(c)}</li>`).join('') + `</ul></div>`;
+    }
+    if (!icerik) icerik = '<span style="color:var(--text3)">(AI içerik üretmedi — başlıkla açılır)</span>';
+    html += `<div class="jira-node" data-febe="${g.id}" style="flex-wrap:wrap">
       <input type="checkbox" checked data-febe-cb="${g.id}" onchange="febeRefresh()">
       ${_febeIdEtiket(g)}
-      <div style="flex:1">
+      <div style="flex:1;min-width:0">
         <input type="text" class="jira-node-input" data-febe-txt="${g.id}" value="${safe}" placeholder="Görev başlığı" style="width:100%">
         ${dep}
+        <button type="button" class="febe-detay-tgl" data-febe-tgl="${g.id}" onclick="febeDetayAcKapa('${g.id}')"
+                style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:11.5px;padding:3px 0;margin-top:2px">▸ İçeriği gör (Jira'ya gidecek)</button>
+        <div class="febe-detay" id="febe-detay-${g.id}" style="display:none;margin-top:4px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;font-size:12px;line-height:1.5;color:var(--text2)">${icerik}</div>
       </div>
     </div>`;
   });
   body.innerHTML = html || '<div style="padding:16px;color:var(--text3)">AI görev üretemedi.</div>';
   body.style.pointerEvents = ''; body.style.opacity = '';
+  const tgl = document.getElementById('febe-tumicerik-btn');  // yeni bölmede içerikler kapalı başlar
+  if (tgl) { tgl.dataset.acik = '0'; tgl.textContent = 'Tüm içerikleri göster'; }
   febeRefresh();
+}
+
+// Task içerik panelini aç/kapat (açıklama + kabul kriterleri — Jira'ya gitmeden önce)
+function febeDetayAcKapa(id) {
+  const p = document.getElementById('febe-detay-' + id);
+  const t = document.querySelector(`[data-febe-tgl="${id}"]`);
+  if (!p) return;
+  const acik = p.style.display !== 'none';
+  p.style.display = acik ? 'none' : '';
+  if (t) t.textContent = (acik ? '▸' : '▾') + ' İçeriği gör (Jira\'ya gidecek)';
+}
+
+// Tüm içerik panellerini aç/kapat (modal üstündeki "tümünü göster")
+function febeTumIcerik(goster) {
+  document.querySelectorAll('.febe-detay').forEach(p => { p.style.display = goster ? '' : 'none'; });
+  document.querySelectorAll('.febe-detay-tgl').forEach(t => {
+    t.textContent = (goster ? '▾' : '▸') + ' İçeriği gör (Jira\'ya gidecek)';
+  });
+}
+function febeTumIcerikTgl(btn) {
+  const goster = btn.dataset.acik !== '1';
+  febeTumIcerik(goster);
+  btn.dataset.acik = goster ? '1' : '0';
+  btn.textContent = goster ? 'Tüm içerikleri gizle' : 'Tüm içerikleri göster';
 }
 
 function febeRefresh() {
