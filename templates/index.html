@@ -7292,11 +7292,16 @@ async function jiraHiyerarsiOnayla() {
     }
     const storyKeys = (d.stories || []).map(s => s.key).join(', ');
     const subCount  = (d.stories || []).reduce((a, s) => a + (s.subtasks || []).length, 0);
-    sonuc.className = 'jira-modal-result ok';
-    sonuc.textContent = `✓ ${d.toplam} issue oluşturuldu.\n`
+    const olusturulan = (d.olusturulan != null) ? d.olusturulan : d.toplam;
+    const hatalar = d.hatalar || [];
+    sonuc.className = 'jira-modal-result ' + (d.kismi ? 'err' : 'ok');
+    sonuc.textContent = (d.kismi ? '⚠ ' : '✓ ') + `${olusturulan}/${d.toplam} issue oluşturuldu`
+      + (hatalar.length ? ` · ${hatalar.length} açılamadı\n` : '.\n')
       + (d.epic_key ? `Epic: ${d.epic_key}\n` : '')
       + (storyKeys ? `Story: ${storyKeys}\n` : '')
-      + (subCount ? `${subCount} Subtask oluşturuldu` : '');
+      + (subCount ? `${subCount} Subtask oluşturuldu\n` : '')
+      + (hatalar.length ? '\nAçılamayanlar (diğerleri Jira\'da açıldı):\n'
+          + hatalar.map(h => `• [${h.seviye}] ${h.ozet}: ${h.hata}`).join('\n') : '');
 
     // Modal gövdesini kilitle, onay → Kapat
     const body = document.getElementById('jira-modal-body');
@@ -7308,8 +7313,9 @@ async function jiraHiyerarsiOnayla() {
 
     // Alttaki özet satırını güncelle
     const res = document.getElementById('jira-hierarchy-result');
-    res.className = 'jira-hierarchy-result ok';
-    res.textContent = `✓ ${d.toplam} issue oluşturuldu`
+    res.className = 'jira-hierarchy-result ' + (d.kismi ? 'err' : 'ok');
+    res.textContent = (d.kismi ? '⚠ ' : '✓ ') + `${olusturulan}/${d.toplam} issue oluşturuldu`
+      + (hatalar.length ? ` · ${hatalar.length} hata` : '')
       + (d.epic_key ? ` (Epic: ${d.epic_key})` : '');
   } catch(e) {
     sonuc.className = 'jira-modal-result err';

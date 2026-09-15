@@ -384,8 +384,11 @@ def jira_hiyerarsi_olustur(hierarchy: dict, confluence_url: str | None = None) -
         )
         print(f"  ✓ Epic: {epic_key}")
 
-    # 2. Story + Subtask'lar
+    # 2. Story + Subtask'lar — KISMİ HATA DAYANIKLI: bir issue Jira'da reddedilirse (ör. projede
+    # gerçek Sub-task tipi yok → Task+parent reddi) döngü PATLAMAZ; hata toplanır, kalanlar açılır,
+    # açılanlar + hatalar raporlanır (öksüz Epic/Story + belirsiz 500 yerine).
     sonuclar = []
+    hatalar = []
     for i, story in enumerate(stories_data, 1):
         story_summary = _katman_prefix(story.get("katman"), (story.get("summary") or f"Story {i}").strip())
         story_desc    = story.get("description", "")
@@ -393,14 +396,19 @@ def jira_hiyerarsi_olustur(hierarchy: dict, confluence_url: str | None = None) -
         story_adf     = _gorev_govde_adf(story_desc, story_ac)   # zorunlu şablon + markdown→ADF
 
         print(f"  Story {i}/{len(stories_data)}: {story_summary[:60]}...")
-        story_key = _issue_olustur(
-            summary=story_summary,
-            description_adf=story_adf,
-            issue_type_id=story_type_id,
-            project_key=project_key,
-            cloud_id=cloud_id,
-            parent_key=epic_key,   # None ise standalone oluşturulur
-        )
+        try:
+            story_key = _issue_olustur(
+                summary=story_summary,
+                description_adf=story_adf,
+                issue_type_id=story_type_id,
+                project_key=project_key,
+                cloud_id=cloud_id,
+                parent_key=epic_key,   # None ise standalone oluşturulur
+            )
+        except Exception as e:
+            hatalar.append({"seviye": "story", "ozet": story_summary[:80], "hata": str(e)})
+            print(f"    ✗ Story oluşturulamadı: {e}")
+            continue
         print(f"    ✓ {story_key}")
 
         subtask_keys = []
@@ -409,14 +417,19 @@ def jira_hiyerarsi_olustur(hierarchy: dict, confluence_url: str | None = None) -
             sub_summary = _katman_prefix(sub.get("katman") or story.get("katman"),
                                          (sub.get("summary") or "Subtask").strip())
             sub_adf     = _gorev_govde_adf(sub.get("description", ""), sub.get("acceptance_criteria", []))
-            sub_key = _issue_olustur(
-                summary=sub_summary,
-                description_adf=sub_adf,
-                issue_type_id=sub_type_id or story_type_id,
-                project_key=project_key,
-                cloud_id=cloud_id,
-                parent_key=story_key,
-            )
+            try:
+                sub_key = _issue_olustur(
+                    summary=sub_summary,
+                    description_adf=sub_adf,
+                    issue_type_id=sub_type_id or story_type_id,
+                    project_key=project_key,
+                    cloud_id=cloud_id,
+                    parent_key=story_key,
+                )
+            except Exception as e:
+                hatalar.append({"seviye": "subtask", "ozet": sub_summary[:80], "hata": str(e), "parent": story_key})
+                print(f"      ✗ Subtask oluşturulamadı: {e}")
+                continue
             subtask_keys.append(sub_key)
             print(f"      ✓ {sub_key}: {sub_summary[:50]}")
 
@@ -426,11 +439,16 @@ def jira_hiyerarsi_olustur(hierarchy: dict, confluence_url: str | None = None) -
             "subtasks": subtask_keys,
         })
 
-    print(f"✓ Toplam {toplam} issue oluşturuldu." + (f" Epic: {epic_key}" if epic_key else ""))
+    olusturulan = (1 if epic_key else 0) + len(sonuclar) + sum(len(s["subtasks"]) for s in sonuclar)
+    print(f"✓ {olusturulan}/{toplam} issue oluşturuldu." + (f" · {len(hatalar)} hata" if hatalar else "")
+          + (f" Epic: {epic_key}" if epic_key else ""))
     return {
         "epic_key": epic_key,
         "stories": sonuclar,
         "toplam": toplam,
+        "olusturulan": olusturulan,
+        "hatalar": hatalar,
+        "kismi": bool(hatalar),
         "proje": project_key,
     }
 
