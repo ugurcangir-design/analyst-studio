@@ -229,7 +229,12 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   (`_febeView('prompt'|'preview')`):** açılışta AUTO-SPLIT YOK → önce **PROMPT ekranı** (`#febe-prompt-view`):
   analist "kaç task / nasıl bölünsün" yazar (`#febe-talimat` textarea; ör. "sadece 2 task: 1 FE + 1 BE",
   "ekran bazlı böl", "ödeme ve sipariş olarak ayır"; boş = doğal kırılım) → **"Task'lara Böl"** (`febeBol` →
-  `/preview` `talimat` ile). Sonra **ÖNİZLEME ekranı** (`#febe-preview-view`): `d.plan` özeti + task listesi
+  `/preview` `talimat` ile). **Önizleme ARKA PLAN işi (uzun AI çağrısı):** `POST /api/jira/fe-be/preview`
+  senkron değil — `{job_id}` döner, `febeBol` `GET /api/jira/fe-be/preview/durum/<job_id>`'yi 2 sn'de bir
+  polling'ler (client-abort YOK; 10 dk güvenlik tavanı). Eskiden senkron istek 120s `AbortController`'a
+  takılıp büyük analizde "Zaman aşımı (120s)" veriyordu (backend biter+cache'lerdi, tekrar deneme çalışırdı).
+  `_febe_preview_isler` job store (son 24) + `_febeAktifJob` (iptal/yeniden-böl polling'i geçersiz kılar).
+  Sonra **ÖNİZLEME ekranı** (`#febe-preview-view`): `d.plan` özeti + task listesi
   (seç/düzenle) + her satırda **"🔍 Görüntüle"** (`febeGoruntule`) → **tam-sayfa task görüntüleyici**
   (`#task-viewer-modal` / `taskViewerAc`): Jira'ya gidecek TAM gövde (başlık FE-/BE- önekli + şablon
   açıklaması + Kabul Kriterleri) `marked.parse` ile Jira'daki gibi render. Aynı görüntüleyici Epic/Story

@@ -4076,10 +4076,33 @@ def jira_hierarchy_olustur():
 
 # ─── Jira FE/BE Görev Bölme (düz Task + Blocks bağı) ─────────────────────────
 
+_febe_preview_isler: dict = {}          # job_id → durum sözlüğü (son 24 tutulur)
+_febe_preview_lock = threading.Lock()   # insert+trim eşzamanlı POST'larda yarışa karşı
+
+
+def _febe_preview_calistir(job_id: str) -> None:
+    """FE/BE önizleme AI üretimini arka planda çalıştırır (uzun; senkron istek
+    client-abort'a takılıyordu)."""
+    from skills.jira_fe_be import jira_fe_be_uret
+    job = _febe_preview_isler.get(job_id)
+    if not job:
+        return
+    try:
+        sonuc = jira_fe_be_uret(teknik_analiz_dosya=job["dosya"], talimat=job["talimat"])
+        job["sonuc"] = sonuc
+        job["durum"] = "bitti"
+    except Exception as e:
+        logger.error(f"Jira FE/BE önizleme hatası: {e}")
+        job["durum"] = "hata"
+        job["hata"] = str(e)
+
+
 @app.route("/api/jira/fe-be/preview", methods=["POST"])
 def jira_fe_be_onizleme():
-    """1. Adım — teknik analizden düz FE/BE **görev (Task)** listesi + BE→FE
-    bağımlılık önerisi üretir; Jira'ya YAZMAZ. Analist seçim yapar → /create."""
+    """1. Adım — teknik analizden düz FE/BE **görev (Task)** listesi + BE→FE bağımlılık
+    önerisi üretimini ARKA PLANDA başlatır (uzun AI çağrısı; senkron istek 120s
+    client-abort'a takılıyordu — büyük analizde önizleme "zaman aşımı" veriyordu).
+    {job_id} döner → /api/jira/fe-be/preview/durum/<job_id> ile polling. Jira'ya YAZMAZ."""
     data = request.get_json(silent=True) or {}
     dosya = (data.get("dosya") or "teknik-analiz.md").strip()
     talimat = (data.get("talimat") or "").strip()[:1000]  # analist bölme yönlendirmesi
@@ -4091,13 +4114,30 @@ def jira_fe_be_onizleme():
     if hata:
         return jsonify({"ok": False, "error": hata}), 400
 
-    try:
-        from skills.jira_fe_be import jira_fe_be_uret
-        sonuc = jira_fe_be_uret(teknik_analiz_dosya=dosya, talimat=talimat)
-        return jsonify({"ok": True, **sonuc})
-    except Exception as e:
-        logger.error(f"Jira FE/BE önizleme hatası: {e}")
-        return jsonify({"ok": False, "error": str(e)}), 500
+    job_id = uuid.uuid4().hex[:12]
+    with _febe_preview_lock:
+        _febe_preview_isler[job_id] = {"durum": "calisiyor", "dosya": dosya, "talimat": talimat,
+                                       "sonuc": None, "hata": None, "zaman": time.time()}
+        if len(_febe_preview_isler) > 24:
+            for eski in sorted(_febe_preview_isler, key=lambda j: _febe_preview_isler[j]["zaman"])[:-24]:
+                _febe_preview_isler.pop(eski, None)
+    threading.Thread(target=_febe_preview_calistir, args=(job_id,), daemon=True,
+                     name=f"febe-{job_id}").start()
+    return jsonify({"ok": True, "job_id": job_id})
+
+
+@app.route("/api/jira/fe-be/preview/durum/<job_id>", methods=["GET"])
+def jira_fe_be_onizleme_durum(job_id):
+    """FE/BE önizleme işi durumu/sonucu (polling). Bitince sonuç alanları (gorevler/proje/
+    plan/ozet…) yanıta yayılır — frontend febeModalDoldur bunu kullanır."""
+    job = _febe_preview_isler.get(job_id)
+    if not job:
+        return jsonify({"ok": False, "error": "iş bulunamadı"}), 404
+    if job["durum"] == "bitti":
+        return jsonify({"ok": True, "durum": "bitti", **(job.get("sonuc") or {})})
+    if job["durum"] == "hata":
+        return jsonify({"ok": True, "durum": "hata", "error": job.get("hata")})
+    return jsonify({"ok": True, "durum": "calisiyor"})
 
 
 @app.route("/api/jira/fe-be/create", methods=["POST"])

@@ -101,6 +101,9 @@ kontrol("jira-kopru/tara projesiz → ok:False (Jira'ya gitmeden)",
 # Jira FE/BE düz Task akışı — giriş doğrulama (Jira'ya gitmeden)
 fbp = istemci.post("/api/jira/fe-be/preview", json={"dosya": "../x"}, headers=ORIGIN)
 kontrol("jira/fe-be/preview geçersiz dosya → 400", fbp.status_code == 400)
+# Önizleme artık ARKA PLAN işi (uzun AI çağrısı client-abort'a takılmasın) → durum polling ucu
+fbd = istemci.get("/api/jira/fe-be/preview/durum/yokboyle")
+kontrol("jira/fe-be/preview/durum bilinmeyen iş → 404", fbd.status_code == 404)
 fbc = istemci.post("/api/jira/fe-be/create", json={"secim": {"gorevler": []}}, headers=ORIGIN)
 kontrol("jira/fe-be/create boş seçim → 400", fbc.status_code == 400)
 _fbm = importlib.import_module("skills.jira_fe_be")
