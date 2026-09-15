@@ -261,6 +261,7 @@ def _kimlik_tam_mi() -> bool:
 _KIMLIK_GEREKLI_ONEKLER = (
     "/api/upload", "/api/run", "/api/rerun", "/api/delta-analiz",
     "/api/mockup/generate", "/api/jira/gorev", "/api/jira/fe-be",
+    "/api/jira/hierarchy", "/api/approve-teknik", "/api/jira-kopru",
     "/api/sorular/uygula", "/api/adim/duzelt", "/api/geri-don",
 )
 
@@ -4412,7 +4413,10 @@ def jira_fe_be_onizleme():
         _febe_preview_isler[job_id] = {"durum": "calisiyor", "dosya": dosya, "talimat": talimat,
                                        "sonuc": None, "hata": None, "zaman": time.time()}
         if len(_febe_preview_isler) > 24:
-            for eski in sorted(_febe_preview_isler, key=lambda j: _febe_preview_isler[j]["zaman"])[:-24]:
+            # Yalnız BİTMİŞ işleri düş (koşan iş düşerse /durum 404 verir → önizleme yarıda kalır)
+            bitmis = [j for j in sorted(_febe_preview_isler, key=lambda j: _febe_preview_isler[j]["zaman"])
+                      if _febe_preview_isler[j]["durum"] != "calisiyor"]
+            for eski in bitmis[:max(0, len(_febe_preview_isler) - 24)]:
                 _febe_preview_isler.pop(eski, None)
     threading.Thread(target=_febe_preview_calistir, args=(job_id,), daemon=True,
                      name=f"febe-{job_id}").start()

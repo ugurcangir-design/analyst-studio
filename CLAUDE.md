@@ -142,7 +142,7 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   `SIRKET_EPOSTA_DOMAIN` (koda gömülü default `sans-technology.com`, env ile ezilebilir — telemetri sink
   URL'i gibi operasyonel sabit). `_eposta_gecerli` (format + domain) + `_kimlik_tam_mi`. `before_request`
   **`kimlik_kontrol`**: kimlik tam değilse `_KIMLIK_GEREKLI_ONEKLER`'deki iş-başlatma uçları (upload/run/
-  rerun/delta/mockup/jira-gorev/jira-fe-be/sorular-uygula/adim-duzelt/geri-don) mutating isteklerde 403
+  rerun/delta/mockup/jira-gorev/jira-fe-be/jira-hierarchy/approve-teknik/jira-kopru/sorular-uygula/adim-duzelt/geri-don) mutating isteklerde 403
   `kimlik_eksik` döner (GET/okuma + `/api/analist` serbest). `/api/analist` GET `{ad_soyad,eposta,domain,
   kimlik_tam}`, POST domain doğrular. Telemetri olayına `eposta` eklenir (Kullanım Raporu stabil atıf).
   UI: Ayarlar e-posta alanı + kimlik eksikse kırmızı uyarı bandı (`_kimlikBandiGuncelle`). Honor-system

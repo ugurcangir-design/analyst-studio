@@ -183,36 +183,6 @@ def _issue_olustur(
     return data["key"]
 
 
-# ─── AI Prompt ────────────────────────────────────────────────────────────────
-
-_HIERARCHY_SISTEM = """Kıdemli yazılım mimarısın. Teknik analiz dokümanından Jira task hiyerarşisi üret.
-
-Kurallar:
-- 1 Epic: tüm projeyi kapsayan üst başlık
-- 3-7 Story: her biri bağımsız bir fonksiyonel alan (BE, FE, entegrasyon, vb.)
-- Her Story için 2-4 Subtask: somut, ölçülebilir geliştirme adımları
-- Her Story için 2-5 acceptance_criteria: test edilebilir kabul kriteri
-- Tüm metinler Türkçe; teknik terimler (API, endpoint, vb.) İngilizce kalabilir
-
-Yanıtı SADECE aşağıdaki XML+JSON formatında ver:
-
-<jira_hierarchy>
-{
-  "epic_summary": "...",
-  "epic_description": "...",
-  "stories": [
-    {
-      "summary": "...",
-      "description": "...",
-      "acceptance_criteria": ["...", "..."],
-      "subtasks": [
-        {"summary": "...", "description": "..."}
-      ]
-    }
-  ]
-}
-</jira_hierarchy>"""
-
 
 def _hierarchy_uret(teknik_analiz: str) -> dict:
     """teknik-analiz.md içeriğinden Jira hiyerarşi JSON'ı üret."""

@@ -6410,11 +6410,6 @@ async function ozelPromptYukle() {
 }
 
 // ─── CR / Delta Analizi ──────────────────────────────────────────────────────
-function toggleDeltaAnaliz() {
-  document.getElementById('da-toggle').classList.toggle('open');
-  document.getElementById('da-fields').classList.toggle('open');
-}
-
 async function deltaAnaliziBaslat() {
   const cr = document.getElementById('da-cr-metni').value.trim();
   if (!cr) { toast('Önce değişiklik isteğini yazın', 'error'); return; }
@@ -8676,14 +8671,6 @@ async function settingsKaydet() {
 // ─── Prompt Editörü ───────────────────────────────────────────────────────────
 let _promptData = {};
 let _aktifSkill = null;
-
-function promptEditorToggle() {
-  const head = document.getElementById('prompt-editor-head');
-  const body = document.getElementById('prompt-editor-body');
-  const acik = head.classList.toggle('open');
-  body.classList.toggle('open', acik);
-  if (acik && Object.keys(_promptData).length === 0) promptlariYukle();
-}
 
 async function promptlariYukle() {
   const r = await fetch('/api/prompts');
