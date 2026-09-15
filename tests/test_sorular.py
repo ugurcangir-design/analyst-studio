@@ -92,4 +92,20 @@ kontrol("_iso_epoch geçersiz → None", S._iso_epoch("çöp") is None)
 kontrol("_iso_epoch None → None", S._iso_epoch(None) is None)
 kontrol("_iso_epoch geçerli → float", isinstance(S._iso_epoch("2026-09-15T10:30:00"), float))
 
+# ── 5) BULLET liste soruları parse edilir (yapısal format YOKKEN fallback) ─────
+# Model açık soruları madde-işaretli liste olarak üretince (tablo/### değil) parse
+# edilmiyordu → Sorular sekmesi boş kalıyordu. Artık bullet + bold-id de yakalanır.
+import tempfile as _tf  # noqa: E402
+_bul = Path(_tf.mktemp(suffix=".md"))
+_bul.write_text("## 7. Açık Sorular / Tutarsızlıklar\n"
+                "- Q-01: Competitions terim karışıklığı?\n"
+                "- **Q-02:** Close Combination akışı yok.\n"
+                "- Q-03: Prematch linki pre-seçili değil.\n", encoding="utf-8")
+_pb = S.parse_md_sorular(_bul)
+kontrol("bullet liste → 3 soru yakalanır", len(_pb) == 3)
+kontrol("bullet id'leri doğru (Q-01/Q-02/Q-03)",
+        [q["id"] for q in _pb] == ["Q-01", "Q-02", "Q-03"])
+kontrol("bold id (**Q-02:**) temizlenir",
+        any(q["id"] == "Q-02" and "Close Combination" in q["soru"] and "*" not in q["soru"] for q in _pb))
+
 print(f"\nSORULAR TESTLERİ GEÇTİ ({basari} kontrol)")

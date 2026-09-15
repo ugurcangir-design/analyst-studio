@@ -74,7 +74,11 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   soru id'leri (Q-001…) KONUMSALDIR — yeni doküman analizinde AYNI id farklı soruya denk gelir. Merge, `(id, kaynak_dosya)`
   eşleşen mevcut sorunun durum/cevabını YALNIZ o soru bu oturuma aitse (`olusturuldu_at` saniyesi ≥ `taze_esik` saniyesi —
   `_bu_oturuma_ait`) korur; önceki oturumdan devrolan aynı-id soru YENİ ('acik') sayılır. Yoksa yeni süreç analizinin açık
-  soruları eski cevaplarla yanlışlıkla "tümü cevaplandı" görünürdü (yeni parse'ta otomatik iyileşir). Test: `tests/test_sorular.py`.
+  soruları eski cevaplarla yanlışlıkla "tümü cevaplandı" görünürdü (yeni parse'ta otomatik iyileşir).
+  **Soru formatı — dayanıklı parse:** `parse_md_sorular` üç format yakalar: `### Q-T-XXX:` blok · `| Q-XXX |`
+  tablo · fallback "Açık Sorular" başlığı altında **numaralı VEYA madde-işaretli** liste (`_LISTE_ITEM`:
+  `1.`/`2)`/`-`/`*`/`•`; bold `**Q-01:**` id de temizlenip yakalanır). Model açık soruları bullet-liste
+  üretince (tablo/### değil) parse edilmiyordu → Sorular sekmesi boş kalıyordu; artık yakalanır. Test: `tests/test_sorular.py`.
   (10) **Ekran adları:** "Çıktılar" →
   **Analiz Dosyaları**, "Görüntüleyici" → **Çıktı Dosyaları** (iç tab anahtarları `ciktilar`/`output` korundu).
   (11) **Yetim workflow uzlaştırması:** `/api/oturum` — workflow "settled" (onay_bekleniyor/teknik_onay/

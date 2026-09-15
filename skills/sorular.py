@@ -142,13 +142,16 @@ def _parse_tablo_sorulari(metin: str, dosya_adi: str) -> list[dict]:
 # üretiyor ("## 5. Açık Sorular\n1. ...\n2. ..."). Yapısal format bulunamazsa bu
 # fallback devreye girer → sorular yine de yakalanıp cevaplanabilir.
 _ACIK_BASLIK = re.compile(r"^#{1,6}[^\n]*[Aa]ç[ıİIi]k\s+[Ss]oru", re.MULTILINE)
-_NUM_ITEM = re.compile(r"^\s{0,3}(\d{1,3})[.)]\s+(.+?)\s*$", re.MULTILINE)
+# NUMARALI (1. / 2)) VEYA MADDE-İŞARETLİ (- / * / •) liste öğesi — model her iki formatı da
+# üretebiliyor; ikisini de yakala (yoksa bullet-liste soruları hiç parse edilmiyordu).
+_LISTE_ITEM = re.compile(r"^\s{0,3}(?:\d{1,3}[.)]|[-*•])\s+(.+?)\s*$", re.MULTILINE)
 
 
 def _parse_liste_sorulari(metin: str, dosya_adi: str) -> list[dict]:
-    """"Açık Sorular" başlığı altındaki NUMARALI liste öğelerini soru olarak yakalar.
-    Yapısal (### / tablo) format YOKKEN fallback. ID yoksa sıra numarasından türetilir
-    (Q-001…); merge (id, kaynak_dosya) ile anahtarladığından dosyalar arası çakışmaz."""
+    """"Açık Sorular" başlığı altındaki NUMARALI **veya MADDE-İŞARETLİ** liste öğelerini soru
+    olarak yakalar. Yapısal (### / tablo) format YOKKEN fallback. ID (Q-01/PO-1 — bold `**Q-01:**`
+    dahil) varsa kullanılır, yoksa sıra numarasından türetilir (Q-001…); merge (id, kaynak_dosya)
+    ile anahtarlandığından dosyalar arası çakışmaz."""
     hm = _ACIK_BASLIK.search(metin)
     if not hm:
         return []
@@ -158,8 +161,11 @@ def _parse_liste_sorulari(metin: str, dosya_adi: str) -> list[dict]:
     sonraki = re.search(r"^#{1,6}\s", metin[blok_bas + 1:], re.MULTILINE)
     blok = metin[blok_bas + 1: blok_bas + 1 + sonraki.start()] if sonraki else metin[blok_bas + 1:]
     sonuc = []
-    for i, m in enumerate(_NUM_ITEM.finditer(blok), start=1):
-        ham = m.group(2).strip()
+    for i, m in enumerate(_LISTE_ITEM.finditer(blok), start=1):
+        ham = m.group(1).strip()
+        # Markdown vurgu (** / *) temizle → '**Q-01:** metin' / '**soru**' düz metne dönsün ki
+        # ID çıkarımı ve başlık temiz olsun.
+        ham = re.sub(r"[*_]{1,2}", "", ham).strip()
         if not ham:
             continue
         qid_m = re.match(r"^(Q-[A-Za-z0-9-]+|PO-\d+)\b\s*[:.\-)]?\s*(.*)", ham)
