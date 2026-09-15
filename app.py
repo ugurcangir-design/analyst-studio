@@ -1791,7 +1791,10 @@ def adim_duzelt():
         try:
             from skills import revizyon, revizyon_ai
             rev = revizyon_ai.bolum_duzenle(dosya, anahtar, talimat)
-            revizyon.onayla(dosya, rev["id"])          # otomatik uygula → gerçek çıktıya yaz
+            revizyon.onayla(dosya, rev["id"])
+            # ZORUNLU: onaylı içeriği GERÇEK çıktıya yaz — yoksa dosya diskte bayat kalır ve
+            # sonraki adım (ör. teknik analiz) düzeltilmemiş süreç analizini okur.
+            (OUTPUT_DIR / dosya).write_text(revizyon.onayli_icerik(dosya), encoding="utf-8")
             _revizyon_durum[dosya] = {"calisiyor": False, "hata": None, "anahtar": anahtar}
             logger.info("Adım düzeltmesi uygulandı: %s / %s", dosya, anahtar)
         except Exception as e:
@@ -3375,6 +3378,14 @@ def _sorulari_hedefli_uygula(kaynak: str, sorular: list[dict]) -> dict:
                 except Exception as e:
                     logger.warning("Hedefli soru uygulaması düşüyor (%s/%s): %s", hedef, bid, e)
         kalan.append(s)
+    # ZORUNLU: hedefli düzeltmeler revizyon oturumunda birikir; onaylı içeriği GERÇEK çıktıya
+    # geri yaz — yoksa dosya diskte bayat kalır ve sonraki adım (teknik analiz surec-analizi.md'yi
+    # DOSYADAN okur) cevap uygulanmamış süreç analizini kullanır.
+    if hedefli and hedef and hedef_yol is not None:
+        try:
+            hedef_yol.write_text(revizyon.onayli_icerik(hedef), encoding="utf-8")
+        except Exception as e:
+            logger.error("Hedefli cevap diske yazılamadı (%s): %s", hedef, e)
     if kalan:
         yeniden_calistir(kaynak, duzeltme_notu_olustur(kalan))
     return {"hedefli": hedefli, "tam": len(kalan)}

@@ -40,10 +40,12 @@ tmp = Path(tempfile.mkdtemp())
 app.OUTPUT_DIR = tmp
 (tmp / "surec-analizi.md").write_text("## Süreç\n\n**PA-003:** Sipariş onay adımı ...\n", encoding="utf-8")
 
+_REVIZE = "## Süreç\n\n**PA-003:** Onay 2 aşamalı — CEVAP UYGULANDI\n"
 cagri = {"bolum_duzenle": [], "yeniden_calistir": []}
 revizyon_ai.bolum_bul = lambda md, anahtar: {"baslik": "PA-003"} if "PA-003" in (anahtar or "") else None
 revizyon_ai.bolum_duzenle = lambda hedef, bid, notu: (cagri["bolum_duzenle"].append((hedef, bid)), {"id": "r1"})[1]
 revizyon.onayla = lambda hedef, rid: None
+revizyon.onayli_icerik = lambda hedef: _REVIZE      # onaylı (revize) içerik
 B.yeniden_calistir = lambda kaynak, notu: cagri["yeniden_calistir"].append(kaynak)
 
 # ── 1) bagli_id bölümü BULUNUR → yalnız o bölüm düzeltilir (tam üretim YOK) ─────
@@ -53,6 +55,9 @@ ozet = app._sorulari_hedefli_uygula("surec-analizi.md", s_bulunur)
 kontrol("süreç sorusu → hedefli (1)", ozet["hedefli"] == 1 and ozet["tam"] == 0)
 kontrol("yalnız PA-003 bölümü düzenlendi", cagri["bolum_duzenle"] == [("surec-analizi.md", "PA-003")])
 kontrol("tam yeniden üretim ÇAĞRILMADI", cagri["yeniden_calistir"] == [])
+# KRİTİK: onaylı revize içerik DİSKE yazıldı mı? (yoksa teknik analiz bayat okur)
+kontrol("hedefli cevap surec-analizi.md'ye DİSKE yazıldı",
+        (tmp / "surec-analizi.md").read_text(encoding="utf-8") == _REVIZE)
 
 # ── 2) bagli_id bölümü BULUNAMAZ → tam yeniden üretime düşer (son çare) ─────────
 cagri["bolum_duzenle"].clear()

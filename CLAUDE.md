@@ -92,7 +92,12 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   `POST /api/adim/duzelt {dosya, talimat}`: hedef dosya ADIMDAN bellidir (niyet yönlendirme YOK); hedef bölüm
   talimattaki yapısal ID (`_ADIM_ID_DESEN`: PA/BR/EK/EF/AF/AC/FR/NFR/Q/PO/T-FE/T-BE-nnn) ya da bölüm başlığı
   kelimesinden türetilir (`_adim_hedef_bolum`) → yalnız o bölüm `revizyon_ai.bolum_duzenle` ile düzenlenir ve
-  **otomatik `revizyon.onayla`** (sürüm oluşur, Revizyon ekranından Geri Al). Bölüm bulunamazsa
+  **otomatik `revizyon.onayla`** (sürüm oluşur, Revizyon ekranından Geri Al). **KRİTİK:** `bolum_duzenle`+`onayla`
+  yalnız revizyon oturumunu günceller — `revizyon.onayla` ÇIKTI DOSYASINI YAZMAZ; her çağıran onaylı içeriği
+  (`onayli_icerik`) `output/<dosya>`'ya GERİ YAZMALI (`/api/adim/duzelt` + `_sorulari_hedefli_uygula` + revizyon
+  onayla/geri-al uçları bunu yapar). Yoksa dosya diskte bayat kalır ve sonraki adım (teknik analiz
+  surec-analizi.md'yi DOSYADAN okur) düzeltilmemiş içeriği kullanır (regresyon: `tests/test_soru_hedefli.py`).
+  Bölüm bulunamazsa
   `tam_uretim_gerekli` döner → UI analiste ID eklemesini ya da "Tam yeniden üret" (eski `/api/rerun`, artık
   `<details>` içinde SON ÇARE) önerir; asla sessizce tümü yeniden yazılmaz. **"◂ Süreç analizine dön"**
   (`POST /api/geri-don` → `wf.surec_adimina_geri_don()`, yeni geçiş TEKNIK_ANALIZ_ONAY_BEKLENIYOR→
