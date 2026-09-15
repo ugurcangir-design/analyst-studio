@@ -2533,6 +2533,7 @@ def filtrele_referanslar(all_files: list, ctx: dict) -> list:
 
     filtered = []
     jira_issues_combined = {}
+    jira_keys_yerel_eslesen: set[str] = set()   # yerel export'ta bulunan key'ler
 
     for f in all_files:
         try:
@@ -2584,6 +2585,7 @@ def filtrele_referanslar(all_files: list, ctx: dict) -> list:
                 for issue in issues:
                     if jira_keys and issue.get("key", "").upper() in jira_keys:
                         matched.append(issue)
+                        jira_keys_yerel_eslesen.add(issue.get("key", "").upper())
                         continue
                     if keywords:
                         text = (str(issue.get("summary", "")) + " " +
@@ -2623,6 +2625,15 @@ def filtrele_referanslar(all_files: list, ctx: dict) -> list:
         else:
             filtered.append(f)
 
+    # Analist bir Jira key girdi ama yerel export'ta (reference/jira/*.json) YOK →
+    # doğrudan Jira'dan çek (proje sync'i yapılmamış olsa bile "bu task'ı bağlama ekle"
+    # çalışsın). Ağ/yetki hatası akışı KIRMAZ (yerel eşleşenlerle devam eder).
+    eksik_keyler = [k for k in jira_keys if k not in jira_keys_yerel_eslesen]
+    if eksik_keyler:
+        cekilen = _jira_keyleri_uzaktan_cek(eksik_keyler)
+        if cekilen:
+            jira_issues_combined.setdefault("_cekilen", []).extend(cekilen)
+
     if jira_issues_combined:
         tmp = JIRA_REF_DIR / "_context_filtered.json"
         tmp.parent.mkdir(parents=True, exist_ok=True)
@@ -2635,6 +2646,36 @@ def filtrele_referanslar(all_files: list, ctx: dict) -> list:
         filtered.append(tmp)
 
     return filtered
+
+
+def _jira_keyleri_uzaktan_cek(keyler: list[str]) -> list[dict]:
+    """Verilen Jira key'lerini doğrudan Jira'dan (bulkfetch) çeker → issue listesi
+    ({key, summary, description, ...}). Bağlam filtresine girilen ama yerel export'ta
+    bulunmayan task'lar için. Jira yapılandırılmamış / ağ / yetki hatasında BOŞ liste
+    döner (analiz akışı kırılmaz). Lazy import → modül-düzeyi döngüsel bağımlılık yok."""
+    try:
+        from skills.jira_gorevleri import _taze_issue_oku, _cloud_id
+    except Exception:
+        return []
+    try:
+        cloud_id = _cloud_id()
+    except Exception:
+        cloud_id = ""
+    if not cloud_id:
+        print(f"  ⚠ Jira bağlam key'leri çekilemedi (Jira bağlı değil): {', '.join(keyler)}")
+        return []
+    try:
+        taze = _taze_issue_oku(keyler, cloud_id)   # {key: görev}
+    except Exception as e:
+        print(f"  ⚠ Jira bağlam key'leri çekilemedi ({', '.join(keyler)}): {e}")
+        return []
+    cekilen = [taze[k] for k in taze if taze.get(k)]
+    bulunamayan = [k for k in keyler if k not in taze]
+    if cekilen:
+        print(f"  ↳ Jira'dan {len(cekilen)} bağlam task'ı çekildi: {', '.join(t.get('key','') for t in cekilen)}")
+    if bulunamayan:
+        print(f"  ⚠ Jira'da bulunamayan bağlam key'leri: {', '.join(bulunamayan)}")
+    return cekilen
 
 
 def referans_dosyalari_hazirla(ctx_override: dict | None = None) -> list[Path]:
@@ -2653,9 +2694,13 @@ def referans_dosyalari_hazirla(ctx_override: dict | None = None) -> list[Path]:
                     if dizin != LIVE_APP_DIR and f.name.startswith("_"):
                         continue
                     tum_dosyalar.append(f)
-    if not tum_dosyalar:
-        return []
     ctx = ctx_override if ctx_override is not None else load_context_filter()
+    if not tum_dosyalar:
+        # Yerel referans dosyası yok — ama bağlam filtresinde Jira key girildiyse yine de
+        # doğrudan Jira'dan çek (filtrele_referanslar boş listeyle çağrılınca fetch çalışır).
+        if ctx and ctx.get("jira_keys"):
+            return filtrele_referanslar([], ctx)
+        return []
     if ctx:
         filtreli = filtrele_referanslar(tum_dosyalar, ctx)
         aktif = []

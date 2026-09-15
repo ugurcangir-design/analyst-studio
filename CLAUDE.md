@@ -109,6 +109,13 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   gerçek veri (Swagger sözleşmesi + MCP canlı gözlem), tarif edilen istekten (BRD) ÜSTÜNDÜR** — BRD
   hatalı/güncel-olmayan olabilir. Olgusal çelişkide (endpoint/alan/tip/gerçek davranış) gerçek veri kazanır,
   çelişki yine Açık Sorular/Tutarsızlıklar'a raporlanır. Ana doküman analizin KONUSU/izlenebilirlik çapası olarak durur.
+- **Bağlam filtresi — Jira Issue Keys (uzaktan çekme):** ekrandaki "Jira Issue Keys" alanı (`ctx-jira-keys` →
+  `context_filter.jira_keys`) `filtrele_referanslar`'da ÖNCE yerel export'ta (`reference/jira/*.json`) aranır;
+  yerelde BULUNMAYAN key'ler doğrudan Jira'dan (`_jira_keyleri_uzaktan_cek` → `jira_gorevleri._taze_issue_oku`
+  bulkfetch, lazy import) çekilip `_context_filtered.json`'a eklenir → proje sync'i yapılmamış olsa bile girilen
+  task'lar bağlama girer. Yalnız EKSİK key çekilir (yereldeki tekrar çekilmez); Jira bağlı değil / ağ / yetki
+  hatasında BOŞ döner (analiz kırılmaz, uyarı loglanır). Yerel referans hiç yoksa bile jira_keys varsa fetch
+  çalışır (`referans_dosyalari_hazirla`). Test: `tests/test_baglam_jira.py`.
 - **Faz 2 — Ürün kalitesi:** tasarım sistemi `static/ds.css` (`ds-*`); ekranlar `screens/ciktilar.html`
   (`/api/oturum`, tazelik = mtime ≥ oturum başlangıcı), `delta.html` (Süreç'ten ayrıldı, `da-*` ID korundu),
   `yetki.html`; sidebar iş akışına göre gruplu (Analiz / Çıktılar & Revizyon / Jira / Kaynaklar / Yönetim 🔒).
@@ -158,7 +165,8 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   Yeni deterministik endpoint → smoke_test'e bir satır ekle. Ayrıca `test_auth_roller.py`, `test_kod_kaynagi.py`,
   `test_jira_kopru.py` (Jira Köprüsü komut→taslak→onay + silent-skip + self-scope + sağlık, offline/0-token),
   `test_bildirim.py` (bildirim kaçış/redaksiyon/no-op), `test_bildirim_akis.py` (analiz bildirim geçiş+dedup),
-  `test_sorular.py` (soru defteri oturum-aidiyeti — bayat cevap taşınmaz + aynı-oturum koruma, offline/0-token).
+  `test_sorular.py` (soru defteri oturum-aidiyeti — bayat cevap taşınmaz + aynı-oturum koruma, offline/0-token),
+  `test_baglam_jira.py` (bağlam filtresi Jira key'leri yerel export'ta yoksa uzaktan bulkfetch — yalnız eksik, hata yutulur; ağ MOCK/0-token).
 - **Faz 3.a — Kod kaynağı:** `skills/kod_kaynagi.py` salt-okuma yerel git/dosya arayüzü (yol repo köküne
   hapsedilir; yazma/komut yok). Config `reference/kod_kaynagi.json` (gitignore + `.example` seed, seed listesinde).
   `/api/kod/*` (config owner-only) + `screens/kod.html` (Kaynaklar). Gerçek repo bağlantısı analiste bırakıldı;
