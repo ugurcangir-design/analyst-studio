@@ -1,4 +1,5 @@
 {
-  "_aciklama": "Kullanıcı-bazlı ekran yetkisi. Anahtar = sha256(salt+küçük-harf e-posta) — PII git'e GİRMEZ. ac=ekstra açılan, kapat=ekstra kapatılan ekran id'leri. Ham e-posta/ad owner'ın YEREL reference/roller_yerel.json'ındadır (gitignore). Owner Yetki ekranından düzenler; analistlere güncellemeyle iner.",
-  "kullanicilar": {}
+  "_aciklama": "Rol→ekran yetkisi. kullanicilar: sha256(salt+küçük-harf e-posta)→rol (PII git'e GİRMEZ; isimler Kullanım Raporu'ndan çekilir). ekran_roller: ekran id→o ekranı görebilecek EN DÜŞÜK rol. Owner Yetki ekranından düzenler; analistlere güncellemeyle iner.",
+  "kullanicilar": {},
+  "ekran_roller": {}
 }

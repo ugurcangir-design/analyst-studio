@@ -69,10 +69,6 @@ backlog/
 # Makineye özel analist kimliği (telemetri)
 analist.json
 
-# Owner'ın YEREL kullanıcı defteri (hash→ad/e-posta) — PII, git'e ASLA girmez.
-# (roller.json TRACKED ama yalnız hash+rol+override taşır; roller_yerel.json ham e-posta/ad taşır)
-reference/roller_yerel.json
-
 # App-üretimi RAG cache
 reference/_filtered_cache/
 

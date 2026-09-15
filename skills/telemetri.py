@@ -56,6 +56,24 @@ def analist_eposta_oku() -> str:
     return analist_kimlik_oku()["eposta"].lower()
 
 
+def analistler_listesi() -> list[dict]:
+    """Kullanım verisinden (events/remote) BENZERSİZ analistler: [{ad, eposta}].
+    Owner Yetki ekranı bu listeyi çeker (rol atamak için). E-postası olanlar önce gelir;
+    aynı e-posta tek satır. Owner tüm ekibi görmek için 'Uzaktan Çek' yapmalı (remote.jsonl)."""
+    gorulen: dict = {}
+    for o in olaylari_oku():
+        eposta = (o.get("eposta") or "").strip().lower()
+        ad = (o.get("analist") or "").strip()
+        if not eposta and not ad:
+            continue
+        anahtar = eposta or ("ad::" + ad.lower())
+        if anahtar not in gorulen:
+            gorulen[anahtar] = {"ad": ad, "eposta": eposta}
+        elif ad and not gorulen[anahtar]["ad"]:
+            gorulen[anahtar]["ad"] = ad
+    return sorted(gorulen.values(), key=lambda x: (x["ad"] or x["eposta"]).lower())
+
+
 def analist_yaz(ad_soyad: str, eposta: str | None = None) -> None:
     """Analist kimliğini yazar. `eposta` None ise mevcut e-posta KORUNUR (ad-soyad tek
     başına güncellenebilir); dize (boş dahil) verilirse üzerine yazılır."""

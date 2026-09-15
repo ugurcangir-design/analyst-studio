@@ -387,14 +387,14 @@ def _denetim(islem: str, hedef: str = "", **detay) -> None:
     return None
 
 
-# ─── Rol atamaları (kullanıcı-bazlı görünürlük) — hash'li, PII'siz ────────────
-# roller.json TRACKED ama PII'siz: {kullanicilar: {<eposta_hash>: {rol, ac[], kapat[]}}}.
-# Ham e-posta/ad YALNIZ owner'ın gitignore'lu roller_yerel.json'ında (Yetki UI için).
+# ─── Rol atamaları (rol→ekran yetkisi) — hash'li, PII'siz ────────────────────
+# roller.json TRACKED ama PII'siz: {kullanicilar: {<eposta_hash>: rol}, ekran_roller: {id: rol}}.
+# İsimler Kullanım Raporu'ndan (telemetri) çekilir → owner rol atar; ekranlar rollere atanır.
 # Analistlere güncellemeyle (git pull) iner; her istekte diskten okunur → restart gerekmez.
 ROLLER_PATH = BASE_DIR / "roller.json"
-ROLLER_YEREL_PATH = REF_DIR / "roller_yerel.json"
 _ROLLER_SALT = "analyst-studio-v2::"    # public repo + honor-system: trivial rainbow'u zorlaştırır
-GECERLI_ROLLER = ("owner", "analist")
+GECERLI_ROLLER = ("analist", "owner")   # rütbe sırası: analist < owner
+_ROL_RUTBE = {"analist": 0, "owner": 1}
 
 
 def _eposta_hash(eposta: str) -> str:
@@ -406,83 +406,76 @@ def _eposta_hash(eposta: str) -> str:
 
 
 def _roller_oku() -> dict:
-    try:
-        if ROLLER_PATH.exists():
-            d = json.loads(ROLLER_PATH.read_text(encoding="utf-8"))
-            if isinstance(d.get("kullanicilar"), dict):
-                return d
-    except Exception:
-        pass
-    return {"kullanicilar": {}}
-
-
-def _roller_yaz(kullanicilar: dict) -> None:
-    """roller.json'a YALNIZ hash+rol+override yazar (PII yok). Geçersiz id/hash elenir."""
+    """{'kullanicilar': {hash: rol}, 'ekran_roller': {ekran_id: rol}}. Eski format
+    (kullanicilar değeri {rol,ac,kapat}) geriye-uyumlu okunur (yalnız rol alınır)."""
+    ku, er = {}, {}
     gecerli_id = {k["id"] for k in GIZLENEBILIR_KATALOG}
-    temiz = {}
-    for h, rec in (kullanicilar or {}).items():
+    try:
+        d = json.loads(ROLLER_PATH.read_text(encoding="utf-8")) if ROLLER_PATH.exists() else {}
+    except Exception:
+        d = {}
+    for h, v in (d.get("kullanicilar") or {}).items():
         if not isinstance(h, str) or not re.fullmatch(r"[0-9a-f]{64}", h):
             continue
-        rec = rec or {}
-        rol = rec.get("rol") if rec.get("rol") in GECERLI_ROLLER else "analist"
-        ac = sorted({x for x in rec.get("ac", []) if x in gecerli_id})
-        kapat = sorted({x for x in rec.get("kapat", []) if x in gecerli_id})
-        temiz[h] = {"rol": rol, "ac": ac, "kapat": kapat}
+        rol = v.get("rol") if isinstance(v, dict) else v
+        ku[h] = rol if rol in GECERLI_ROLLER else "analist"
+    for i, rol in (d.get("ekran_roller") or {}).items():
+        if i in gecerli_id and rol in GECERLI_ROLLER:
+            er[i] = rol
+    return {"kullanicilar": ku, "ekran_roller": er}
+
+
+def _roller_kaydet(kullanicilar: dict, ekran_roller: dict) -> None:
+    """roller.json'a YALNIZ hash→rol + ekran→rol yazar (PII yok). Geçersiz eleştirilir."""
+    gecerli_id = {k["id"] for k in GIZLENEBILIR_KATALOG}
+    ku = {h: (r if r in GECERLI_ROLLER else "analist")
+          for h, r in (kullanicilar or {}).items()
+          if isinstance(h, str) and re.fullmatch(r"[0-9a-f]{64}", h)}
+    er = {i: r for i, r in (ekran_roller or {}).items()
+          if i in gecerli_id and r in GECERLI_ROLLER}
     veri = {
-        "_aciklama": "Kullanıcı-bazlı ekran yetkisi. Anahtar = sha256(salt+küçük-harf e-posta) "
-                     "— PII git'e GİRMEZ. ac=ekstra açılan, kapat=ekstra kapatılan ekran id'leri. "
-                     "Ham e-posta/ad owner'ın YEREL reference/roller_yerel.json'ındadır (gitignore).",
-        "kullanicilar": temiz,
+        "_aciklama": "Rol→ekran yetkisi. kullanicilar: sha256(salt+küçük-harf e-posta)→rol (PII git'e "
+                     "GİRMEZ; isimler Kullanım Raporu'ndan çekilir). ekran_roller: ekran id→o ekranı "
+                     "görebilecek EN DÜŞÜK rol. Owner Yetki ekranından düzenler; analistlere güncellemeyle iner.",
+        "kullanicilar": dict(sorted(ku.items())),
+        "ekran_roller": dict(sorted(er.items())),
     }
     tmp = ROLLER_PATH.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(veri, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     tmp.replace(ROLLER_PATH)
 
 
-def _roller_yerel_oku() -> dict:
-    """Owner'ın YEREL kullanıcı defteri: {hash: {ad, eposta}}. Yalnız Yetki UI için."""
-    try:
-        if ROLLER_YEREL_PATH.exists():
-            d = json.loads(ROLLER_YEREL_PATH.read_text(encoding="utf-8"))
-            if isinstance(d, dict):
-                return d
-    except Exception:
-        pass
-    return {}
-
-
-def _roller_yerel_yaz(d: dict) -> None:
-    try:
-        ROLLER_YEREL_PATH.parent.mkdir(parents=True, exist_ok=True)
-        ROLLER_YEREL_PATH.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception:
-        pass
-
-
-def _bu_kullanici_kaydi() -> dict | None:
-    """Bu makinedeki analistin (yerel e-posta) roller.json kaydı: {rol, ac, kapat} veya None."""
+def _bu_kullanici_rol() -> str:
+    """Bu makinedeki analistin (yerel e-posta) atanmış rolü. Atanmamışsa 'analist'."""
     from skills import telemetri
     h = _eposta_hash(telemetri.analist_eposta_oku())
     if not h:
-        return None
-    return _roller_oku()["kullanicilar"].get(h)
+        return "analist"
+    return _roller_oku()["kullanicilar"].get(h, "analist")
+
+
+def _ekran_gerekli_rol(ekran_id: str, ekran_roller: dict, gizli_default: set) -> str:
+    """Bir ekranı görmek için gereken EN DÜŞÜK rol. Öncelik: ekran_roller ataması >
+    eski gorunurluk.json (gizli → 'owner') > varsayılan 'analist'."""
+    if ekran_id in ekran_roller:
+        return ekran_roller[ekran_id]
+    return "owner" if ekran_id in gizli_default else "analist"
 
 
 def _etkin_gizli() -> list[str]:
-    """Bu kullanıcı için ETKİN gizli ekran id'leri: analist-default (gorunurluk.json)
-    − kullanıcı 'ac' + kullanıcı 'kapat'. roller rolü 'owner' (per-user) ise hiç gizlenmez.
-    Yerel owner (owner_konsol → _owner_mi) zaten her şeyi görür."""
+    """Bu kullanıcı için ETKİN gizli ekran id'leri: rolü, ekranın gerektirdiği rolden
+    DÜŞÜKSE ekran gizlidir. Yerel owner (owner_konsol → _owner_mi) her şeyi görür."""
     if _owner_mi():
         return []
-    base = set(_gorunurluk_oku())
-    rec = _bu_kullanici_kaydi()
-    if rec:
-        if rec.get("rol") == "owner":
-            return []
-        base -= set(rec.get("ac", []))
-        base |= set(rec.get("kapat", []))
-    gecerli = {k["id"] for k in GIZLENEBILIR_KATALOG}
-    return sorted(x for x in base if x in gecerli)
+    d = _roller_oku()
+    my_rank = _ROL_RUTBE.get(_bu_kullanici_rol(), 0)
+    gizli_default = set(_gorunurluk_oku())
+    hidden = []
+    for k in GIZLENEBILIR_KATALOG:
+        gerekli = _ekran_gerekli_rol(k["id"], d["ekran_roller"], gizli_default)
+        if my_rank < _ROL_RUTBE.get(gerekli, 0):
+            hidden.append(k["id"])
+    return sorted(hidden)
 
 
 @app.before_request
@@ -2077,62 +2070,64 @@ def gorunurluk_kaydet():
     return jsonify({"ok": True, "gizli": sorted(yeni)})
 
 
-# ─── Rol atamaları (kullanıcı-bazlı ekran yetkisi) — owner Yetki ekranı ──────
+# ─── Rol atamaları (rol→ekran yetkisi) — owner Yetki ekranı ──────────────────
 
 @app.route("/api/roller", methods=["GET"])
 @yetki_gerekli
 def roller_getir():
-    """Owner Yetki UI: kullanıcı listesi (yerel ad/e-posta ile) + rol + override + katalog.
-    Ham ad/e-posta owner'ın YEREL roller_yerel.json'ından gelir; tracked roller.json PII'siz."""
-    kullanicilar = _roller_oku()["kullanicilar"]
-    yerel = _roller_yerel_oku()
-    liste = []
-    for h, rec in kullanicilar.items():
-        y = yerel.get(h, {})
-        liste.append({"hash": h, "ad": y.get("ad", ""), "eposta": y.get("eposta", ""),
-                      "rol": rec.get("rol", "analist"),
-                      "ac": rec.get("ac", []), "kapat": rec.get("kapat", [])})
-    liste.sort(key=lambda k: (k["rol"], (k["ad"] or k["eposta"] or k["hash"]).lower()))
-    return jsonify({"ok": True, "kullanicilar": liste, "katalog": GIZLENEBILIR_KATALOG,
+    """Owner Yetki UI. Kullanıcılar Kullanım Raporu'ndan (telemetri) ÇEKİLİR (isim+e-posta,
+    owner-lokal veri) → atanmış rolüyle döner. Ekranlar + o ekranı görebilecek EN DÜŞÜK rol.
+    tracked roller.json yalnız hash→rol + ekran→rol tutar (PII yok)."""
+    from skills import telemetri
+    d = _roller_oku()
+    gizli_default = set(_gorunurluk_oku())
+    kullanicilar, gorulen = [], set()
+    for a in telemetri.analistler_listesi():
+        eposta = (a.get("eposta") or "").strip().lower()
+        if not eposta:
+            continue   # rol atamak için e-posta şart (hash) — kimlik zorunlu olduğundan yeni olaylar taşır
+        h = _eposta_hash(eposta)
+        if h in gorulen:
+            continue
+        gorulen.add(h)
+        kullanicilar.append({"hash": h, "ad": a.get("ad", ""), "eposta": eposta,
+                             "rol": d["kullanicilar"].get(h, "analist")})
+    kullanicilar.sort(key=lambda k: (k["ad"] or k["eposta"]).lower())
+    ekranlar = [{"id": k["id"], "ad": k["ad"], "grup": k["grup"], "aciklama": k.get("aciklama", ""),
+                 "rol": _ekran_gerekli_rol(k["id"], d["ekran_roller"], gizli_default)}
+                for k in GIZLENEBILIR_KATALOG]
+    return jsonify({"ok": True, "kullanicilar": kullanicilar, "ekranlar": ekranlar,
                     "roller": list(GECERLI_ROLLER), "domain": SIRKET_EPOSTA_DOMAIN})
 
 
 @app.route("/api/roller/kullanici", methods=["POST"])
 @yetki_gerekli
-def roller_kullanici_kaydet():
-    """Kullanıcı ekle/güncelle. Body: {eposta, ad, rol, ac[], kapat[]}. E-posta hash'lenir;
-    ham e-posta/ad YALNIZ yerel dosyaya, tracked roller.json'a yalnız hash+rol+override."""
+def roller_kullanici_rol():
+    """Bir kullanıcıya rol ata. Body: {eposta, rol}. E-posta hash'lenir; roller.json'a
+    yalnız hash→rol yazılır (ham e-posta git'e girmez). rol='analist' varsayılana döner."""
     data = request.get_json(silent=True) or {}
     eposta = (data.get("eposta") or "").strip().lower()
-    ad = (data.get("ad") or "").strip()
     rol = data.get("rol") if data.get("rol") in GECERLI_ROLLER else "analist"
     if not _eposta_gecerli(eposta):
-        return jsonify({"ok": False, "error": f"Geçerli bir @{SIRKET_EPOSTA_DOMAIN} e-postası girin"}), 400
-    gecerli_id = {k["id"] for k in GIZLENEBILIR_KATALOG}
-    ac = [x for x in (data.get("ac") or []) if x in gecerli_id]
-    kapat = [x for x in (data.get("kapat") or []) if x in gecerli_id]
-    h = _eposta_hash(eposta)
+        return jsonify({"ok": False, "error": f"Geçerli bir @{SIRKET_EPOSTA_DOMAIN} e-postası gerekli"}), 400
     d = _roller_oku()
-    d["kullanicilar"][h] = {"rol": rol, "ac": ac, "kapat": kapat}
-    _roller_yaz(d["kullanicilar"])
-    yerel = _roller_yerel_oku()
-    yerel[h] = {"ad": ad, "eposta": eposta}
-    _roller_yerel_yaz(yerel)
-    return jsonify({"ok": True, "hash": h})
-
-
-@app.route("/api/roller/kullanici/<hash_>", methods=["DELETE"])
-@yetki_gerekli
-def roller_kullanici_sil(hash_):
-    """Kullanıcıyı defterden kaldırır (tracked + yerel)."""
-    d = _roller_oku()
-    if d["kullanicilar"].pop(hash_, None) is None:
-        return jsonify({"ok": False, "error": "Kullanıcı bulunamadı"}), 404
-    _roller_yaz(d["kullanicilar"])
-    yerel = _roller_yerel_oku()
-    if yerel.pop(hash_, None) is not None:
-        _roller_yerel_yaz(yerel)
+    d["kullanicilar"][_eposta_hash(eposta)] = rol
+    _roller_kaydet(d["kullanicilar"], d["ekran_roller"])
     return jsonify({"ok": True})
+
+
+@app.route("/api/roller/ekranlar", methods=["POST"])
+@yetki_gerekli
+def roller_ekranlar_kaydet():
+    """Ekran→rol atamalarını topluca kaydet. Body: {ekran_roller: {ekran_id: rol}} —
+    o ekranı görebilecek EN DÜŞÜK rol. Geçersiz id/rol elenir."""
+    data = request.get_json(silent=True) or {}
+    er = data.get("ekran_roller")
+    if not isinstance(er, dict):
+        return jsonify({"ok": False, "error": "ekran_roller sözlüğü zorunlu"}), 400
+    d = _roller_oku()
+    _roller_kaydet(d["kullanicilar"], er)
+    return jsonify({"ok": True, "ekran_roller": _roller_oku()["ekran_roller"]})
 
 
 # ─── Otomatik Güncelleme — v2 Faz 2.5 (bildirimli otomatik) ──────────────────

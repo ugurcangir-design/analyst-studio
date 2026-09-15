@@ -135,19 +135,21 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   kimlik_tam}`, POST domain doğrular. Telemetri olayına `eposta` eklenir (Kullanım Raporu stabil atıf).
   UI: Ayarlar e-posta alanı + kimlik eksikse kırmızı uyarı bandı (`_kimlikBandiGuncelle`). Honor-system
   (lokal, kendi-beyan — teknik engelleme değil, düzen/atıf). Test: `smoke_test` kimlik kapısı kontrolleri.
-  **Kullanıcı-bazlı ekran yetkisi (rol atamaları, Adım 2-3):** `roller.json` (repoda İZLENİR, **PII'siz**):
-  `{kullanicilar: {<eposta_hash>: {rol, ac[], kapat[]}}}`, `eposta_hash = sha256(_ROLLER_SALT + küçük-harf
-  e-posta)` → git'e ham e-posta GİRMEZ. Ham ad/e-posta YALNIZ owner'ın `reference/roller_yerel.json`'ında
-  (gitignore). **Etkin görünürlük** `_etkin_gizli()`: analist-default (`gorunurluk.json`) − kullanıcı `ac`
-  (ekstra göster) + `kapat` (ekstra gizle); per-user rol=`owner` → hiç gizlenmez; yerel owner (`_owner_mi`)
-  zaten her şeyi görür. `gorunurluk_kontrol` + `/api/auth/me.gizli` artık `_etkin_gizli` kullanır → her istekte
-  okunur, `git pull` sonrası restart'sız geçerli. **Owner-console SINIRI korunur:** e-posta ile "owner" ataması
-  Yetki/Kullanım ekranlarını AÇMAZ (o hâlâ `owner_konsol.json` lokal işaretinde) — yalnız analist ekran
-  görünürlüğünü yönetir. Uçlar (owner-gate `yetki_gerekli`): `GET /api/roller` (yerel ad/e-posta ile birleşik
-  liste), `POST /api/roller/kullanici` (eposta hash'lenir; ham → yerel, hash+rol+override → tracked),
-  `DELETE /api/roller/kullanici/<hash>`. UI: `screens/yetki.html` "Kullanıcılar & Roller" paneli (ekle/rol
-  dropdown/kullanıcı-bazlı ekran istisnası aç-kapat) + mevcut "Görünürlük" paneli (analist-default). Honor-system.
-  Test: `tests/test_roller.py`.
+  **Rol→ekran yetkisi (Adım 2-3, telemetri-güdümlü):** `roller.json` (repoda İZLENİR, **PII'siz**):
+  `{kullanicilar: {<eposta_hash>: rol}, ekran_roller: {ekran_id: rol}}`, `eposta_hash = sha256(_ROLLER_SALT +
+  küçük-harf e-posta)` → git'e ham e-posta GİRMEZ. **İsimler elle girilmez** — Kullanım Raporu'ndan
+  (`telemetri.analistler_listesi`, e-posta ile) çekilir; owner yalnız **rol atar** (dropdown). Ekranlar rollere
+  atanır (`ekran_roller`: o ekranı görebilecek EN DÜŞÜK rol). Roller rütbeli: `analist(0) < owner(1)`
+  (`_ROL_RUTBE`). **Etkin görünürlük** `_etkin_gizli()`: kullanıcının rolü, ekranın gerektirdiği rolden DÜŞÜKSE
+  ekran gizli; `_ekran_gerekli_rol` önceliği: `ekran_roller` ataması > eski `gorunurluk.json` (gizli→'owner')
+  fallback > 'analist'. Yerel owner (`_owner_mi`) her şeyi görür. `gorunurluk_kontrol` + `/api/auth/me.gizli`
+  bunu kullanır → her istekte okunur, `git pull` sonrası restart'sız geçerli. **Owner-console SINIRI korunur:**
+  e-posta ile "owner" rolü Yetki/Kullanım ekranlarını AÇMAZ (o hâlâ `owner_konsol.json` lokal işaretinde) —
+  yalnız normal ekran görünürlüğü. Uçlar (owner-gate `yetki_gerekli`): `GET /api/roller` (çekili kullanıcılar +
+  ekran-rolleri), `POST /api/roller/kullanici` (`{eposta, rol}` → hash→rol), `POST /api/roller/ekranlar`
+  (`{ekran_roller}` topluca). UI: `screens/yetki.html` — "Kullanıcılar & Roller" (çekili isimler + rol dropdown,
+  otomatik kayıt) + "Ekran Yetkileri" (her ekran → rol dropdown, Kaydet). `roller_yerel.json` KALDIRILDI
+  (isimler telemetriden). Honor-system. Test: `tests/test_roller.py`.
   Yeni gizlenebilir ekran/aksiyon → `GIZLENEBILIR_KATALOG` (app.py). **Owner konsolu (Kullanım Raporu +
   Yetki ekranları) — kilit `.env`'de DEĞİL, gitignore'lu YEREL DOSYADA:** `_owner_konsol_aktif()` yalnız
   `reference/owner_konsol.json` (`{"owner_konsol": true}`) okur; `_usage_yetkili_mi()` + `_yetki_paneli_mi()`
