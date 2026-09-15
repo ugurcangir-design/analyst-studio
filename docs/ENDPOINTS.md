@@ -42,7 +42,9 @@ GET  /api/jira/callback            OAuth dönüş
 POST /api/jira/test                Bağlantı testi (JIRA_URL ZORUNLU DEĞİL — site otomatik algılanır)
 POST /api/jira/hierarchy/preview   AI hiyerarşi önerir (Jira'ya YAZMAZ)
 POST /api/jira/hierarchy/create    Analist seçtiklerini Jira'da açar
-POST /api/jira/fe-be/preview       Teknik analizi DÜZ FE/BE görev(Task) listesine böler + BE→FE bağımlılık önerir (Jira'ya YAZMAZ)
+POST /api/jira/fe-be/preview       Teknik analizi DÜZ FE/BE görev(Task) listesine bölmeyi ARKA PLANDA başlatır → {job_id}
+                                     (uzun AI çağrısı; senkron istek 120s client-abort veriyordu). Jira'ya YAZMAZ.
+GET  /api/jira/fe-be/preview/durum/<job_id>  Önizleme işi durumu (polling): {durum:calisiyor|bitti|hata, ...sonuc}
 POST /api/jira/fe-be/create        Seçilen FE/BE görevlerini Task olarak açar + ilişkili BE→FE Blocks bağını kurar
 POST /api/jira/gorevler/cek        FAZ 1: alt görevleri çek + YAPISAL sınıflandır (AI'sız, 0 token)
 POST /api/jira/gorevler/siniflandir FAZ 2: yeniden çek + AI ile içerikten sınıflandır (opt-in)
@@ -81,10 +83,16 @@ eski takip-Excel senkron akışının yerini board-to-board mutabakat aldı.
 
 ## Kullanım Raporu (Telemetri — owner-only, 0 token; skills/telemetri.py)
 ```
-GET  /api/auth/me                  → {username, is_admin, usage_admin}. usage_admin = USAGE_DASHBOARD
-                                     bayrağı (AUTH'tan bağımsız owner-gate).
-GET  /api/analist                  Bu makinedeki analist ad-soyad (analist.json). Owner-gate YOK.
-POST /api/analist                  {ad_soyad} → analist.json'a yazar (UI'dan kimlik; .env gerekmez).
+GET  /api/auth/me                  → {username, is_admin, usage_admin, yetki_admin, rol, gizli[]}. usage_admin/
+                                     yetki_admin = `reference/owner_konsol.json` işaret dosyası (env DEĞİL). gizli[] =
+                                     bu kullanıcı için ETKİN gizli ekran id'leri (rol→ekran, _etkin_gizli).
+GET  /api/analist                  Bu makinedeki analist kimliği → {ad_soyad, eposta, domain, kimlik_tam}.
+                                     Owner-gate YOK (herkes kendi kimliğini ayarlar). analist.json (YEREL+gitignore).
+POST /api/analist                  {ad_soyad, eposta} → analist.json'a yazar. E-posta ZORUNLU + @<SIRKET_EPOSTA_DOMAIN>
+                                     (varsayılan sans-technology.com); geçersizse 400. Arka planda telemetri.kimlik_bildir()
+                                     → owner Yetki roster'ında görünür. ZORUNLU KİMLİK KAPISI (before_request kimlik_kontrol):
+                                     kimlik tam değilse iş-başlatma uçları (upload/run/rerun/delta/mockup/jira-gorev/
+                                     jira-fe-be/sorular-uygula/adim-duzelt/geri-don) mutating isteklerde 403 kimlik_eksik.
 GET  /api/usage/stats?gun=90&donem=gun|hafta|ay&analist=<ad>
                                      Owner-only. Dönem bazlı (gün/hafta/ay trend) + analist filtresi.
                                      403 eğer USAGE_DASHBOARD yok. Dönüş: ozet{bugun,bu_hafta,bu_ay},
@@ -158,10 +166,21 @@ Ekran adı: **Yetki** (`screens/yetki.html`; eski "Yetki & Denetim").
 ```
 GET  /api/gorunurluk   Gizlenebilir katalog (GIZLENEBILIR_KATALOG: id/ad/grup/endpoints) + gizli[]   [yetki_gerekli]
 POST /api/gorunurluk   {gizli:[id]} → gorunurluk.json (repoda İZLENİR; analistlere güncellemeyle iner) [yetki_gerekli]
+GET  /api/roller             Yetki roster'ı: kullanicilar[] (Kullanım Raporu'ndan çekili ad+e-posta + atanmış rol +
+                             atanabilir) + ekranlar[] (id/ad/grup + görebilecek EN DÜŞÜK rol) + roller[] + domain [yetki_gerekli]
+POST /api/roller/kullanici   {eposta, rol} → hash→rol (roller.json TRACKED, PII'siz). E-posta hash'lenir; geçersiz domain 400 [yetki_gerekli]
+POST /api/roller/ekranlar    {ekran_roller:{id:rol}} → ekran→rol (topluca). rol='analist'(Herkes)|'owner'(Yalnız owner) [yetki_gerekli]
 ```
-**Yetki ekranı owner-KURULUM kapısı:** `yetki_gerekli` = `YETKI_PANELI=true` (verilmezse `USAGE_DASHBOARD`'a düşer)
-**ve** owner. Kendi makinesine kuran analist AUTH kapalıyken 'owner' sayıldığı için rol yetmez; bayrak analist
-kurulumunda yoktur → nav gizli (`auth/me.yetki_admin=false`) + endpoint 403.
+**Rol→ekran modeli (kullanıcı-bazlı yetki):** `roller.json` (repoda İZLENİR, **PII'siz**):
+`{kullanicilar:{<sha256(salt+e-posta)>:rol}, ekran_roller:{id:rol}}`. İsimler **elle girilmez** — Kullanım
+Raporu'ndan (telemetri) çekilir; owner rol atar + ekranları rollere atar. `_etkin_gizli()`: kullanıcının rolü
+ekranın gerektirdiği rolden DÜŞÜKSE ekran gizli (`_ekran_gerekli_rol`: ekran_roller > eski gorunurluk.json
+fallback > analist). Analistlere güncellemeyle iner, her istekte okunur (restart'sız). **Owner-console
+SINIRI:** e-posta ile 'owner' rolü Yetki/Kullanım'ı AÇMAZ (o hâlâ `reference/owner_konsol.json`).
+**Yetki ekranı owner-KURULUM kapısı:** `yetki_gerekli` = `_owner_konsol_aktif()` (gitignore'lu YEREL
+`reference/owner_konsol.json` `{"owner_konsol":true}`; env bayrağı DEĞİL) **ve** owner. Kendi makinesine
+kuran analist AUTH kapalıyken 'owner' sayıldığı için rol yetmez; işaret dosyası analist kurulumunda yoktur
+→ nav gizli (`auth/me.yetki_admin=false`) + endpoint 403.
 ```
 ```
 Sunucu tarafı: `gorunurluk_kontrol` before_request — analist için gizli id'lerin `endpoints` ön ekleri 403.
