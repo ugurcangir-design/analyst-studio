@@ -125,6 +125,16 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   **Roller:** owner (AUTH kapalı → tek kullanıcı; açık → `ADMIN_USER`) / analist. Analist, owner'ın
   `gorunurluk.json`'da (repoda İZLENİR) gizlediği id'ler hariç her şeyi kullanır; sunucu tarafı
   `gorunurluk_kontrol` + UI `_rolUygula()`. (Denetim/audit kaydı v3'te kaldırıldı — üstteki UI v3 notuna bak.)
+  **Analist kimliği — ZORUNLU şirket e-postası (agent kapısı, Adım 1):** Ayarlar'da ad-soyad + şirket
+  e-postası (`analist.json`, YEREL+gitignore → ham e-posta git'e girmez). Domain zorunlu:
+  `SIRKET_EPOSTA_DOMAIN` (koda gömülü default `sans-technology.com`, env ile ezilebilir — telemetri sink
+  URL'i gibi operasyonel sabit). `_eposta_gecerli` (format + domain) + `_kimlik_tam_mi`. `before_request`
+  **`kimlik_kontrol`**: kimlik tam değilse `_KIMLIK_GEREKLI_ONEKLER`'deki iş-başlatma uçları (upload/run/
+  rerun/delta/mockup/jira-gorev/jira-fe-be/sorular-uygula/adim-duzelt/geri-don) mutating isteklerde 403
+  `kimlik_eksik` döner (GET/okuma + `/api/analist` serbest). `/api/analist` GET `{ad_soyad,eposta,domain,
+  kimlik_tam}`, POST domain doğrular. Telemetri olayına `eposta` eklenir (Kullanım Raporu stabil atıf).
+  UI: Ayarlar e-posta alanı + kimlik eksikse kırmızı uyarı bandı (`_kimlikBandiGuncelle`). Honor-system
+  (lokal, kendi-beyan — teknik engelleme değil, düzen/atıf). Test: `smoke_test` kimlik kapısı kontrolleri.
   Yeni gizlenebilir ekran/aksiyon → `GIZLENEBILIR_KATALOG` (app.py). **Owner konsolu (Kullanım Raporu +
   Yetki ekranları) — kilit `.env`'de DEĞİL, gitignore'lu YEREL DOSYADA:** `_owner_konsol_aktif()` yalnız
   `reference/owner_konsol.json` (`{"owner_konsol": true}`) okur; `_usage_yetkili_mi()` + `_yetki_paneli_mi()`

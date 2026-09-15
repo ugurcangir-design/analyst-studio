@@ -35,19 +35,36 @@ def _sink_url() -> str:
     return os.getenv("USAGE_SINK_URL", "").strip() or VARSAYILAN_SINK_URL
 
 
-def analist_oku() -> str:
-    """UI'dan kaydedilen analist ad-soyad. Yoksa ''."""
+def analist_kimlik_oku() -> dict:
+    """UI'dan kaydedilen analist kimliği: {ad_soyad, eposta}. Yoksa boş dizeler.
+    analist.json YEREL + gitignore → ham e-posta git'e ASLA girmez."""
     try:
         d = json.loads(ANALIST_DOSYA.read_text(encoding="utf-8"))
-        return str(d.get("ad_soyad", "")).strip()
+        return {"ad_soyad": str(d.get("ad_soyad", "")).strip(),
+                "eposta": str(d.get("eposta", "")).strip()}
     except Exception:
-        return ""
+        return {"ad_soyad": "", "eposta": ""}
 
 
-def analist_yaz(ad_soyad: str) -> None:
+def analist_oku() -> str:
+    """UI'dan kaydedilen analist ad-soyad. Yoksa ''."""
+    return analist_kimlik_oku()["ad_soyad"]
+
+
+def analist_eposta_oku() -> str:
+    """UI'dan kaydedilen analist şirket e-postası (küçük harf). Yoksa ''."""
+    return analist_kimlik_oku()["eposta"].lower()
+
+
+def analist_yaz(ad_soyad: str, eposta: str | None = None) -> None:
+    """Analist kimliğini yazar. `eposta` None ise mevcut e-posta KORUNUR (ad-soyad tek
+    başına güncellenebilir); dize (boş dahil) verilirse üzerine yazılır."""
     try:
+        mevcut = analist_kimlik_oku()
+        yeni_eposta = mevcut["eposta"] if eposta is None else (eposta or "").strip()
         ANALIST_DOSYA.write_text(
-            json.dumps({"ad_soyad": (ad_soyad or "").strip()}, ensure_ascii=False),
+            json.dumps({"ad_soyad": (ad_soyad or "").strip(), "eposta": yeni_eposta},
+                       ensure_ascii=False),
             encoding="utf-8")
     except Exception:
         pass
@@ -151,6 +168,7 @@ def olay_yaz(
         kayit = {
             "ts": datetime.now().isoformat(timespec="seconds"),
             "analist": _analist_belirle(analist),
+            "eposta": analist_eposta_oku() or None,   # Kullanım Raporu'nda stabil atıf anahtarı
             "olay": olay,
             "durum": durum,
             "sure_ms": sure_ms,

@@ -16,9 +16,11 @@ os.environ["AUTH_ENABLED"] = "true"
 os.environ["ADMIN_USER"] = "owner.test"
 os.environ["AUTO_UPDATE"] = "false"
 os.environ.setdefault("SECRET_KEY", "test")
+os.environ.setdefault("SIRKET_EPOSTA_DOMAIN", "example.com")
 
 from werkzeug.security import generate_password_hash   # noqa: E402
 import app as uygulama                                  # noqa: E402
+from skills import telemetri as _tel                    # noqa: E402,F401
 
 _tmp = Path(tempfile.mkdtemp())
 uygulama.USERS_PATH = _tmp / "users.json"
@@ -28,6 +30,8 @@ uygulama.USERS_PATH.write_text(json.dumps({
 }), encoding="utf-8")
 uygulama.GORUNURLUK_PATH = _tmp / "gorunurluk.json"    # gerçek gorunurluk.json'a dokunma
 uygulama.OUTPUT_DIR = _tmp
+_tel.ANALIST_DOSYA = _tmp / "analist.json"             # kimlik kapısı: geçerli kimlik (gated POST'lar geçsin)
+_tel.analist_yaz("Rol Test", "rol@example.com")
 
 ORIGIN = {"Origin": "http://localhost"}
 ok = 0

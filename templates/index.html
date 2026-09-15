@@ -3563,15 +3563,21 @@ function temaDegistir() {
 
         <!-- Analist Kimliği -->
         <div class="settings-section">
-          <div class="section-title">Analist Adı Soyadı</div>
-          <div class="section-desc">Kullanım kayıtlarında bu ad ile görünürsünüz. Bir kez ayarlamanız yeterli.</div>
+          <div class="section-title">Analist Kimliği <span style="color:var(--red);font-weight:600">(zorunlu)</span></div>
+          <div class="section-desc">Ad-soyad ve <strong>şirket e-postanız</strong> zorunludur — bu bilgi girilmeden analiz başlatılamaz. Kullanım kayıtlarında ve ekran yetkilerinde bu kimlik kullanılır. Bir kez ayarlamanız yeterli.</div>
           <div class="form-group">
             <label>Ad Soyad</label>
+            <input type="text" id="analist-input" placeholder="örn: Ad Soyad" autocomplete="off" style="width:100%;box-sizing:border-box"
+              onkeydown="if(event.key==='Enter') document.getElementById('analist-eposta-input').focus()">
+          </div>
+          <div class="form-group" style="margin-top:10px">
+            <label>Şirket E-postası</label>
             <div style="display:flex;gap:8px;align-items:center">
-              <input type="text" id="analist-input" placeholder="örn: Ad Soyad" autocomplete="off" style="flex:1"
+              <input type="email" id="analist-eposta-input" placeholder="ad.soyad@sans-technology.com" autocomplete="off" style="flex:1"
                 onkeydown="if(event.key==='Enter') analistKaydet()">
               <button class="btn btn-primary btn-sm" onclick="analistKaydet()">Kaydet</button>
             </div>
+            <div class="field-sub" id="analist-eposta-ipucu" style="margin-top:6px">Yalnız şirket e-postası kabul edilir.</div>
             <div id="analist-durum" style="font-size:11px;color:var(--text3);margin-top:6px"></div>
           </div>
         </div>
@@ -4185,7 +4191,13 @@ function navBolumAcKapa(sec, force) {
 (function _telifYili() { const y = document.getElementById('brand-copyright-yil'); if (y) y.textContent = new Date().getFullYear(); })();
 (async () => {
   try { _rolUygula(await (await fetch('/api/auth/me')).json() || {}); } catch (e) {}
-  try { const a = await (await fetch('/api/analist')).json(); _analistKimligiUygula(a.ad_soyad || ''); } catch (e) {}
+  try {
+    const a = await (await fetch('/api/analist')).json();
+    _analistKimligiUygula(a.ad_soyad || '');
+    _kimlikDomain = a.domain || _kimlikDomain;
+    _kimlikTam = !!a.kimlik_tam;
+    _kimlikBandiGuncelle();
+  } catch (e) {}
   // Çalışan sürüm (git commit) sidebar'da göster → "güncelledim ama eski ekran" anında görünür
   try {
     const v = await (await fetch('/api/version', {cache:'no-store'})).json();
@@ -4208,29 +4220,64 @@ function _analistKimligiUygula(ad) {
   const akAv = document.getElementById('ak-avatar'); if (akAv) akAv.textContent = ini;
   const tbAv = document.getElementById('topbar-avatar'); if (tbAv) { tbAv.textContent = ini; tbAv.title = ad || 'Analist'; }
 }
+let _kimlikTam = true;         // şirket e-postası girili mi (agent kapısı)
+let _kimlikDomain = 'sans-technology.com';
 async function analistYukle() {
   try {
     const d = await (await fetch('/api/analist')).json();
     const el = document.getElementById('analist-input');
     if (el) el.value = d.ad_soyad || '';
+    const ep = document.getElementById('analist-eposta-input');
+    if (ep) ep.value = d.eposta || '';
+    _kimlikDomain = d.domain || _kimlikDomain;
+    const ipucu = document.getElementById('analist-eposta-ipucu');
+    if (ipucu) ipucu.textContent = 'Yalnız @' + _kimlikDomain + ' e-postası kabul edilir.';
+    const ep2 = document.getElementById('analist-eposta-input');
+    if (ep2) ep2.placeholder = 'ad.soyad@' + _kimlikDomain;
+    _kimlikTam = !!d.kimlik_tam;
+    _kimlikBandiGuncelle();
     _analistKimligiUygula(d.ad_soyad || '');
   } catch (e) {}
 }
 async function analistKaydet() {
   const el = document.getElementById('analist-input');
+  const ep = document.getElementById('analist-eposta-input');
   const durum = document.getElementById('analist-durum');
   const ad = (el ? el.value : '').trim();
+  const eposta = (ep ? ep.value : '').trim().toLowerCase();
   if (!ad) { if (durum) durum.textContent = 'Ad soyad boş olamaz.'; return; }
+  if (!eposta) { if (durum) durum.textContent = 'Şirket e-postası zorunlu.'; return; }
+  if (!eposta.endsWith('@' + _kimlikDomain)) {
+    if (durum) durum.textContent = 'Yalnız @' + _kimlikDomain + ' e-postası kabul edilir.'; return;
+  }
   try {
     const r = await fetch('/api/analist', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ad_soyad: ad }),
+      body: JSON.stringify({ ad_soyad: ad, eposta }),
     });
     const d = await r.json();
-    if (durum) durum.textContent = d.ok ? ('Kaydedildi: ' + d.ad_soyad) : ('Hata: ' + (d.error || ''));
-    if (d.ok) _analistKimligiUygula(d.ad_soyad);
-    if (d.ok && typeof toast === 'function') toast('ok', 'Kaydedildi', 'Analist: ' + d.ad_soyad);
+    if (durum) durum.textContent = d.ok ? ('Kaydedildi: ' + d.ad_soyad + ' · ' + d.eposta) : ('Hata: ' + (d.error || ''));
+    if (d.ok) {
+      _analistKimligiUygula(d.ad_soyad);
+      _kimlikTam = !!d.kimlik_tam;
+      _kimlikBandiGuncelle();
+      if (typeof toast === 'function') toast('ok', 'Kaydedildi', 'Kimlik: ' + d.ad_soyad);
+    }
   } catch (e) { if (durum) durum.textContent = 'Kaydedilemedi.'; }
+}
+// Kimlik eksikse üstte kalıcı uyarı bandı (agent çalışmaz — Ayarlar'a yönlendir)
+function _kimlikBandiGuncelle() {
+  let b = document.getElementById('kimlik-uyari-band');
+  if (_kimlikTam) { if (b) b.remove(); return; }
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'kimlik-uyari-band';
+    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9800;background:var(--red);color:#fff;'
+      + 'padding:8px 16px;font-size:12.5px;font-weight:600;text-align:center;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.3)';
+    b.onclick = () => switchTab('settings');
+    document.body.appendChild(b);
+  }
+  b.textContent = '⚠ Şirket e-postanız girilmeden analiz başlatılamaz — Ayarlar\'dan kimliğinizi tamamlayın (tıklayın).';
 }
 
 // ─── Jira Görevleri ───────────────────────────────────────────────────────────

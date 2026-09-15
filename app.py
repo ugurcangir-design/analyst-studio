@@ -233,6 +233,37 @@ def _auth_aktif_mi() -> bool:
     return os.getenv("AUTH_ENABLED", "false").lower() in ("1", "true", "yes")
 
 
+# ─── Analist kimliği — zorunlu şirket e-postası ───────────────────────────────
+# Şirket domain'i koda gömülü (env ile ezilebilir) — telemetri sink URL'i gibi operasyonel
+# sabit; git ile tüm analistlere iner. Ham analist e-postaları YEREL analist.json'da (gitignore).
+SIRKET_EPOSTA_DOMAIN = os.getenv("SIRKET_EPOSTA_DOMAIN", "sans-technology.com").strip().lower()
+_EPOSTA_DESEN = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+
+
+def _eposta_gecerli(eposta: str) -> bool:
+    """Geçerli e-posta formatı + (tanımlıysa) zorunlu şirket domain'i."""
+    e = (eposta or "").strip().lower()
+    if not _EPOSTA_DESEN.match(e):
+        return False
+    return e.endswith("@" + SIRKET_EPOSTA_DOMAIN) if SIRKET_EPOSTA_DOMAIN else True
+
+
+def _kimlik_tam_mi() -> bool:
+    """Analiz başlatmak için ad-soyad + geçerli şirket e-postası ZORUNLU (agent kapısı)."""
+    from skills import telemetri
+    k = telemetri.analist_kimlik_oku()
+    return bool(k["ad_soyad"]) and _eposta_gecerli(k["eposta"])
+
+
+# Kimlik (şirket e-postası) girilmeden ÇALIŞTIRILAMAYAN iş-başlatma uçları (mutating).
+# Durum/okuma (GET) ve Ayarlar (/api/analist) engellenmez → analist kimliğini girebilir.
+_KIMLIK_GEREKLI_ONEKLER = (
+    "/api/upload", "/api/run", "/api/rerun", "/api/delta-analiz",
+    "/api/mockup/generate", "/api/jira/gorev", "/api/jira/fe-be",
+    "/api/sorular/uygula", "/api/adim/duzelt", "/api/geri-don",
+)
+
+
 OWNER_KONSOL_PATH = REF_DIR / "owner_konsol.json"
 
 
@@ -367,6 +398,23 @@ def gorunurluk_kontrol():
         if k["id"] in gizli and any(request.path.startswith(p) for p in k["endpoints"]):
             return jsonify({"error": "Bu işlem sizin için kapalı (owner tarafından gizlendi)", "gizli": k["id"]}), 403
     return None
+
+
+@app.before_request
+def kimlik_kontrol():
+    """Şirket e-postası girilmeden iş-başlatma uçlarını engeller (agent çalışmasın).
+    GET/okuma ve Ayarlar hariç; kimlik tamsa geçer."""
+    if request.method == "GET":
+        return None
+    if not any(request.path.startswith(p) for p in _KIMLIK_GEREKLI_ONEKLER):
+        return None
+    if _kimlik_tam_mi():
+        return None
+    return jsonify({
+        "error": f"Devam etmek için Ayarlar'dan @{SIRKET_EPOSTA_DOMAIN} şirket "
+                 "e-postanızı girin (ad-soyad + e-posta zorunlu).",
+        "kimlik_eksik": True,
+    }), 403
 
 
 def _token_bas() -> bool:
@@ -2756,21 +2804,31 @@ def auth_me():
 
 @app.route("/api/analist", methods=["GET"])
 def analist_getir():
-    """Bu makinedeki analist ad-soyad (UI için). Owner-gate YOK — herkes kendi adını ayarlar."""
+    """Bu makinedeki analist kimliği (ad-soyad + şirket e-postası). Owner-gate YOK —
+    herkes kendi kimliğini ayarlar. `domain`/`kimlik_tam` UI kapısı için."""
     from skills import telemetri
-    return jsonify({"ad_soyad": telemetri.analist_oku()})
+    k = telemetri.analist_kimlik_oku()
+    return jsonify({"ad_soyad": k["ad_soyad"], "eposta": k["eposta"],
+                    "domain": SIRKET_EPOSTA_DOMAIN, "kimlik_tam": _kimlik_tam_mi()})
 
 
 @app.route("/api/analist", methods=["POST"])
 def analist_kaydet():
-    """Analist kendi ad-soyadını kaydeder (.env düzenlemeden). Telemetri atfı buna göre yapılır."""
+    """Analist kendi ad-soyad + şirket e-postasını kaydeder. E-posta ZORUNLU ve
+    @<domain> olmalı (agent bu bilgi olmadan çalışmaz). Telemetri atfı buna göre yapılır."""
     data = request.get_json(silent=True) or {}
     ad_soyad = (data.get("ad_soyad") or "").strip()
+    eposta = (data.get("eposta") or "").strip().lower()
     if not ad_soyad:
         return jsonify({"ok": False, "error": "Ad soyad boş olamaz"}), 400
+    if not eposta:
+        return jsonify({"ok": False, "error": "Şirket e-postası zorunlu"}), 400
+    if not _eposta_gecerli(eposta):
+        return jsonify({"ok": False,
+                        "error": f"Geçerli bir @{SIRKET_EPOSTA_DOMAIN} e-postası girin"}), 400
     from skills import telemetri
-    telemetri.analist_yaz(ad_soyad)
-    return jsonify({"ok": True, "ad_soyad": ad_soyad})
+    telemetri.analist_yaz(ad_soyad, eposta)
+    return jsonify({"ok": True, "ad_soyad": ad_soyad, "eposta": eposta, "kimlik_tam": True})
 
 
 @app.route("/api/usage/stats", methods=["GET"])

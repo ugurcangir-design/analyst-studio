@@ -20,6 +20,7 @@ os.environ.setdefault("AUTO_UPDATE", "false")      # arka plan thread'i başlatm
 os.environ.setdefault("AUTH_ENABLED", "false")
 os.environ.setdefault("JIRA_KOPRU", "false")       # köprü döngüsünü başlatma + durum testi deterministik
 os.environ.setdefault("JIRA_KOPRU_PROJELER", "")   # makinenin .env'i (JIRA_KOPRU=true) test sonucunu etkilemesin
+os.environ.setdefault("SIRKET_EPOSTA_DOMAIN", "example.com")  # kimlik kapısı testi jenerik domain'le deterministik
 
 import skills.jira_kopru as _jk_mod                # noqa: E402
 _jk_mod._kopru_config = lambda: {}                # seed'lenen jira_kopru.json'u yok say → .env deterministik (KAPALI)
@@ -36,6 +37,12 @@ uygulama.OUTPUT_DIR = _tmp                         # app.py'nin çıktı dizini 
 
 istemci = uygulama.app.test_client()
 ORIGIN = {"Origin": "http://localhost"}            # CSRF same-origin
+
+# Kimlik kapısı deterministik: geçici analist.json + geçerli kimlik (gated POST'lar geçsin)
+from skills import telemetri as _tel               # noqa: E402
+_tel.ANALIST_DOSYA = _tmp / "analist.json"
+_tel.analist_yaz("Smoke Analist", "smoke@example.com")
+
 basari = 0
 
 
@@ -115,6 +122,24 @@ _fbn = _fbm._gorevleri_normalize([
 ])
 kontrol("jira_fe_be: hayalet bağımlılık düşer (BE-YOK atılır)",
         _fbn[1]["bagimli_be"] == ["BE-1"])
+
+# ── Analist kimliği — zorunlu şirket e-postası (agent kapısı) ──────────────────
+kontrol("eposta doğrulama: @example.com geçerli", uygulama._eposta_gecerli("a@example.com"))
+kontrol("eposta doğrulama: yanlış domain reddedilir", not uygulama._eposta_gecerli("a@gmail.com"))
+kontrol("eposta doğrulama: boş reddedilir", not uygulama._eposta_gecerli(""))
+_ka = istemci.post("/api/analist", json={"ad_soyad": "X", "eposta": "x@gmail.com"}, headers=ORIGIN)
+kontrol("/api/analist yanlış domain → 400", _ka.status_code == 400)
+_kg = istemci.get("/api/analist")
+kontrol("/api/analist GET domain + kimlik_tam döner",
+        _kg.get_json().get("domain") == "example.com" and _kg.get_json().get("kimlik_tam") is True)
+# Kimlik boşken iş-başlatma ucu 403 kimlik_eksik; sonra geri yükle
+_tel.ANALIST_DOSYA = _tmp / "kimlik_yok.json"
+_kk = istemci.post("/api/sorular/uygula", json={}, headers=ORIGIN)
+kontrol("kimlik yokken iş-başlatma → 403 kimlik_eksik",
+        _kk.status_code == 403 and (_kk.get_json() or {}).get("kimlik_eksik") is True)
+_kget = istemci.get("/api/oturum")
+kontrol("kimlik yokken GET okuma engellenmez", _kget.status_code == 200)
+_tel.ANALIST_DOSYA = _tmp / "analist.json"          # geçerli kimliği geri yükle (sonraki testler)
 # Katman başlık öneki (FE - / BE -) — tüm task açma yollarında ortak
 _jt = importlib.import_module("skills.jira_tasks")
 kontrol("katman öneki: FE → 'FE - …'", _jt._katman_prefix("FE", "Sipariş ekranı") == "FE - Sipariş ekranı")
