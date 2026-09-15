@@ -356,7 +356,9 @@ def _owner_mi() -> bool:
 
 
 def _rol() -> str:
-    return "owner" if _owner_mi() else "analist"
+    # Görünürlük/ekran rolü ETKİN role dayanır (owner_konsol/admin → owner; yoksa roller.json'daki
+    # atanmış rol). AUTH-off'ta _owner_mi herkes için True olduğundan _rol'ü ona bağlamak yanlıştı.
+    return _etkin_rol()
 
 
 def _gorunurluk_oku() -> list[str]:
@@ -454,6 +456,24 @@ def _bu_kullanici_rol() -> str:
     return _roller_oku()["kullanicilar"].get(h, "analist")
 
 
+def _etkin_rol() -> str:
+    """ETKİN ekran-görünürlük rolü. Owner-console işareti (`owner_konsol.json`) ya da AUTH admin
+    → 'owner'. Aksi hâlde yerel e-postaya `roller.json`'da atanmış rol (default 'analist').
+
+    KRİTİK: AUTH kapalıyken (pilot) herkes teknik olarak `_owner_mi`'dir; ekran yetkisini buna
+    bağlarsak roller HİÇBİR ŞEY yapmaz. Bu yüzden görünürlük `_owner_mi`'den DEĞİL, bu ETKİN
+    rolden hesaplanır → owner (kendi makinesinde owner_konsol=true) her şeyi görür, atanmış
+    analistlerde owner-only ekranlar gizlenir.
+
+    AUTH-SUNUCU modunda owner = ADMIN_USER (`_admin_mi`); owner_konsol.json (per-makine lokal
+    işaret) çok-kullanıcılı sunucuda anlamsızdır, dikkate alınmaz."""
+    if _auth_aktif_mi():
+        return "owner" if _admin_mi() else _bu_kullanici_rol()
+    if _owner_konsol_aktif():
+        return "owner"
+    return _bu_kullanici_rol()
+
+
 def _ekran_gerekli_rol(ekran_id: str, ekran_roller: dict, gizli_default: set) -> str:
     """Bir ekranı görmek için gereken EN DÜŞÜK rol. Öncelik: ekran_roller ataması >
     eski gorunurluk.json (gizli → 'owner') > varsayılan 'analist'."""
@@ -463,12 +483,13 @@ def _ekran_gerekli_rol(ekran_id: str, ekran_roller: dict, gizli_default: set) ->
 
 
 def _etkin_gizli() -> list[str]:
-    """Bu kullanıcı için ETKİN gizli ekran id'leri: rolü, ekranın gerektirdiği rolden
-    DÜŞÜKSE ekran gizlidir. Yerel owner (owner_konsol → _owner_mi) her şeyi görür."""
-    if _owner_mi():
+    """Bu kullanıcı için ETKİN gizli ekran id'leri: ETKİN rolü, ekranın gerektirdiği rolden
+    DÜŞÜKSE ekran gizlidir. Owner (owner_konsol/admin) her şeyi görür → []."""
+    rol = _etkin_rol()
+    if rol == "owner":
         return []
     d = _roller_oku()
-    my_rank = _ROL_RUTBE.get(_bu_kullanici_rol(), 0)
+    my_rank = _ROL_RUTBE.get(rol, 0)
     gizli_default = set(_gorunurluk_oku())
     hidden = []
     for k in GIZLENEBILIR_KATALOG:
@@ -481,8 +502,8 @@ def _etkin_gizli() -> list[str]:
 @app.before_request
 def gorunurluk_kontrol():
     """Analist için gizlenen ekranların endpoint'lerini sunucu tarafında engeller
-    (kullanıcı-bazlı override dahil — `_etkin_gizli`)."""
-    if _owner_mi() or not request.path.startswith("/api/"):
+    (ETKİN role göre — `_etkin_gizli`; _owner_mi DEĞİL, yoksa AUTH-off'ta herkes owner sayılırdı)."""
+    if _etkin_rol() == "owner" or not request.path.startswith("/api/"):
         return None
     gizli = set(_etkin_gizli())
     if not gizli:
@@ -2986,7 +3007,7 @@ def auth_me():
     return jsonify({"username": session.get("username"), "is_admin": _admin_mi(),
                     "usage_admin": _usage_yetkili_mi(),
                     "yetki_admin": _yetki_paneli_mi() and _owner_mi(),
-                    "rol": _rol(), "gizli": _etkin_gizli()})
+                    "rol": _rol(), "gizli": _etkin_gizli(), "auth_aktif": _auth_aktif_mi()})
 
 
 @app.route("/api/analist", methods=["GET"])

@@ -152,10 +152,15 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   küçük-harf e-posta)` → git'e ham e-posta GİRMEZ. **İsimler elle girilmez** — Kullanım Raporu'ndan
   (`telemetri.analistler_listesi`, e-posta ile) çekilir; owner yalnız **rol atar** (dropdown). Ekranlar rollere
   atanır (`ekran_roller`: o ekranı görebilecek EN DÜŞÜK rol). Roller rütbeli: `analist(0) < owner(1)`
-  (`_ROL_RUTBE`). **Etkin görünürlük** `_etkin_gizli()`: kullanıcının rolü, ekranın gerektirdiği rolden DÜŞÜKSE
-  ekran gizli; `_ekran_gerekli_rol` önceliği: `ekran_roller` ataması > eski `gorunurluk.json` (gizli→'owner')
-  fallback > 'analist'. Yerel owner (`_owner_mi`) her şeyi görür. `gorunurluk_kontrol` + `/api/auth/me.gizli`
-  bunu kullanır → her istekte okunur, `git pull` sonrası restart'sız geçerli. **Owner-console SINIRI korunur:**
+  (`_ROL_RUTBE`). **ETKİN rol (`_etkin_rol`) — KRİTİK:** görünürlük `_owner_mi`'ye DEĞİL ETKİN role dayanır
+  (yoksa AUTH-off pilotta herkes `_owner_mi`=True → roller HİÇ çalışmazdı). AUTH-off: `owner` = `owner_konsol.json`
+  işareti, yoksa yerel e-postaya atanmış rol (default analist). AUTH-sunucu: `owner` = `ADMIN_USER` (`_admin_mi`);
+  owner_konsol per-makine işareti sunucuda YOK SAYILIR. **Etkin görünürlük** `_etkin_gizli()`: ETKİN rol, ekranın
+  gerektirdiği rolden DÜŞÜKSE ekran gizli; `_ekran_gerekli_rol` önceliği: `ekran_roller` > eski `gorunurluk.json`
+  (gizli→'owner') > 'analist' (VARSAYILAN: hiçbir şey gizli değil — owner "Yalnız owner" atayana kadar). `_rol()` +
+  `gorunurluk_kontrol` + `/api/auth/me.{rol,gizli,auth_aktif}` bunu kullanır → her istekte okunur, restart'sız.
+  **UI `_rolUygula`:** `me.gizli` HER ZAMAN uygulanır; Yönetim grubunu wholesale gizleme YALNIZ AUTH-sunucu
+  analistinde (AUTH-off analist Ayarlar/Güncelleme/Jira Ayarları'na erişmeli — e-posta ZORUNLU). **Owner-console SINIRI korunur:**
   e-posta ile "owner" rolü Yetki/Kullanım ekranlarını AÇMAZ (o hâlâ `owner_konsol.json` lokal işaretinde) —
   yalnız normal ekran görünürlüğü. Uçlar (owner-gate `yetki_gerekli`): `GET /api/roller` (çekili kullanıcılar +
   ekran-rolleri), `POST /api/roller/kullanici` (`{eposta, rol}` → hash→rol), `POST /api/roller/ekranlar`

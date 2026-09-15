@@ -57,8 +57,9 @@ kontrol("okuma: ekran rolü", d["ekran_roller"]["delta"] == "owner")
 app.ROLLER_PATH.write_text(json.dumps({"kullanicilar": {h: {"rol": "owner", "ac": [], "kapat": []}}}), encoding="utf-8")
 kontrol("eski format kullanıcı rolü okunur", app._roller_oku()["kullanicilar"][h] == "owner")
 
-# ── Etkin görünürlük (rol rütbesi) ────────────────────────────────────────────
-app._owner_mi = lambda: False
+# ── Etkin görünürlük (rol rütbesi) — analist simülasyonu (owner-console kapalı) ──
+app._owner_konsol_aktif = lambda: False   # ETKİN rol: owner_konsol/admin değil → roller'daki rol
+app._admin_mi = lambda: False
 app.GORUNURLUK_PATH.write_text(json.dumps({"gizli": ["brd"]}), encoding="utf-8")   # eski default: brd → owner
 app._roller_kaydet({h: "analist"}, {"delta": "owner", "kod": "analist"})
 telemetri.analist_yaz("Emin", "emin@example.com")
@@ -75,9 +76,15 @@ kontrol("owner rolü → hiç gizli yok", app._etkin_gizli() == [])
 telemetri.ANALIST_DOSYA = tmp / "yok.json"
 kontrol("kimlik yoksa analist default", set(app._etkin_gizli()) == {"delta", "brd"})
 
-# yerel owner her şeyi görür
-app._owner_mi = lambda: True
-kontrol("yerel owner → hiç gizli", app._etkin_gizli() == [])
+# owner-console açık → ETKİN rol owner → her şeyi görür (roller'daki rol ne olursa olsun)
+app._owner_konsol_aktif = lambda: True
+kontrol("owner-console → hiç gizli", app._etkin_gizli() == [])
+kontrol("owner-console → _etkin_rol owner", app._etkin_rol() == "owner")
+app._owner_konsol_aktif = lambda: False   # geri: sonraki kontroller analist
+telemetri.ANALIST_DOSYA = tmp / "analist.json"
+telemetri.analist_yaz("Emin", "emin@example.com")
+app._roller_kaydet({app._eposta_hash("emin@example.com"): "analist"}, {"delta": "owner"})
+kontrol("analist e-postası → _etkin_rol analist", app._etkin_rol() == "analist")
 
 # ── Telemetri isim çekme (benzersiz) ──────────────────────────────────────────
 telemetri.olaylari_oku = lambda: [
