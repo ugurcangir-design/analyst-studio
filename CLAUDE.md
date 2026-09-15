@@ -149,7 +149,13 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   ekran-rolleri), `POST /api/roller/kullanici` (`{eposta, rol}` → hash→rol), `POST /api/roller/ekranlar`
   (`{ekran_roller}` topluca). UI: `screens/yetki.html` — "Kullanıcılar & Roller" (çekili isimler + rol dropdown,
   otomatik kayıt) + "Ekran Yetkileri" (her ekran → rol dropdown, Kaydet). `roller_yerel.json` KALDIRILDI
-  (isimler telemetriden). Honor-system. Test: `tests/test_roller.py`.
+  (isimler telemetriden). **Kimlik bildirimi:** `POST /api/analist` (e-posta kaydı) arka planda
+  `telemetri.kimlik_bildir()` → sink'e `kimlik` olayı (ad+e-posta) → analist, analiz çalıştırmadan
+  e-posta girer girmez owner roster'ında görünür. `kimlik` olayı istatistikten HARİÇ (işlem sayılmaz).
+  `/api/roller` roster'ı e-postası HENÜZ gelmemiş isimleri de gösterir (`atanabilir:false`, "e-posta
+  bekleniyor" — eski sürümdeki/e-postasız analistler) + bu makinenin kendi kimliğini başa ekler (owner
+  kendini hemen görür). NOT: e-posta yalnız YENİ (Adım 1 sürümlü) olaylara eklenir — geçmiş kayıtlara
+  işlemez; analist güncel sürümde e-posta girmeli. Honor-system. Test: `tests/test_roller.py`.
   Yeni gizlenebilir ekran/aksiyon → `GIZLENEBILIR_KATALOG` (app.py). **Owner konsolu (Kullanım Raporu +
   Yetki ekranları) — kilit `.env`'de DEĞİL, gitignore'lu YEREL DOSYADA:** `_owner_konsol_aktif()` yalnız
   `reference/owner_konsol.json` (`{"owner_konsol": true}`) okur; `_usage_yetkili_mi()` + `_yetki_paneli_mi()`

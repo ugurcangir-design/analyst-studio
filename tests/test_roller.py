@@ -101,6 +101,10 @@ r = c.get("/api/roller")
 j = r.get_json()
 kontrol("GET /api/roller: çekilen kullanıcılar + ekranlar",
         any(u["eposta"] == "emin@example.com" for u in j["kullanicilar"]) and len(j["ekranlar"]) > 0)
+kontrol("GET: e-postalı kullanıcı atanabilir",
+        any(u["eposta"] == "emin@example.com" and u["atanabilir"] for u in j["kullanicilar"]))
+kontrol("GET: e-postasız isim roster'da ama atanamaz",
+        any(u["ad"] == "Adsız" and not u["atanabilir"] for u in j["kullanicilar"]))
 
 r = c.post("/api/roller/kullanici", json={"eposta": "emin@example.com", "rol": "owner"}, headers=ORIGIN)
 kontrol("POST rol ata → 200", r.status_code == 200)

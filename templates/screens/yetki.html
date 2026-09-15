@@ -73,7 +73,7 @@
         el.innerHTML = '<div class="ds-callout"><div class="grow"><p>Kullanım verisinde analist yok. Analistler agent\'ı en az bir kez çalıştırıp <b>şirket e-postalarını</b> girmeli. Ekibi görmek için <b>Kullanım Raporu → Uzaktan Çek</b> yapıp bu ekranı yenileyin.</p></div></div>';
         return;
       }
-      el.innerHTML = kullanicilar.map(u => `
+      el.innerHTML = kullanicilar.map(u => u.atanabilir ? `
         <div class="ds-tglrow" style="align-items:center">
           <div style="flex:1;min-width:0">
             <div class="ds-tgl-txt">${_ytEsc(u.ad || '(isimsiz)')}</div>
@@ -82,6 +82,13 @@
           <select class="ctx-input" onchange="ytRolAta('${_ytEsc(u.hash)}', this.value)" style="width:auto;min-width:120px">
             ${_ytRoller.map(r => `<option value="${_ytEsc(r)}" ${u.rol === r ? 'selected' : ''}>${_ytEsc(r)}</option>`).join('')}
           </select>
+        </div>` : `
+        <div class="ds-tglrow" style="align-items:center;opacity:.6">
+          <div style="flex:1;min-width:0">
+            <div class="ds-tgl-txt">${_ytEsc(u.ad || '(isimsiz)')}</div>
+            <div class="ds-tgl-sub">⏳ e-posta bekleniyor — analist güncel sürümde şirket e-postasını girmeli</div>
+          </div>
+          <span class="ds-chip old" style="white-space:nowrap">rol atanamaz</span>
         </div>`).join('');
     }
 

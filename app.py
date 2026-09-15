@@ -2081,18 +2081,29 @@ def roller_getir():
     from skills import telemetri
     d = _roller_oku()
     gizli_default = set(_gorunurluk_oku())
-    kullanicilar, gorulen = [], set()
-    for a in telemetri.analistler_listesi():
+    # Kaynak: bu makinenin kendi kimliği (owner hemen kendini görsün) + telemetriden çekilenler.
+    kaynak = list(telemetri.analistler_listesi())
+    yerel = telemetri.analist_kimlik_oku()
+    if yerel.get("eposta"):
+        kaynak.insert(0, {"ad": yerel.get("ad_soyad", ""), "eposta": yerel["eposta"]})
+    kullanicilar, eposta_gorulen, adsiz_gorulen = [], set(), set()
+    for a in kaynak:
         eposta = (a.get("eposta") or "").strip().lower()
-        if not eposta:
-            continue   # rol atamak için e-posta şart (hash) — kimlik zorunlu olduğundan yeni olaylar taşır
-        h = _eposta_hash(eposta)
-        if h in gorulen:
-            continue
-        gorulen.add(h)
-        kullanicilar.append({"hash": h, "ad": a.get("ad", ""), "eposta": eposta,
-                             "rol": d["kullanicilar"].get(h, "analist")})
-    kullanicilar.sort(key=lambda k: (k["ad"] or k["eposta"]).lower())
+        ad = (a.get("ad") or "").strip()
+        if eposta:
+            h = _eposta_hash(eposta)
+            if h in eposta_gorulen:
+                continue
+            eposta_gorulen.add(h)
+            kullanicilar.append({"hash": h, "ad": ad, "eposta": eposta, "atanabilir": True,
+                                 "rol": d["kullanicilar"].get(h, "analist")})
+        elif ad:
+            # E-postası henüz telemetride yok (analist güncel sürümde e-posta girmeli) → rol atanamaz.
+            if ad.lower() in adsiz_gorulen:
+                continue
+            adsiz_gorulen.add(ad.lower())
+            kullanicilar.append({"hash": "", "ad": ad, "eposta": "", "atanabilir": False, "rol": "analist"})
+    kullanicilar.sort(key=lambda k: (not k["atanabilir"], (k["ad"] or k["eposta"]).lower()))
     ekranlar = [{"id": k["id"], "ad": k["ad"], "grup": k["grup"], "aciklama": k.get("aciklama", ""),
                  "rol": _ekran_gerekli_rol(k["id"], d["ekran_roller"], gizli_default)}
                 for k in GIZLENEBILIR_KATALOG]
@@ -2981,6 +2992,8 @@ def analist_kaydet():
                         "error": f"Geçerli bir @{SIRKET_EPOSTA_DOMAIN} e-postası girin"}), 400
     from skills import telemetri
     telemetri.analist_yaz(ad_soyad, eposta)
+    # Kimliği sink'e bildir (arka planda) → owner Yetki roster'ında analiz beklemeden görünür.
+    threading.Thread(target=telemetri.kimlik_bildir, daemon=True, name="kimlik-bildir").start()
     return jsonify({"ok": True, "ad_soyad": ad_soyad, "eposta": eposta, "kimlik_tam": True})
 
 

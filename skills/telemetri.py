@@ -206,6 +206,18 @@ def olay_yaz(
         pass  # telemetri asla analizi bozmaz
 
 
+def kimlik_bildir() -> None:
+    """Analist kimliğini (ad + e-posta) sink'e 'kimlik' olayı olarak bildirir → owner Yetki
+    ekranında rol atamak için GÖRÜNÜR olsun (analiz çalıştırmayı beklemeden, e-posta girer
+    girmez). E-posta yoksa no-op. best-effort (hata yutulur)."""
+    try:
+        if not analist_eposta_oku():
+            return
+        olay_yaz("kimlik")   # ad + eposta otomatik eklenir (analist.json'dan)
+    except Exception:
+        pass
+
+
 def olaylari_oku() -> list[dict]:
     """Owner dashboard veri kaynağı.
 
@@ -273,7 +285,8 @@ def istatistik(gun: int = 90, donem: str = "gun", analist: str | None = None) ->
     """Deterministik, 0-token özet. donem: gun|hafta|ay (trend kovası). analist: tek kişi filtresi."""
     if donem not in ("gun", "hafta", "ay"):
         donem = "gun"
-    aralik = _olaylari_filtrele(gun)                      # dropdown + genel için (analist filtresi YOK)
+    # 'kimlik' olayları (Yetki roster'ı için bildirilen ad+e-posta) İŞLEM sayılmaz → istatistikten çıkar.
+    aralik = [e for e in _olaylari_filtrele(gun) if (e.get("olay") or "") != "kimlik"]  # dropdown + genel
     tum_analistler = sorted({(e.get("analist") or "bilinmeyen") for e in aralik},
                             key=lambda x: str(x).casefold())
     filtreli = [e for e in aralik if not analist or (e.get("analist") or "") == analist]
