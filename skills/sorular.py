@@ -45,7 +45,7 @@ KAYNAK_DOSYALAR = (
     "teknik-analiz.md",   # Q-T-XXX
     "brd-sorular.md",     # PO-XXX
     "acik-sorular.md",    # Q-T-XXX (combined output'tan)
-    "surec-analizi.md",   # bölüm 12 tablosu (Q-XXX)
+    "surec-analizi.md",   # ### Q-XXX blok (eski çıktılarda tablo)
 )
 
 
@@ -85,7 +85,7 @@ def _alan_oku(blok: str, anahtar: str) -> str:
     return m.group(1).strip() if m else ""
 
 
-# Tablo satırı deseni (süreç analizi Bölüm 12 tablosu için)
+# Tablo satırı deseni (eski süreç çıktıları + tablo üreten modeller için — genel fallback)
 # | Q-001 | Konu | Tip | Önem | Bağlı | Mevcut | Beklenen Yanıt |
 _TABLO_SORU_SATIR = re.compile(
     r"^\|\s*(Q-T?-?\d+|Q-K-\d+|PO-\d+)\s*\|", re.MULTILINE
@@ -93,7 +93,7 @@ _TABLO_SORU_SATIR = re.compile(
 
 
 def _parse_tablo_sorulari(metin: str, dosya_adi: str) -> list[dict]:
-    """Markdown tablo formatındaki soruları yakalar (süreç analizi Bölüm 12).
+    """Markdown tablo formatındaki soruları yakalar (eski süreç çıktıları / genel).
 
     Format: | Q-001 | Konu | Tip | Önem | Bağlı Bölüm | Mevcut Durum | Beklenen Yanıt |
     Sütun sırası analiz tipine göre değişebilir — esnek davranır.
@@ -187,7 +187,7 @@ def parse_md_sorular(md_yol: Path) -> list[dict]:
 
     Üç format destekler (öncelik sırasıyla):
     1. Yapılandırılmış blok: `### Q-T-001: Başlık` (teknik analiz, BRD soruları)
-    2. Tablo satırı: `| Q-001 | ...` (süreç analizi Bölüm 12)
+    2. Tablo satırı: `| Q-001 | ...` (eski süreç çıktıları / tablo üreten model)
     3. FALLBACK — "Açık Sorular" başlığı altında düz NUMARALI liste (yapısal yoksa)
 
     Aynı id iki formatta varsa blok formatı kazanır (daha zengin veri).

@@ -492,10 +492,17 @@ Kavramsal entity/alan listesi — DDL DEĞİL (teknik analiz DDL üretir).
 | Evet | Hayır | ... | ... | PA-XXX |
 
 ### Açık Sorular / Karar Bekleyen Konular
-Belirsiz TÜM konular buraya; ana metne SIZDIRMA. Tablo formatını KORU (veri satırı `| Q-001 |` ile başlamalı):
-| # | Konu | Tip | Önem | Bağlı Bölüm | Mevcut Durum | Beklenen Yanıt |
-|---|------|-----|------|-------------|--------------|----------------|
-| Q-001 | ... | Çelişki/Eksik/Belirsiz | Kritik/Yüksek/Orta | BR-XXX | [mevcut bilgi] | [ne sorulduğu] |"""
+Belirsiz TÜM konular buraya; ana metne SIZDIRMA. Her soru, önem sırasına göre, aşağıdaki formatta
+(teknik/BRD analiziyle AYNI yapı — tablo/madde-işaretli DEĞİL):
+
+### Q-[N]: [Başlık]
+- Kategori: Çelişki / Eksik / Belirsiz / Kapsam / Bağımlılık
+- Öncelik: Kritik / Yüksek / Orta / Düşük
+- Bağlı ID: PA-XXX / BR-XXX / AF-XXX / EF-XXX / EK-XXX (varsa)
+- Soru: [net, tek konuya odaklı soru]
+- Mevcut Durum: [kaynakta ne var / ne eksik]
+- Beklenen Yanıt: [hangi formatta cevap gerekiyor]
+- Etki: [yanıt alınmazsa süreçte ne aksar]"""
         ),
     },
     "teknik_analiz_bolumler": {

@@ -117,9 +117,14 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   teknik-analiz · brd-sorular→brd-analizi · **surec-analizi→surec-analizi (kendisi)** · teknik-analiz→kendisi)
   bulunursa yalnız o bölüm düzenlenir; bulunamayanlar toplanıp `yeniden_calistir(hedef, …)`'a (TÜM **hedef=analiz**
   dosyası yeniden üretim — SORU dosyası `kaynak` DEĞİL; kaynak≠hedef'te kaynağı üretmek cevabı analize hiç
-  işlemez=sessiz kayıp) düşer (`sonuclar[].hedefli/tam_uretim`). Süreç analizi soruları (Bölüm 12 tablosu, `bagli_id`=PA-XXX/BR-XXX)
-  doğrudan surec-analizi.md'de yaşar → cevap AYNI dosyanın ilgili bölümüne hedefli uygulanır (gövde-içi ID
-  fallback). Test: `tests/test_soru_hedefli.py`. **`revizyon_ai.bolum_bul` iki aşamalı:**
+  işlemez=sessiz kayıp) düşer (`sonuclar[].hedefli/tam_uretim`). Süreç analizi soruları (`### Q-XXX:` blok,
+  `bagli_id`=PA-XXX/BR-XXX) doğrudan surec-analizi.md'de yaşar → cevap AYNI dosyanın ilgili bölümüne hedefli
+  uygulanır (gövde-içi ID fallback). Test: `tests/test_soru_hedefli.py`.
+  **AÇIK SORU FORMATI — ÜÇ ANALİZDE TUTARLI (birleştirildi):** her analiz aynı `### <ID>: [Başlık]` blok yapısını
+  kullanır (`- Kategori/Öncelik/Bağlı ID/Soru/Mevcut Durum/Beklenen Yanıt/Etki`). YALNIZ **ID öneki farklı**
+  (izlenebilirlik): süreç `Q-XXX` · teknik `Q-T-XXX` · BRD `PO-XXX`. Eskiden süreç TABLO, teknik+BRD blok idi →
+  süreç de bloğa çekildi (base.py). Parser (`skills/sorular.py`) yine de HEPSİNİ yakalar (blok · tablo · numaralı ·
+  **bullet** · bold `**Q-01:**`) — model sapması olsa bile Sorular sekmesi dolar. **`revizyon_ai.bolum_bul` iki aşamalı:**
   (1) başlık eşleşmesi (teknik analiz — ID başlıkta), (2) başarısızsa **gövde-içi ID fallback** (süreç analizi —
   ID gövdede satır-içi `**PA-003:** …`; `anahtar`'daki ID token'ını içeren EN DERİN bölüm) → süreç Q&A cevapları da
   hedefli/ucuz uygulanır, tam-regenerasyona düşmez. ID yoksa/bulunmazsa None (tam-regen — doğru davranış).
