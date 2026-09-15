@@ -26,6 +26,16 @@ from .base import OUTPUT_DIR
 
 SORULAR_DOSYA = OUTPUT_DIR / "sorular.json"
 
+
+def _iso_epoch(iso: str | None) -> float | None:
+    """ISO zaman damgasını ('2026-09-15T10:30:00') epoch saniyeye çevirir. Okunamazsa None."""
+    if not iso:
+        return None
+    try:
+        return datetime.fromisoformat(iso).timestamp()
+    except (ValueError, TypeError):
+        return None
+
 # Geçerli durum değerleri
 DURUM_DEGERLERI = frozenset({"acik", "bekleniyor", "cevaplandi", "atlandi", "varsayim"})
 
@@ -255,6 +265,27 @@ def parse_ve_birlestir(taze_esik: float | None = None) -> dict:
             return False
         return True
 
+    def _bu_oturuma_ait(soru: dict) -> bool:
+        """Mevcut sorunun (deftedeki) bu OTURUMA ait olup olmadığı.
+
+        `taze_esik` yoksa (oturum belirsiz) → geriye-uyumlu: hep koru (True).
+        Aksi hâlde sorunun oluşturulma zamanı oturum başlangıcından ÖNCE ise, önceki
+        oturumdan devrolmuş demektir → durum/cevap KORUNMAZ (soru yeniden 'acik' olur).
+        Soru id'leri (Q-001…) konumsaldır; farklı doküman analizinde AYNI id farklı
+        soruya denk gelir — eski cevabı taşımak yanlış 'cevaplandı' üretir.
+
+        `olusturuldu_at` saniyeye yuvarlıdır (timespec='seconds'), `taze_esik` ise
+        saniye-altı kesirli olabilir → aynı saniyede oluşan soru yanlışlıkla 'eski'
+        görünmesin diye karşılaştırma SANİYE tabanında (floor) yapılır: 'oturum
+        başlangıç saniyesinde ya da sonrasında oluşan' soru bu oturuma aittir. Önceki
+        oturum soruları eşikten saniyeler/dakikalar öncedir → asla yanlış korunmaz."""
+        if taze_esik is None:
+            return True
+        ts = _iso_epoch(soru.get("olusturuldu_at") or soru.get("guncellendi_at"))
+        if ts is None:
+            return True   # zaman damgası okunamadı → veri kaybetme, koru
+        return int(ts) >= int(taze_esik)
+
     mevcut = sorular_yukle()
     indeks = {(s["id"], s["kaynak_dosya"]): s for s in mevcut.get("sorular", [])}
     # Mezar-taşları: analist sildiyse (id,kaynak) → silme zamanı. Kaynak dosya bu zamandan
@@ -280,11 +311,13 @@ def parse_ve_birlestir(taze_esik: float | None = None) -> dict:
                     continue                    # silinmiş + kaynak yeniden üretilmemiş → geri ekleme
                 del tomb[anahtar]               # kaynak yeniden üretildi → mezar-taşı geçersiz, geri getir
             eski = indeks.pop(anahtar, None)
-            if eski:
-                # Korunan alanlar (analist veri girmişse bozma)
+            if eski and _bu_oturuma_ait(eski):
+                # Korunan alanlar (analist veri girmişse bozma) — YALNIZ bu oturuma ait
+                # soru için; önceki oturumdan devrolan aynı-id soru YENİ sayılır (aşağı).
                 parsed["durum"]      = eski.get("durum", "acik")
                 parsed["cevap"]      = eski.get("cevap")
                 parsed["varsayim"]   = eski.get("varsayim")
+                parsed["uygulandi_at"] = eski.get("uygulandi_at")
                 parsed["olusturuldu_at"] = eski.get("olusturuldu_at", simdi)
                 parsed["guncellendi_at"] = simdi
                 guncellenen += 1
@@ -297,10 +330,11 @@ def parse_ve_birlestir(taze_esik: float | None = None) -> dict:
                 eklenen += 1
             yeni_listesi.append(parsed)
 
-    # Çıktıda artık olmayan sorular: kaynak dosyası HÂLÂ TAZE ise koru (analist cevaplamış
-    # olabilir); BAYAT/eksik ise düşür (önceki oturuma aitti — hayalet soru bırakma).
+    # Çıktıda artık olmayan sorular: kaynak dosyası HÂLÂ TAZE *ve* bu OTURUMA ait ise koru
+    # (analist cevaplamış olabilir); BAYAT/eksik ya da önceki oturumdan devrolan → düşür
+    # (hayalet soru / bayat 'cevaplandı' bırakma).
     for kalan in indeks.values():
-        if _taze(kalan.get("kaynak_dosya", "")):
+        if _taze(kalan.get("kaynak_dosya", "")) and _bu_oturuma_ait(kalan):
             yeni_listesi.append(kalan)
 
     # Mezar-taşlarını buda: yalnız kaynağı HÂLÂ TAZE ve HENÜZ yeniden üretilmemiş olanları koru

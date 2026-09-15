@@ -70,7 +70,12 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   (çalışırken 409 verir) → bayat "onay_bekleniyor"/tamamlandı durumu yeni dokümana taşınmaz. (9) **Sorular
   tazelik filtresi:** `parse_ve_birlestir(taze_esik)` yalnız bu oturuma ait (mtime ≥ `_oturum_baslangic()`) TAZE
   çıktıların sorularını gösterir; bayat/önceki-oturum soruları düşürülür — süreç analizi tamamlanmadan hayalet soru
-  görünmez (tüm analiz tipleri). `/api/sorular` her zaman filtreli döner. (10) **Ekran adları:** "Çıktılar" →
+  görünmez (tüm analiz tipleri). `/api/sorular` her zaman filtreli döner. **Oturum-aidiyeti (bayat cevap taşınmaz):**
+  soru id'leri (Q-001…) KONUMSALDIR — yeni doküman analizinde AYNI id farklı soruya denk gelir. Merge, `(id, kaynak_dosya)`
+  eşleşen mevcut sorunun durum/cevabını YALNIZ o soru bu oturuma aitse (`olusturuldu_at` saniyesi ≥ `taze_esik` saniyesi —
+  `_bu_oturuma_ait`) korur; önceki oturumdan devrolan aynı-id soru YENİ ('acik') sayılır. Yoksa yeni süreç analizinin açık
+  soruları eski cevaplarla yanlışlıkla "tümü cevaplandı" görünürdü (yeni parse'ta otomatik iyileşir). Test: `tests/test_sorular.py`.
+  (10) **Ekran adları:** "Çıktılar" →
   **Analiz Dosyaları**, "Görüntüleyici" → **Çıktı Dosyaları** (iç tab anahtarları `ciktilar`/`output` korundu).
   (11) **Yetim workflow uzlaştırması:** `/api/oturum` — workflow "settled" (onay_bekleniyor/teknik_onay/
   brd_revize/tamamlandi) ama çalışmıyor ve **0 güncel çıktı** varsa (çıktı önceki oturumdan) → `wf.sifirla()` +
@@ -152,7 +157,8 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   enforcement; env + USERS_PATH geçici) — commit öncesi ruff ile birlikte çalıştır. AI/kota harcamaz.
   Yeni deterministik endpoint → smoke_test'e bir satır ekle. Ayrıca `test_auth_roller.py`, `test_kod_kaynagi.py`,
   `test_jira_kopru.py` (Jira Köprüsü komut→taslak→onay + silent-skip + self-scope + sağlık, offline/0-token),
-  `test_bildirim.py` (bildirim kaçış/redaksiyon/no-op), `test_bildirim_akis.py` (analiz bildirim geçiş+dedup).
+  `test_bildirim.py` (bildirim kaçış/redaksiyon/no-op), `test_bildirim_akis.py` (analiz bildirim geçiş+dedup),
+  `test_sorular.py` (soru defteri oturum-aidiyeti — bayat cevap taşınmaz + aynı-oturum koruma, offline/0-token).
 - **Faz 3.a — Kod kaynağı:** `skills/kod_kaynagi.py` salt-okuma yerel git/dosya arayüzü (yol repo köküne
   hapsedilir; yazma/komut yok). Config `reference/kod_kaynagi.json` (gitignore + `.example` seed, seed listesinde).
   `/api/kod/*` (config owner-only) + `screens/kod.html` (Kaynaklar). Gerçek repo bağlantısı analiste bırakıldı;
