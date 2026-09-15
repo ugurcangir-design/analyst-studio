@@ -1200,7 +1200,17 @@ def upload():
     # (onay_bekleniyor / tamamlandı vb.) SIFIRLA. Yoksa Çıktılar/oturum bu yeni
     # dosya için yanlışlıkla "Analist onayı bekleniyor" gösterirdi (henüz analiz yok).
     wf.sifirla()
-    logger.info(f"Dosya yüklendi: {guvenli_ad} (yeni oturum — workflow sıfırlandı)")
+    # YENİ doküman → önceki dokümanın revizyon oturumları GEÇERSİZ. Temizle; yoksa sonraki
+    # hedefli düzeltme bayat (eski doküman) içeriği diske geri yazıp yeni analizi ezebilir.
+    try:
+        from skills import revizyon as _rev
+        _rev.oturumlari_temizle()
+    except Exception as e:
+        logger.warning("Revizyon oturumları temizlenemedi: %s", e)
+    if not _sorular_uygula_durum.get("calisiyor"):
+        _sorular_uygula_durum.update({"calisiyor": False, "toplam": 0, "tamamlanan": 0,
+                                      "sonuclar": [], "mesaj": "", "bitti": None})
+    logger.info(f"Dosya yüklendi: {guvenli_ad} (yeni oturum — workflow + revizyon sıfırlandı)")
     return jsonify({"ok": True, "dosya": guvenli_ad})
 
 
@@ -1818,6 +1828,10 @@ def revizyon_onayla_endpoint(dosya_adi: str):
     if not revizyon_id:
         return jsonify({"ok": False, "error": "revizyon_id zorunlu"}), 400
     from skills import revizyon
+    # Arka plan hedefli-düzeltme (adim/duzelt · sorular/uygula) ile AYNI dosya/oturuma yazma
+    # yarışını önle: _revizyon_lock'u non-blocking al (meşgulse 409).
+    if not _revizyon_lock.acquire(blocking=False):
+        return jsonify({"ok": False, "error": "Bu dosyada bir düzeltme işlemi sürüyor — birazdan tekrar deneyin."}), 409
     try:
         revizyon.onayla(dosya_adi, revizyon_id)
         # Onaylı içeriği gerçek çıktı dosyasına yansıt (dosya_adi zaten allowlist'te)
@@ -1830,6 +1844,8 @@ def revizyon_onayla_endpoint(dosya_adi: str):
     except Exception as e:
         logger.error("Revizyon onay hatası: %s", e)
         return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        _revizyon_lock.release()
 
 
 @app.route("/api/revizyon/<dosya_adi>/reddet", methods=["POST"])
@@ -1861,6 +1877,8 @@ def revizyon_geri_al_endpoint(dosya_adi: str):
     if not versiyon_id:
         return jsonify({"ok": False, "error": "versiyon_id zorunlu"}), 400
     from skills import revizyon
+    if not _revizyon_lock.acquire(blocking=False):
+        return jsonify({"ok": False, "error": "Bu dosyada bir düzeltme işlemi sürüyor — birazdan tekrar deneyin."}), 409
     try:
         revizyon.geri_al(dosya_adi, versiyon_id)
         (OUTPUT_DIR / dosya_adi).write_text(revizyon.onayli_icerik(dosya_adi), encoding="utf-8")
@@ -1869,6 +1887,8 @@ def revizyon_geri_al_endpoint(dosya_adi: str):
         return jsonify({"ok": True, "oturum": revizyon.ozet(dosya_adi)})
     except ValueError as e:
         return jsonify({"ok": False, "error": str(e)}), 400
+    finally:
+        _revizyon_lock.release()
 
 
 @app.route("/api/revizyon/<dosya_adi>/diff", methods=["GET"])
@@ -3387,7 +3407,10 @@ def _sorulari_hedefli_uygula(kaynak: str, sorular: list[dict]) -> dict:
         except Exception as e:
             logger.error("Hedefli cevap diske yazılamadı (%s): %s", hedef, e)
     if kalan:
-        yeniden_calistir(kaynak, duzeltme_notu_olustur(kalan))
+        # ANALİZ dosyasını (hedef) yeniden üret — soru dosyasını (kaynak) DEĞİL. acik-sorular.md→
+        # teknik-analiz.md, brd-sorular.md→brd-analizi.md eşlemelerinde kaynak≠hedef; kaynağı
+        # yeniden üretmek cevabı soru dosyasına yazıp analize hiç işlemez (sessiz kayıp).
+        yeniden_calistir(hedef or kaynak, duzeltme_notu_olustur(kalan))
     return {"hedefli": hedefli, "tam": len(kalan)}
 
 
@@ -3423,13 +3446,14 @@ def sorular_uygula():
                                   "tamamlanan": 0, "sonuclar": [], "mesaj": "", "bitti": None})
 
     def _calistir(gruplar):
-        from skills.sorular import (uygulandi_isaretle, parse_ve_birlestir)
         sonuclar = []
-        # Aynı output/*.md + output/revizyon/ oturumuna yazan /api/adim/duzelt ile YARIŞMA.
-        # adim/duzelt _revizyon_lock'u non-blocking alır (409) → burada bloklu al: serileşir,
-        # circular-wait yok (adim/duzelt bu worker'ı beklemez, yalnız 409 döner) → deadlock yok.
-        _revizyon_lock.acquire()
+        rev_locked = False
         try:
+            from skills.sorular import (uygulandi_isaretle, parse_ve_birlestir)
+            # Aynı output/*.md + output/revizyon/ oturumuna yazan adim/duzelt + manuel revizyon
+            # uçlarıyla YARIŞMA. Bloklu al: serileşir (circular-wait yok → deadlock yok).
+            _revizyon_lock.acquire()
+            rev_locked = True
             for kaynak, sorular in gruplar.items():
                 if kaynak not in IZIN_VERILEN_CIKTILAR:
                     sonuclar.append({"kaynak_dosya": kaynak, "ok": False, "error": "Bilinmeyen dosya, atlandı"})
@@ -3455,12 +3479,15 @@ def sorular_uygula():
                 parse_ve_birlestir(taze_esik=_oturum_baslangic())
             except Exception:
                 pass
+        except Exception as e:
+            logger.error("Sorular uygula worker beklenmeyen hata: %s", e)
         finally:
             basari = sum(1 for s in sonuclar if s.get("ok"))
             _sorular_uygula_durum.update({"calisiyor": False, "sonuclar": sonuclar,
                                           "mesaj": f"{basari}/{len(sonuclar)} dosya güncellendi",
                                           "bitti": time.time()})
-            _revizyon_lock.release()
+            if rev_locked:
+                _revizyon_lock.release()
             _sorular_uygula_lock.release()
 
     threading.Thread(target=_calistir, args=(gruplar,), daemon=True).start()

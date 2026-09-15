@@ -96,4 +96,18 @@ v2 = r.versiyon_icerik("t.md", "v2")
 dogru("DÜZENLENDİ" in v2 and "PA-002" in v2 and v2.count("### PA-001") == 1, "splice komşuları korur")
 esit(rv["onay_durumu"], "beklemede", "bölüm düzenleme beklemede")
 
+# ── BAYAT OTURUM KORUMASI (#1 veri kaybı önleme) ──────────────────────────────
+# Disk pipeline/rerun/upload ile yeniden üretildiğinde, hedefli düzeltme oturumdaki ESKİ
+# içeriği değil DİSKTEKİ güncel içeriği baz almalı; yoksa güncel analiz eski içerikle ezilir.
+H3 = "teknik-analiz.md"
+(tmp / H3).write_text("### PA-001: Giriş\nESKI_A içerik.\n", encoding="utf-8")
+r.baslat(H3, (tmp / H3).read_text(encoding="utf-8"), "İlk (A)")
+(tmp / H3).write_text("### PA-001: Giriş\nYENI_B içerik tamamen farklı.\n", encoding="utf-8")  # disk B'ye üretildi
+rv3 = ra.bolum_duzenle(H3, "PA-001", "kısalt",
+                       _ai_fn=lambda t, b: "### PA-001: Giriş\nDÜZENLENDİ_B.\n")
+aktif = r.onayli_icerik(H3)
+dogru("YENI_B" in aktif and "ESKI_A" not in aktif, "#1 oturum diske (B) yeniden bazlandı — eski A ezmez")
+esit(rv3["onay_durumu"], "beklemede", "#1 yeniden bazlama sonrası öneri beklemede")
+dogru("ESKI_A" not in r.versiyon_icerik(H3, "v2"), "#1 öneri eski A içeriği taşımaz")
+
 print(f"\nREVİZYON TESTLERİ GEÇTİ ({ok} assert)")

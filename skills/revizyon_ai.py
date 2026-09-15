@@ -176,6 +176,16 @@ def bolum_duzenle(
     # 1) Aktif içerik — oturum varsa ondan, yoksa dosyadan başlat
     if revizyon.oturum_var_mi(hedef_dosya):
         mevcut = revizyon.onayli_icerik(hedef_dosya)
+        # BAYAT OTURUM KORUMASI (veri kaybı önleme): pipeline/rerun/yeni-upload diski
+        # oturumdan SONRA yeniden ürettiyse oturum eski içeriği tutar. Diski OTORİTE kabul et,
+        # oturumu tazele — yoksa düzenleme sonrası onaylı içerik (eski + küçük düzeltme) güncel
+        # analizin üzerine yazılıp onu yok eder.
+        yol = OUTPUT_DIR / Path(hedef_dosya).name
+        if yol.exists():
+            disk = yol.read_text(encoding="utf-8")
+            if disk.strip() != (mevcut or "").strip():
+                revizyon.yeniden_bazla(hedef_dosya, disk)
+                mevcut = disk
     else:
         yol = OUTPUT_DIR / Path(hedef_dosya).name
         if not yol.exists():

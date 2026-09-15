@@ -145,6 +145,33 @@ def baslat(hedef_dosya: str, icerik: str, not_: str = "İlk üretim") -> dict:
     return oturum
 
 
+def oturum_sil(hedef_dosya: str) -> None:
+    """Bir dosyanın revizyon oturumunu + sürüm anlık görüntülerini tamamen siler."""
+    import shutil
+    try:
+        oturum_yolu(hedef_dosya).unlink()
+    except FileNotFoundError:
+        pass
+    vd = _versiyon_dir(hedef_dosya)
+    if vd.exists():
+        shutil.rmtree(vd, ignore_errors=True)
+
+
+def yeniden_bazla(hedef_dosya: str, icerik: str,
+                  not_: str = "Yeniden üretim — oturum güncel içerikle tazelendi") -> dict:
+    """Oturumu silip DİSKTEKİ güncel içerikle yeniden başlatır. Pipeline/rerun/upload çıktıyı
+    yeniden ürettiğinde BAYAT oturumun eski içeriği geri yazıp güncel analizi ezmesini önler."""
+    oturum_sil(hedef_dosya)
+    return baslat(hedef_dosya, icerik, not_=not_)
+
+
+def oturumlari_temizle() -> None:
+    """TÜM revizyon oturumlarını siler (yeni doküman = yeni oturum → eski oturumlar geçersiz)."""
+    import shutil
+    if REVIZYON_DIR.exists():
+        shutil.rmtree(REVIZYON_DIR, ignore_errors=True)
+
+
 def revizyon_oner(
     hedef_dosya: str,
     yeni_icerik: str,

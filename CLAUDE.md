@@ -97,7 +97,13 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   (`onayli_icerik`) `output/<dosya>`'ya GERİ YAZMALI (`/api/adim/duzelt` + `_sorulari_hedefli_uygula` + revizyon
   onayla/geri-al uçları bunu yapar). Yoksa dosya diskte bayat kalır ve sonraki adım (teknik analiz
   surec-analizi.md'yi DOSYADAN okur) düzeltilmemiş içeriği kullanır (regresyon: `tests/test_soru_hedefli.py`).
-  Bölüm bulunamazsa
+  **BAYAT OTURUM KORUMASI (veri kaybı önleme):** revizyon oturumu dosya-adı slug'ıyla anahtarlı ve pipeline/
+  rerun/upload çıktıyı yeniden ürettiğinde tazelenmezdi → `bolum_duzenle` oturumu (eski içerik) baz alıp geri
+  yazınca güncel analizi EZİYORDU. Artık: `bolum_duzenle` oturum içeriği ≠ disk ise diski otorite kabul edip
+  `revizyon.yeniden_bazla` ile oturumu tazeler; `/api/upload` yeni dokümanda `revizyon.oturumlari_temizle()`
+  yapar (regresyon: `tests/test_revizyon.py` #1). **Manuel revizyon yazıcıları** (onayla/geri-al) artık
+  `_revizyon_lock`'u non-blocking alır (meşgulse 409) → arka plan hedefli-düzeltme ile yarış yok. **Sorular
+  worker** import/kilit hatasında kilitleri sızdırmaz (dış try/finally). Bölüm bulunamazsa
   `tam_uretim_gerekli` döner → UI analiste ID eklemesini ya da "Tam yeniden üret" (eski `/api/rerun`, artık
   `<details>` içinde SON ÇARE) önerir; asla sessizce tümü yeniden yazılmaz. **"◂ Süreç analizine dön"**
   (`POST /api/geri-don` → `wf.surec_adimina_geri_don()`, yeni geçiş TEKNIK_ANALIZ_ONAY_BEKLENIYOR→
@@ -105,8 +111,9 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   düzeltir, "Devam Et" teknik analizi yeniden üretir. **Soru cevapları hedefli:** `/api/sorular/uygula` →
   `_sorulari_hedefli_uygula`: `bagli_id` bölümü analiz dosyasında (`_SORU_HEDEF_ANALIZ`: acik-sorular→
   teknik-analiz · brd-sorular→brd-analizi · **surec-analizi→surec-analizi (kendisi)** · teknik-analiz→kendisi)
-  bulunursa yalnız o bölüm düzenlenir; bulunamayanlar toplanıp `yeniden_calistir`'a (TÜM dosya yeniden üretim)
-  düşer (`sonuclar[].hedefli/tam_uretim`). Süreç analizi soruları (Bölüm 12 tablosu, `bagli_id`=PA-XXX/BR-XXX)
+  bulunursa yalnız o bölüm düzenlenir; bulunamayanlar toplanıp `yeniden_calistir(hedef, …)`'a (TÜM **hedef=analiz**
+  dosyası yeniden üretim — SORU dosyası `kaynak` DEĞİL; kaynak≠hedef'te kaynağı üretmek cevabı analize hiç
+  işlemez=sessiz kayıp) düşer (`sonuclar[].hedefli/tam_uretim`). Süreç analizi soruları (Bölüm 12 tablosu, `bagli_id`=PA-XXX/BR-XXX)
   doğrudan surec-analizi.md'de yaşar → cevap AYNI dosyanın ilgili bölümüne hedefli uygulanır (gövde-içi ID
   fallback). Test: `tests/test_soru_hedefli.py`. **`revizyon_ai.bolum_bul` iki aşamalı:**
   (1) başlık eşleşmesi (teknik analiz — ID başlıkta), (2) başarısızsa **gövde-içi ID fallback** (süreç analizi —

@@ -69,4 +69,16 @@ kontrol("bölüm bulunamazsa tam üretim (1)", ozet2["hedefli"] == 0 and ozet2["
 kontrol("tam yeniden üretim surec-analizi.md için çağrıldı", cagri["yeniden_calistir"] == ["surec-analizi.md"])
 kontrol("bölüm düzenleme yapılmadı", cagri["bolum_duzenle"] == [])
 
+# ── 3) FALLBACK HEDEF dosyayı üretir (kaynak≠hedef): acik-sorular.md → teknik-analiz.md ──
+# Bölüm bulunamayınca cevap ANALİZ dosyasına (hedef) işlenmeli, SORU dosyasına (kaynak) değil.
+cagri["bolum_duzenle"].clear()
+cagri["yeniden_calistir"].clear()
+(tmp / "acik-sorular.md").write_text("### Q-T-9\n- Soru: x\n", encoding="utf-8")
+(tmp / "teknik-analiz.md").write_text("## Teknik Analiz\n", encoding="utf-8")
+s_teknik = [{"id": "Q-T-9", "kaynak_dosya": "acik-sorular.md", "bagli_id": "YOK-1",
+             "durum": "cevaplandi", "cevap": "x"}]
+ozet3 = app._sorulari_hedefli_uygula("acik-sorular.md", s_teknik)
+kontrol("acik-sorular fallback → HEDEF teknik-analiz.md üretilir (kaynak değil)",
+        cagri["yeniden_calistir"] == ["teknik-analiz.md"])
+
 print(f"\nSORU HEDEFLİ TESTLERİ GEÇTİ ({basari} kontrol)")
