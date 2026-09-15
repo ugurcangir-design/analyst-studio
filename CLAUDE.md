@@ -99,8 +99,11 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   ONAY_BEKLENIYOR): süreç analizi YENİDEN ÇALIŞMAZ, teknik-analiz.md silinmez; analist süreçte hedefli
   düzeltir, "Devam Et" teknik analizi yeniden üretir. **Soru cevapları hedefli:** `/api/sorular/uygula` →
   `_sorulari_hedefli_uygula`: `bagli_id` bölümü analiz dosyasında (`_SORU_HEDEF_ANALIZ`: acik-sorular→
-  teknik-analiz, brd-sorular→brd-analizi) bulunursa yalnız o bölüm düzenlenir; bulunamayanlar toplanıp
-  `yeniden_calistir`'a düşer (`sonuclar[].hedefli/tam_uretim`). **`revizyon_ai.bolum_bul` iki aşamalı:**
+  teknik-analiz · brd-sorular→brd-analizi · **surec-analizi→surec-analizi (kendisi)** · teknik-analiz→kendisi)
+  bulunursa yalnız o bölüm düzenlenir; bulunamayanlar toplanıp `yeniden_calistir`'a (TÜM dosya yeniden üretim)
+  düşer (`sonuclar[].hedefli/tam_uretim`). Süreç analizi soruları (Bölüm 12 tablosu, `bagli_id`=PA-XXX/BR-XXX)
+  doğrudan surec-analizi.md'de yaşar → cevap AYNI dosyanın ilgili bölümüne hedefli uygulanır (gövde-içi ID
+  fallback). Test: `tests/test_soru_hedefli.py`. **`revizyon_ai.bolum_bul` iki aşamalı:**
   (1) başlık eşleşmesi (teknik analiz — ID başlıkta), (2) başarısızsa **gövde-içi ID fallback** (süreç analizi —
   ID gövdede satır-içi `**PA-003:** …`; `anahtar`'daki ID token'ını içeren EN DERİN bölüm) → süreç Q&A cevapları da
   hedefli/ucuz uygulanır, tam-regenerasyona düşmez. ID yoksa/bulunmazsa None (tam-regen — doğru davranış).
@@ -166,7 +169,8 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   `test_jira_kopru.py` (Jira Köprüsü komut→taslak→onay + silent-skip + self-scope + sağlık, offline/0-token),
   `test_bildirim.py` (bildirim kaçış/redaksiyon/no-op), `test_bildirim_akis.py` (analiz bildirim geçiş+dedup),
   `test_sorular.py` (soru defteri oturum-aidiyeti — bayat cevap taşınmaz + aynı-oturum koruma, offline/0-token),
-  `test_baglam_jira.py` (bağlam filtresi Jira key'leri yerel export'ta yoksa uzaktan bulkfetch — yalnız eksik, hata yutulur; ağ MOCK/0-token).
+  `test_baglam_jira.py` (bağlam filtresi Jira key'leri yerel export'ta yoksa uzaktan bulkfetch — yalnız eksik, hata yutulur; ağ MOCK/0-token),
+  `test_soru_hedefli.py` (soru cevabı hedefli düzeltme yönlendirmesi — süreç/teknik kendine, bölüm bulunamazsa tam üretim; AI MOCK/0-token).
 - **Faz 3.a — Kod kaynağı:** `skills/kod_kaynagi.py` salt-okuma yerel git/dosya arayüzü (yol repo köküne
   hapsedilir; yazma/komut yok). Config `reference/kod_kaynagi.json` (gitignore + `.example` seed, seed listesinde).
   `/api/kod/*` (config owner-only) + `screens/kod.html` (Kaynaklar). Gerçek repo bağlantısı analiste bırakıldı;

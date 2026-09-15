@@ -3114,8 +3114,18 @@ def sorular_tumunu_sil():
 
 # Cevap uygulama ARKA PLANDA yürür — bloklayan refine (yeniden_calistir, timeout 1200 sn)
 # istek thread'ini tutmasın (rerun deseni). UI /api/sorular/uygula/durum ile ilerlemeyi sorgular.
-# Soru kaynağı → cevabın işleneceği ANALİZ dosyası (hedefli düzeltme için)
-_SORU_HEDEF_ANALIZ = {"acik-sorular.md": "teknik-analiz.md", "brd-sorular.md": "brd-analizi.md"}
+# Soru kaynağı → cevabın işleneceği ANALİZ dosyası (hedefli düzeltme için).
+# - Ayrı "soru dosyaları" (acik-sorular.md/brd-sorular.md) → ilgili ANALİZ dosyasına yazılır.
+# - Sorular doğrudan analiz dosyasının içinde yaşıyorsa (surec-analizi.md Bölüm 12 tablosu;
+#   nadiren teknik-analiz.md gömülü Q-T-XXX) → KENDİ dosyasına hedefli uygulanır. `bagli_id`
+#   (PA-XXX/BR-XXX vb.) o dosyanın gövdesinde satır-içi geçtiğinden `bolum_bul` gövde-içi ID
+#   fallback'i ile bulunur; bulunamazsa yine tam yeniden üretime düşer (davranış bozulmaz).
+_SORU_HEDEF_ANALIZ = {
+    "acik-sorular.md":  "teknik-analiz.md",
+    "brd-sorular.md":   "brd-analizi.md",
+    "surec-analizi.md": "surec-analizi.md",
+    "teknik-analiz.md": "teknik-analiz.md",
+}
 
 
 def _sorulari_hedefli_uygula(kaynak: str, sorular: list[dict]) -> dict:
