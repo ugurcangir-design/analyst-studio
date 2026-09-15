@@ -222,6 +222,7 @@
       <a href="#sss"       class="h1">17. SSS</a>
       <a href="#jira-kopru" class="h1">18. Jira Köprüsü</a>
       <a href="#bildirim"  class="h1">19. Bildirimler</a>
+      <a href="#kimlik-yetki" class="h1">20. Kimlik &amp; Yetki</a>
     </nav>
   </aside>
 
@@ -1886,6 +1887,76 @@ pip install -r requirements.txt   # gerekirse</code></pre>
     </ul>
     <p>Kapatmak için <code>.env</code> <code>BILDIRIM=false</code>. <strong>Sınır:</strong> agent tamamen
       kapalıyken anlık bildirim gönderilemez (kapalı program yazamaz) — açılışta telafi edilir.</p>
+
+    <h2 id="kimlik-yetki">20. Kimlik &amp; Yetki <span class="pill new">Yeni</span></h2>
+    <p>
+      Her analist kendini <strong>şirket e-postasıyla</strong> tanıtır; owner (Uğur) bu kimliklere
+      <strong>rol</strong> atar ve hangi ekranın hangi rolde görüneceğini belirler. Kimlik ve yetki
+      bilgisi güncellemeyle tüm ekibe iner ve her işlemde kontrol edilir.
+    </p>
+
+    <h3 id="ky-kimlik">20.1 Analist Kimliği (zorunlu) <span class="pill new">Zorunlu</span></h3>
+    <p>
+      <strong>Ayarlar → Analist Kimliği</strong> altında <strong>ad-soyad</strong> ve
+      <strong>şirket e-postanızı</strong> (<code>ad.soyad@sans-technology.com</code>) girin.
+      Bu bilgi bir kez girilir ve <strong>yalnızca kendi bilgisayarınızda</strong> saklanır
+      (<code>analist.json</code>, git'e gönderilmez).
+    </p>
+    <div class="box warn">
+      <strong>E-posta girilmeden analiz başlatılamaz.</strong> Kimlik eksikse ekranın üstünde
+      kırmızı bir uyarı bandı çıkar ve analiz/task açma işlemleri engellenir. Yalnız
+      <code>@sans-technology.com</code> adresleri kabul edilir.
+    </div>
+    <ul>
+      <li>Kimliğiniz <strong>Kullanım Raporu</strong>'nda ad + e-posta ile görünür (doğru atıf).</li>
+      <li>E-postanızı girer girmez owner'ın <strong>Yetki</strong> ekranındaki listeye düşersiniz
+        (analiz çalıştırmanız gerekmez).</li>
+    </ul>
+    <div class="box tip">
+      <strong>Önemli:</strong> E-posta yalnızca <em>güncel sürümle</em> üretilen kayıtlara eklenir.
+      Listede görünmüyorsanız: agent'ı <strong>güncelleyip Yeniden Başlat</strong> yapın, sonra
+      Ayarlar'dan e-postanızı (yeniden) kaydedin.
+    </div>
+
+    <h3 id="ky-roller">20.2 Roller</h3>
+    <table>
+      <tr><th>Rol</th><th>Ne görür?</th></tr>
+      <tr><td><strong>owner</strong></td><td>Her şeyi görür ve yönetir (Yetki, Kullanım Raporu dahil).</td></tr>
+      <tr><td><strong>analist</strong></td><td>Rolüne <strong>açık</strong> ekranları kullanır; owner'ın "Yalnız owner" yaptığı ekranları görmez.</td></tr>
+    </table>
+    <p>
+      Bir ekran, gerektirdiği rolden düşük rollü kullanıcıdan gizlenir. Şu an iki rol vardır:
+      ekran ya <strong>Herkes</strong>'e (analist + owner) ya da <strong>Yalnız owner</strong>'a açıktır.
+    </p>
+
+    <h3 id="ky-yetki">20.3 Owner: Yetki ekranı</h3>
+    <p>Yetki ekranı yalnız owner kurulumunda görünür ve iki panelden oluşur:</p>
+    <ul>
+      <li><strong>Kullanıcılar &amp; Roller</strong> — İsimler Kullanım Raporu'ndan <strong>otomatik çekilir</strong>
+        (elle e-posta girmezsiniz). Her satırdaki <strong>rol dropdown</strong>'undan analist/owner seçilir,
+        anında kaydedilir. E-postası henüz gelmemiş kişiler "⏳ e-posta bekleniyor" olarak görünür.</li>
+      <li><strong>Ekran Yetkileri</strong> — Her ekranın yanındaki dropdown'dan <strong>Herkes</strong> veya
+        <strong>Yalnız owner</strong> seçilir, <strong>Kaydet</strong>'e basılır.</li>
+    </ul>
+    <div class="box info">
+      <strong>Ekibi görmek için:</strong> Kullanım Raporu → <strong>Uzaktan Çek</strong> yapıp Yetki ekranını
+      yenileyin. Analistler agent'ı güncel sürümde çalıştırıp e-postalarını girmiş olmalı.
+    </div>
+    <div class="box tip">
+      <strong>Nasıl dağılır?</strong> Rol/ekran atamaları <code>roller.json</code>'a yazılır. Owner bunu
+      <strong>commit + push</strong> eder; analistler <strong>güncelleme</strong> ile kendi rollerini alır
+      (yeniden başlatma gerekmez, her istekte kontrol edilir).
+    </div>
+    <div class="box warn">
+      <strong>Gizlilik:</strong> <code>roller.json</code> git'te izlenir ama <strong>ham e-posta/isim
+      içermez</strong> — e-postalar hash'lenerek saklanır. İsimler yalnız owner'ın kendi Kullanım Raporu
+      verisinden gösterilir. Owner konsolu (Yetki/Kullanım) yerel <code>reference/owner_konsol.json</code>
+      işaretine bağlıdır; e-posta ile "owner" rolü atamak bu ekranları AÇMAZ.
+    </div>
+    <p style="color:var(--text3); font-size:13px">
+      Not: Uygulama her analistin kendi makinesinde çalıştığından bu yetki katmanı <em>düzen ve doğru atıf</em>
+      içindir; teknik bir güvenlik sınırı değildir (güvenilir ekip modeli).
+    </p>
 
     <div style="margin-top:64px; padding-top:24px; border-top:1px solid var(--border); font-size:12px; color:var(--text3); text-align:center;">
       <strong>Analyst Studio</strong> · v2026.09 · Kullanıcı Kılavuzu · Jira Köprüsü &amp; Bildirimler<br>
