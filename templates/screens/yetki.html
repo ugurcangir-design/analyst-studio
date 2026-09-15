@@ -1,25 +1,60 @@
-    <!-- EKRAN: Yetki (v2) — owner-only. Görünürlük yönetimi: analistlerden gizlenen
-         ekran/aksiyonlar. Backend: /api/gorunurluk. Kullanıcı yönetimi Ayarlar'da (/api/users).
-         Not: Denetim/audit kaydı v2'de kaldırıldı — analist iş takibi Kullanım Raporu'nda. -->
+    <!-- EKRAN: Yetki (v2) — owner-only. (1) Kullanıcılar & Roller: şirket e-postası+ad ile
+         kullanıcı ekle, rol ata, kullanıcı-bazlı ekran istisnası (aç/kapat). E-posta HASH'lenir
+         (roller.json, PII'siz); ham ad/e-posta yalnız yerel (roller_yerel.json). (2) Görünürlük:
+         analist-default gizli ekranlar (gorunurluk.json). Backend: /api/roller, /api/gorunurluk. -->
     <div class="page" id="page-yetki">
       <div class="ph">
         <div class="ph-text">
           <h1>Yetki</h1>
-          <p>Analistlerin görmeyeceği ekran ve aksiyonları seç. Seçim tüm analistlere güncellemeyle iner.</p>
+          <p>Kullanıcılara rol ata ve her ekran için görünürlüğü yönet. Tanımlar tüm analistlere güncellemeyle iner.</p>
         </div>
         <div class="ph-actions">
-          <button class="btn btn-outline btn-sm" onclick="switchTab('settings')">Kullanıcılar (Ayarlar)</button>
+          <button class="btn btn-outline btn-sm" onclick="switchTab('settings')">Ayarlar</button>
         </div>
       </div>
 
       <div class="ds-callout" style="margin-bottom:14px">
         <div class="grow"><div class="ct">İki rol</div>
-          <p><b>Owner</b> (bu makine / <code>ADMIN_USER</code>) her şeyi görür ve yönetir. <b>Analist</b> aşağıda işaretlediklerin hariç tüm ekran ve işlemleri kullanır. Seçim <code>gorunurluk.json</code>'a yazılır; analistlere güncellemeyle iner. Sunucu tarafında da uygulanır.</p></div>
+          <p><b>Owner</b> (bu makine / <code>ADMIN_USER</code>) her şeyi görür ve yönetir. <b>Analist</b> aşağıda işaretlediğin ekranlar hariç her şeyi kullanır. Kullanıcı-bazlı istisna tanımlayabilirsin. Analistler <b>şirket e-postalarına</b> tanımlı rol ve ekranları güncellemeyle alır; her istekte kontrol edilir.</p></div>
       </div>
 
+      <!-- (1) Kullanıcılar & Roller -->
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-head">
+          <span class="panel-title">Kullanıcılar &amp; Roller</span>
+          <span class="ds-panel-tag">OWNER</span>
+          <span class="panel-spacer"></span>
+          <span id="yt-kull-durum" class="mono-meta"></span>
+        </div>
+        <div class="panel-body">
+          <div class="ds-callout" style="margin-bottom:12px">
+            <div class="grow"><p>Şirket e-postası + ad ile kullanıcı ekle, rol ata. E-posta <b>hash'lenerek</b> <code>roller.json</code>'a yazılır (git'e ham e-posta girmez); ham ad/e-posta yalnız bu makinede tutulur. Kullanıcıya özel <b>ekran istisnası</b> (aç/kapat) tanımlayabilirsin.</p></div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
+            <div style="flex:2;min-width:200px">
+              <label class="ds-tgl-sub">Şirket e-postası</label>
+              <input type="email" id="yt-yeni-eposta" class="ctx-input" placeholder="ad.soyad@…" autocomplete="off" style="width:100%;box-sizing:border-box">
+            </div>
+            <div style="flex:2;min-width:150px">
+              <label class="ds-tgl-sub">Ad Soyad</label>
+              <input type="text" id="yt-yeni-ad" class="ctx-input" placeholder="Ad Soyad" autocomplete="off" style="width:100%;box-sizing:border-box">
+            </div>
+            <div style="flex:1;min-width:110px">
+              <label class="ds-tgl-sub">Rol</label>
+              <select id="yt-yeni-rol" class="ctx-input" style="width:100%">
+                <option value="analist">analist</option><option value="owner">owner</option>
+              </select>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="ytKullEkle()">Ekle</button>
+          </div>
+          <div id="yt-kull-liste"><div class="mono-meta">Yükleniyor…</div></div>
+        </div>
+      </div>
+
+      <!-- (2) Görünürlük — analist-default -->
       <div class="panel">
         <div class="panel-head">
-          <span class="panel-title">Görünürlük — analistlerden gizle</span>
+          <span class="panel-title">Görünürlük — analistlerden gizle (varsayılan)</span>
           <span class="ds-panel-tag">OWNER</span>
           <span class="panel-spacer"></span>
           <span id="yt-gor-durum" class="mono-meta"></span>
@@ -30,12 +65,113 @@
     </div>
 
     <script>
-    // ─── Yetki ekranı (v2) — görünürlük yönetimi ────────────────────────────
-    function _ytEsc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+    // ─── Yetki ekranı (v2) — kullanıcı/rol + görünürlük yönetimi ────────────────
+    function _ytEsc(s) { return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
     let _ytKatalog = [];
+    let _ytRolKatalog = [];
+    let _ytRoller = ['analist', 'owner'];
+    let _ytDomain = '';
+    let _ytKullMap = {};       // hash → kullanıcı (istemci cache)
 
-    async function ytYukle() { await ytGorYukle(); }
+    async function ytYukle() { await ytKullYukle(); await ytGorYukle(); }
 
+    // ── (1) Kullanıcılar & Roller ──────────────────────────────────────────────
+    async function ytKullYukle() {
+      const el = document.getElementById('yt-kull-liste');
+      const d = await (await fetch('/api/roller')).json();
+      if (!d.ok) { el.innerHTML = '<div class="ds-callout warn"><div class="grow"><div class="ct">' + _ytEsc(d.error || 'Yetkisiz') + '</div></div></div>'; return; }
+      _ytRolKatalog = d.katalog || [];
+      _ytRoller = d.roller || ['analist', 'owner'];
+      _ytDomain = d.domain || '';
+      _ytKullMap = {};
+      (d.kullanicilar || []).forEach(u => { _ytKullMap[u.hash] = u; });
+      const ep = document.getElementById('yt-yeni-eposta'); if (ep && _ytDomain) ep.placeholder = 'ad.soyad@' + _ytDomain;
+      const rs = document.getElementById('yt-yeni-rol'); if (rs) rs.innerHTML = _ytRoller.map(r => `<option value="${_ytEsc(r)}">${_ytEsc(r)}</option>`).join('');
+      const ku = d.kullanicilar || [];
+      if (!ku.length) { el.innerHTML = '<div class="mono-meta">Henüz kullanıcı yok — yukarıdan ekleyin.</div>'; return; }
+      el.innerHTML = ku.map(u => _ytKullRow(u)).join('');
+    }
+
+    function _ytKullRow(u) {
+      const ist = (u.ac || []).length + (u.kapat || []).length;
+      return `<div class="ds-tglrow" style="align-items:center;flex-wrap:wrap">
+        <div style="flex:1;min-width:0">
+          <div class="ds-tgl-txt">${_ytEsc(u.ad || '(isimsiz)')}</div>
+          <div class="ds-tgl-sub">${_ytEsc(u.eposta || '—')}</div>
+        </div>
+        <select class="ctx-input" onchange="ytRolDegis('${_ytEsc(u.hash)}', this.value)" style="width:auto;min-width:105px">
+          ${_ytRoller.map(r => `<option value="${_ytEsc(r)}" ${u.rol === r ? 'selected' : ''}>${_ytEsc(r)}</option>`).join('')}
+        </select>
+        <button class="btn btn-outline btn-xs" onclick="ytKullDetayAc('${_ytEsc(u.hash)}')">İstisnalar${ist ? ' (' + ist + ')' : ''}</button>
+        <button class="btn btn-outline btn-xs" onclick="ytKullSil('${_ytEsc(u.hash)}')">Sil</button>
+        <div class="yt-detay" id="yt-detay-${_ytEsc(u.hash)}" style="display:none;flex-basis:100%;margin-top:8px"></div>
+      </div>`;
+    }
+
+    function ytKullDetayAc(hash) {
+      const box = document.getElementById('yt-detay-' + hash);
+      if (!box) return;
+      if (box.style.display !== 'none') { box.style.display = 'none'; return; }
+      const u = _ytKullMap[hash] || { ac: [], kapat: [] };
+      const ac = new Set(u.ac || []), kapat = new Set(u.kapat || []);
+      const gruplar = {};
+      _ytRolKatalog.forEach(k => (gruplar[k.grup] = gruplar[k.grup] || []).push(k));
+      box.innerHTML = '<div class="ds-callout" style="margin:0 0 8px"><div class="grow"><p><b>Aç</b> = analiste kapalı olsa bile bu kullanıcıya göster · <b>Kapat</b> = açık olsa bile bu kullanıcıya gizle.</p></div></div>'
+        + Object.entries(gruplar).map(([g, ks]) => `<div class="ds-sec-label">${_ytEsc(g)}</div>`
+          + ks.map(k => `<div class="ds-tglrow" style="align-items:center">
+              <div style="flex:1"><div class="ds-tgl-txt">${_ytEsc(k.ad)}</div><div class="ds-tgl-sub">${_ytEsc(k.aciklama || '')}</div></div>
+              <select class="ctx-input yt-ist" data-id="${_ytEsc(k.id)}" style="width:auto;min-width:130px">
+                <option value="">Varsayılan</option>
+                <option value="ac" ${ac.has(k.id) ? 'selected' : ''}>Aç (göster)</option>
+                <option value="kapat" ${kapat.has(k.id) ? 'selected' : ''}>Kapat (gizle)</option>
+              </select></div>`).join('')).join('')
+        + `<div style="margin-top:10px"><button class="btn btn-primary btn-sm" onclick="ytKullDetayKaydet('${_ytEsc(hash)}')">İstisnaları Kaydet</button></div>`;
+      box.style.display = 'block';
+    }
+
+    async function ytKullDetayKaydet(hash) {
+      const u = _ytKullMap[hash]; if (!u) return;
+      const box = document.getElementById('yt-detay-' + hash);
+      const ac = [], kapat = [];
+      box.querySelectorAll('.yt-ist').forEach(s => { if (s.value === 'ac') ac.push(s.dataset.id); else if (s.value === 'kapat') kapat.push(s.dataset.id); });
+      await _ytKullPost({ eposta: u.eposta, ad: u.ad, rol: u.rol, ac, kapat }, 'İstisnalar kaydedildi');
+    }
+
+    async function ytRolDegis(hash, rol) {
+      const u = _ytKullMap[hash]; if (!u) return;
+      await _ytKullPost({ eposta: u.eposta, ad: u.ad, rol, ac: u.ac || [], kapat: u.kapat || [] }, 'Rol güncellendi');
+    }
+
+    async function ytKullEkle() {
+      const eposta = (document.getElementById('yt-yeni-eposta').value || '').trim().toLowerCase();
+      const ad = (document.getElementById('yt-yeni-ad').value || '').trim();
+      const rol = document.getElementById('yt-yeni-rol').value;
+      if (!eposta) { toast('Şirket e-postası zorunlu', 'error'); return; }
+      if (_ytDomain && !eposta.endsWith('@' + _ytDomain)) { toast('Yalnız @' + _ytDomain + ' e-postası kabul edilir', 'error'); return; }
+      const ok = await _ytKullPost({ eposta, ad, rol, ac: [], kapat: [] }, 'Kullanıcı eklendi');
+      if (ok) { document.getElementById('yt-yeni-eposta').value = ''; document.getElementById('yt-yeni-ad').value = ''; }
+    }
+
+    async function _ytKullPost(body, okMsg) {
+      try {
+        const r = await fetch('/api/roller/kullanici', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const d = await r.json();
+        if (d.ok) { toast(okMsg + ' — analistlere güncellemeyle iner', 'success'); await ytKullYukle(); return true; }
+        toast(d.error || 'Kaydedilemedi', 'error'); return false;
+      } catch (e) { toast('Kaydedilemedi', 'error'); return false; }
+    }
+
+    async function ytKullSil(hash) {
+      const u = _ytKullMap[hash] || {};
+      if (!confirm((u.ad || u.eposta || 'Kullanıcı') + ' silinsin mi?')) return;
+      try {
+        const r = await fetch('/api/roller/kullanici/' + encodeURIComponent(hash), { method: 'DELETE' });
+        const d = await r.json();
+        if (d.ok) { toast('Silindi', 'success'); await ytKullYukle(); } else toast(d.error || 'Silinemedi', 'error');
+      } catch (e) { toast('Silinemedi', 'error'); }
+    }
+
+    // ── (2) Görünürlük (analist-default) ───────────────────────────────────────
     async function ytGorYukle() {
       const el = document.getElementById('yt-gor-liste');
       const d = await (await fetch('/api/gorunurluk')).json();

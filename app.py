@@ -12,6 +12,7 @@ import json
 import time
 import signal
 import shutil
+import hashlib
 import logging
 import logging.handlers
 import secrets
@@ -386,12 +387,111 @@ def _denetim(islem: str, hedef: str = "", **detay) -> None:
     return None
 
 
+# ─── Rol atamaları (kullanıcı-bazlı görünürlük) — hash'li, PII'siz ────────────
+# roller.json TRACKED ama PII'siz: {kullanicilar: {<eposta_hash>: {rol, ac[], kapat[]}}}.
+# Ham e-posta/ad YALNIZ owner'ın gitignore'lu roller_yerel.json'ında (Yetki UI için).
+# Analistlere güncellemeyle (git pull) iner; her istekte diskten okunur → restart gerekmez.
+ROLLER_PATH = BASE_DIR / "roller.json"
+ROLLER_YEREL_PATH = REF_DIR / "roller_yerel.json"
+_ROLLER_SALT = "analyst-studio-v2::"    # public repo + honor-system: trivial rainbow'u zorlaştırır
+GECERLI_ROLLER = ("owner", "analist")
+
+
+def _eposta_hash(eposta: str) -> str:
+    """Şirket e-postasının deterministik hash'i (küçük harf + salt). PII git'e girmez."""
+    e = (eposta or "").strip().lower()
+    if not e:
+        return ""
+    return hashlib.sha256((_ROLLER_SALT + e).encode("utf-8")).hexdigest()
+
+
+def _roller_oku() -> dict:
+    try:
+        if ROLLER_PATH.exists():
+            d = json.loads(ROLLER_PATH.read_text(encoding="utf-8"))
+            if isinstance(d.get("kullanicilar"), dict):
+                return d
+    except Exception:
+        pass
+    return {"kullanicilar": {}}
+
+
+def _roller_yaz(kullanicilar: dict) -> None:
+    """roller.json'a YALNIZ hash+rol+override yazar (PII yok). Geçersiz id/hash elenir."""
+    gecerli_id = {k["id"] for k in GIZLENEBILIR_KATALOG}
+    temiz = {}
+    for h, rec in (kullanicilar or {}).items():
+        if not isinstance(h, str) or not re.fullmatch(r"[0-9a-f]{64}", h):
+            continue
+        rec = rec or {}
+        rol = rec.get("rol") if rec.get("rol") in GECERLI_ROLLER else "analist"
+        ac = sorted({x for x in rec.get("ac", []) if x in gecerli_id})
+        kapat = sorted({x for x in rec.get("kapat", []) if x in gecerli_id})
+        temiz[h] = {"rol": rol, "ac": ac, "kapat": kapat}
+    veri = {
+        "_aciklama": "Kullanıcı-bazlı ekran yetkisi. Anahtar = sha256(salt+küçük-harf e-posta) "
+                     "— PII git'e GİRMEZ. ac=ekstra açılan, kapat=ekstra kapatılan ekran id'leri. "
+                     "Ham e-posta/ad owner'ın YEREL reference/roller_yerel.json'ındadır (gitignore).",
+        "kullanicilar": temiz,
+    }
+    tmp = ROLLER_PATH.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(veri, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(ROLLER_PATH)
+
+
+def _roller_yerel_oku() -> dict:
+    """Owner'ın YEREL kullanıcı defteri: {hash: {ad, eposta}}. Yalnız Yetki UI için."""
+    try:
+        if ROLLER_YEREL_PATH.exists():
+            d = json.loads(ROLLER_YEREL_PATH.read_text(encoding="utf-8"))
+            if isinstance(d, dict):
+                return d
+    except Exception:
+        pass
+    return {}
+
+
+def _roller_yerel_yaz(d: dict) -> None:
+    try:
+        ROLLER_YEREL_PATH.parent.mkdir(parents=True, exist_ok=True)
+        ROLLER_YEREL_PATH.write_text(json.dumps(d, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _bu_kullanici_kaydi() -> dict | None:
+    """Bu makinedeki analistin (yerel e-posta) roller.json kaydı: {rol, ac, kapat} veya None."""
+    from skills import telemetri
+    h = _eposta_hash(telemetri.analist_eposta_oku())
+    if not h:
+        return None
+    return _roller_oku()["kullanicilar"].get(h)
+
+
+def _etkin_gizli() -> list[str]:
+    """Bu kullanıcı için ETKİN gizli ekran id'leri: analist-default (gorunurluk.json)
+    − kullanıcı 'ac' + kullanıcı 'kapat'. roller rolü 'owner' (per-user) ise hiç gizlenmez.
+    Yerel owner (owner_konsol → _owner_mi) zaten her şeyi görür."""
+    if _owner_mi():
+        return []
+    base = set(_gorunurluk_oku())
+    rec = _bu_kullanici_kaydi()
+    if rec:
+        if rec.get("rol") == "owner":
+            return []
+        base -= set(rec.get("ac", []))
+        base |= set(rec.get("kapat", []))
+    gecerli = {k["id"] for k in GIZLENEBILIR_KATALOG}
+    return sorted(x for x in base if x in gecerli)
+
+
 @app.before_request
 def gorunurluk_kontrol():
-    """Analist için gizlenen ekranların endpoint'lerini sunucu tarafında engeller."""
+    """Analist için gizlenen ekranların endpoint'lerini sunucu tarafında engeller
+    (kullanıcı-bazlı override dahil — `_etkin_gizli`)."""
     if _owner_mi() or not request.path.startswith("/api/"):
         return None
-    gizli = set(_gorunurluk_oku())
+    gizli = set(_etkin_gizli())
     if not gizli:
         return None
     for k in GIZLENEBILIR_KATALOG:
@@ -1977,6 +2077,64 @@ def gorunurluk_kaydet():
     return jsonify({"ok": True, "gizli": sorted(yeni)})
 
 
+# ─── Rol atamaları (kullanıcı-bazlı ekran yetkisi) — owner Yetki ekranı ──────
+
+@app.route("/api/roller", methods=["GET"])
+@yetki_gerekli
+def roller_getir():
+    """Owner Yetki UI: kullanıcı listesi (yerel ad/e-posta ile) + rol + override + katalog.
+    Ham ad/e-posta owner'ın YEREL roller_yerel.json'ından gelir; tracked roller.json PII'siz."""
+    kullanicilar = _roller_oku()["kullanicilar"]
+    yerel = _roller_yerel_oku()
+    liste = []
+    for h, rec in kullanicilar.items():
+        y = yerel.get(h, {})
+        liste.append({"hash": h, "ad": y.get("ad", ""), "eposta": y.get("eposta", ""),
+                      "rol": rec.get("rol", "analist"),
+                      "ac": rec.get("ac", []), "kapat": rec.get("kapat", [])})
+    liste.sort(key=lambda k: (k["rol"], (k["ad"] or k["eposta"] or k["hash"]).lower()))
+    return jsonify({"ok": True, "kullanicilar": liste, "katalog": GIZLENEBILIR_KATALOG,
+                    "roller": list(GECERLI_ROLLER), "domain": SIRKET_EPOSTA_DOMAIN})
+
+
+@app.route("/api/roller/kullanici", methods=["POST"])
+@yetki_gerekli
+def roller_kullanici_kaydet():
+    """Kullanıcı ekle/güncelle. Body: {eposta, ad, rol, ac[], kapat[]}. E-posta hash'lenir;
+    ham e-posta/ad YALNIZ yerel dosyaya, tracked roller.json'a yalnız hash+rol+override."""
+    data = request.get_json(silent=True) or {}
+    eposta = (data.get("eposta") or "").strip().lower()
+    ad = (data.get("ad") or "").strip()
+    rol = data.get("rol") if data.get("rol") in GECERLI_ROLLER else "analist"
+    if not _eposta_gecerli(eposta):
+        return jsonify({"ok": False, "error": f"Geçerli bir @{SIRKET_EPOSTA_DOMAIN} e-postası girin"}), 400
+    gecerli_id = {k["id"] for k in GIZLENEBILIR_KATALOG}
+    ac = [x for x in (data.get("ac") or []) if x in gecerli_id]
+    kapat = [x for x in (data.get("kapat") or []) if x in gecerli_id]
+    h = _eposta_hash(eposta)
+    d = _roller_oku()
+    d["kullanicilar"][h] = {"rol": rol, "ac": ac, "kapat": kapat}
+    _roller_yaz(d["kullanicilar"])
+    yerel = _roller_yerel_oku()
+    yerel[h] = {"ad": ad, "eposta": eposta}
+    _roller_yerel_yaz(yerel)
+    return jsonify({"ok": True, "hash": h})
+
+
+@app.route("/api/roller/kullanici/<hash_>", methods=["DELETE"])
+@yetki_gerekli
+def roller_kullanici_sil(hash_):
+    """Kullanıcıyı defterden kaldırır (tracked + yerel)."""
+    d = _roller_oku()
+    if d["kullanicilar"].pop(hash_, None) is None:
+        return jsonify({"ok": False, "error": "Kullanıcı bulunamadı"}), 404
+    _roller_yaz(d["kullanicilar"])
+    yerel = _roller_yerel_oku()
+    if yerel.pop(hash_, None) is not None:
+        _roller_yerel_yaz(yerel)
+    return jsonify({"ok": True})
+
+
 # ─── Otomatik Güncelleme — v2 Faz 2.5 (bildirimli otomatik) ──────────────────
 # Arka planda periyodik `git fetch`; uzak dal öndeyse "yeni sürüm hazır" bildirimi.
 # İş YOKKEN (workflow çalışmıyor + rerun/revizyon kilidi boş) sessizce `pull --ff-only`
@@ -2799,7 +2957,7 @@ def auth_me():
     return jsonify({"username": session.get("username"), "is_admin": _admin_mi(),
                     "usage_admin": _usage_yetkili_mi(),
                     "yetki_admin": _yetki_paneli_mi() and _owner_mi(),
-                    "rol": _rol(), "gizli": [] if _owner_mi() else _gorunurluk_oku()})
+                    "rol": _rol(), "gizli": _etkin_gizli()})
 
 
 @app.route("/api/analist", methods=["GET"])

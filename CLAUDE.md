@@ -135,6 +135,19 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   kimlik_tam}`, POST domain doğrular. Telemetri olayına `eposta` eklenir (Kullanım Raporu stabil atıf).
   UI: Ayarlar e-posta alanı + kimlik eksikse kırmızı uyarı bandı (`_kimlikBandiGuncelle`). Honor-system
   (lokal, kendi-beyan — teknik engelleme değil, düzen/atıf). Test: `smoke_test` kimlik kapısı kontrolleri.
+  **Kullanıcı-bazlı ekran yetkisi (rol atamaları, Adım 2-3):** `roller.json` (repoda İZLENİR, **PII'siz**):
+  `{kullanicilar: {<eposta_hash>: {rol, ac[], kapat[]}}}`, `eposta_hash = sha256(_ROLLER_SALT + küçük-harf
+  e-posta)` → git'e ham e-posta GİRMEZ. Ham ad/e-posta YALNIZ owner'ın `reference/roller_yerel.json`'ında
+  (gitignore). **Etkin görünürlük** `_etkin_gizli()`: analist-default (`gorunurluk.json`) − kullanıcı `ac`
+  (ekstra göster) + `kapat` (ekstra gizle); per-user rol=`owner` → hiç gizlenmez; yerel owner (`_owner_mi`)
+  zaten her şeyi görür. `gorunurluk_kontrol` + `/api/auth/me.gizli` artık `_etkin_gizli` kullanır → her istekte
+  okunur, `git pull` sonrası restart'sız geçerli. **Owner-console SINIRI korunur:** e-posta ile "owner" ataması
+  Yetki/Kullanım ekranlarını AÇMAZ (o hâlâ `owner_konsol.json` lokal işaretinde) — yalnız analist ekran
+  görünürlüğünü yönetir. Uçlar (owner-gate `yetki_gerekli`): `GET /api/roller` (yerel ad/e-posta ile birleşik
+  liste), `POST /api/roller/kullanici` (eposta hash'lenir; ham → yerel, hash+rol+override → tracked),
+  `DELETE /api/roller/kullanici/<hash>`. UI: `screens/yetki.html` "Kullanıcılar & Roller" paneli (ekle/rol
+  dropdown/kullanıcı-bazlı ekran istisnası aç-kapat) + mevcut "Görünürlük" paneli (analist-default). Honor-system.
+  Test: `tests/test_roller.py`.
   Yeni gizlenebilir ekran/aksiyon → `GIZLENEBILIR_KATALOG` (app.py). **Owner konsolu (Kullanım Raporu +
   Yetki ekranları) — kilit `.env`'de DEĞİL, gitignore'lu YEREL DOSYADA:** `_owner_konsol_aktif()` yalnız
   `reference/owner_konsol.json` (`{"owner_konsol": true}`) okur; `_usage_yetkili_mi()` + `_yetki_paneli_mi()`
@@ -180,7 +193,8 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   `test_bildirim.py` (bildirim kaçış/redaksiyon/no-op), `test_bildirim_akis.py` (analiz bildirim geçiş+dedup),
   `test_sorular.py` (soru defteri oturum-aidiyeti — bayat cevap taşınmaz + aynı-oturum koruma, offline/0-token),
   `test_baglam_jira.py` (bağlam filtresi Jira key'leri yerel export'ta yoksa uzaktan bulkfetch — yalnız eksik, hata yutulur; ağ MOCK/0-token),
-  `test_soru_hedefli.py` (soru cevabı hedefli düzeltme yönlendirmesi — süreç/teknik kendine, bölüm bulunamazsa tam üretim; AI MOCK/0-token).
+  `test_soru_hedefli.py` (soru cevabı hedefli düzeltme yönlendirmesi — süreç/teknik kendine, bölüm bulunamazsa tam üretim; AI MOCK/0-token),
+  `test_roller.py` (kullanıcı-bazlı ekran yetkisi — hash/PII'siz, etkin görünürlük ac/kapat, owner sınırı, CRUD; offline/0-token).
 - **Faz 3.a — Kod kaynağı:** `skills/kod_kaynagi.py` salt-okuma yerel git/dosya arayüzü (yol repo köküne
   hapsedilir; yazma/komut yok). Config `reference/kod_kaynagi.json` (gitignore + `.example` seed, seed listesinde).
   `/api/kod/*` (config owner-only) + `screens/kod.html` (Kaynaklar). Gerçek repo bağlantısı analiste bırakıldı;

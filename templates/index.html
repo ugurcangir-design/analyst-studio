@@ -4261,7 +4261,7 @@ async function analistKaydet() {
       _analistKimligiUygula(d.ad_soyad);
       _kimlikTam = !!d.kimlik_tam;
       _kimlikBandiGuncelle();
-      if (typeof toast === 'function') toast('ok', 'Kaydedildi', 'Kimlik: ' + d.ad_soyad);
+      if (typeof toast === 'function') toast('Kimlik kaydedildi: ' + d.ad_soyad, 'success');
     }
   } catch (e) { if (durum) durum.textContent = 'Kaydedilemedi.'; }
 }
