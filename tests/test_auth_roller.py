@@ -29,6 +29,7 @@ uygulama.USERS_PATH.write_text(json.dumps({
     "analist.test": generate_password_hash("analist123"),
 }), encoding="utf-8")
 uygulama.GORUNURLUK_PATH = _tmp / "gorunurluk.json"    # gerçek gorunurluk.json'a dokunma
+uygulama.ROLLER_PATH = _tmp / "roller.json"            # gerçek roller.json ekran_roller'ı testi etkilemesin
 uygulama.OUTPUT_DIR = _tmp
 _tel.ANALIST_DOSYA = _tmp / "analist.json"             # kimlik kapısı: geçerli kimlik (gated POST'lar geçsin)
 _tel.analist_yaz("Rol Test", "rol@example.com")

@@ -86,16 +86,26 @@ telemetri.analist_yaz("Emin", "emin@example.com")
 app._roller_kaydet({app._eposta_hash("emin@example.com"): "analist"}, {"delta": "owner"})
 kontrol("analist e-postası → _etkin_rol analist", app._etkin_rol() == "analist")
 
-# ── Telemetri isim çekme (benzersiz) ──────────────────────────────────────────
-telemetri.olaylari_oku = lambda: [
+# ── Telemetri isim çekme (benzersiz — remote + local birleşik) ────────────────
+import json as _json  # noqa: E402
+telemetri.UZAK_DOSYA = tmp / "remote.jsonl"
+telemetri.EVENTS_DOSYA = tmp / "events.jsonl"
+telemetri.UZAK_DOSYA.write_text("\n".join(_json.dumps(o) for o in [
     {"analist": "Emin K", "eposta": "emin@example.com"},
-    {"analist": "Emin K", "eposta": "emin@example.com"},
+    {"analist": "Emin K", "eposta": "emin@example.com"},   # tekrar → tek satır
+    {"analist": "Emin K", "eposta": ""},                    # aynı isim e-postasız → GİZLENMELİ
     {"analist": "Kübra", "eposta": "kubra@example.com"},
-    {"analist": "Adsız", "eposta": ""},
-]
+    {"analist": "Adsız", "eposta": ""},                     # e-postasız isim → görünür (atanamaz)
+]), encoding="utf-8")
+telemetri.EVENTS_DOSYA.write_text(_json.dumps(
+    {"analist": "Owner Yerel", "eposta": "owner@example.com", "olay": "kimlik"}), encoding="utf-8")
 liste = telemetri.analistler_listesi()
-kontrol("telemetri: benzersiz e-posta (2 kişi)",
-        {x["eposta"] for x in liste if x["eposta"]} == {"emin@example.com", "kubra@example.com"})
+kontrol("telemetri: benzersiz e-posta (remote+local)",
+        {x["eposta"] for x in liste if x["eposta"]} == {"emin@example.com", "kubra@example.com", "owner@example.com"})
+kontrol("aynı isim e-postalı+e-postasız → tek kez (çift değil)",
+        len([x for x in liste if x["ad"] == "Emin K"]) == 1)
+kontrol("owner'ın YEREL kimlik olayı roster'da görünür",
+        any(x["eposta"] == "owner@example.com" for x in liste))
 
 # ── CRUD uçları (owner-gate) ──────────────────────────────────────────────────
 app._owner_konsol_aktif = lambda: True

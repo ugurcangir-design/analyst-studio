@@ -180,8 +180,13 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   e-posta girer girmez owner roster'ında görünür. `kimlik` olayı istatistikten HARİÇ (işlem sayılmaz).
   `/api/roller` roster'ı e-postası HENÜZ gelmemiş isimleri de gösterir (`atanabilir:false`, "e-posta
   bekleniyor" — eski sürümdeki/e-postasız analistler) + bu makinenin kendi kimliğini başa ekler (owner
-  kendini hemen görür). NOT: e-posta yalnız YENİ (Adım 1 sürümlü) olaylara eklenir — geçmiş kayıtlara
-  işlemez; analist güncel sürümde e-posta girmeli. Honor-system. Test: `tests/test_roller.py`.
+  kendini hemen görür). `analistler_listesi` HEM `remote.jsonl` (ekip, Uzaktan Çek) HEM `events.jsonl`
+  (yerel — owner kimlik olayı round-trip beklemeden) okur + dedup (aynı isim e-postalı+e-postasız tek kez).
+  **NOT (kritik):** e-posta yalnız YENİ (Adım 1+) sürümle üretilen olaylara eklenir — geçmiş kayıtlara işlemez.
+  Analistlerin roster'da e-POSTALI görünmesi için: (1) güncel sürümde Ayarlar→Kaydet (kimlik olayı sink'e) →
+  (2) owner Uzaktan Çek. **Bunu yapmalarına rağmen e-posta gelmiyorsa muhtemel neden: telemetri SINK (Google
+  Apps Script) `eposta` sütununu tutmuyor** → Apps Script'e eposta alanı eklenmeli (owner'ın kendi script'i).
+  Honor-system. Test: `tests/test_roller.py`.
   Yeni gizlenebilir ekran/aksiyon → `GIZLENEBILIR_KATALOG` (app.py). **Owner konsolu (Kullanım Raporu +
   Yetki ekranları) — kilit `.env`'de DEĞİL, gitignore'lu YEREL DOSYADA:** `_owner_konsol_aktif()` yalnız
   `reference/owner_konsol.json` (`{"owner_konsol": true}`) okur; `_usage_yetkili_mi()` + `_yetki_paneli_mi()`

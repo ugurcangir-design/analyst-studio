@@ -57,21 +57,39 @@ def analist_eposta_oku() -> str:
 
 
 def analistler_listesi() -> list[dict]:
-    """Kullanım verisinden (events/remote) BENZERSİZ analistler: [{ad, eposta}].
-    Owner Yetki ekranı bu listeyi çeker (rol atamak için). E-postası olanlar önce gelir;
-    aynı e-posta tek satır. Owner tüm ekibi görmek için 'Uzaktan Çek' yapmalı (remote.jsonl)."""
-    gorulen: dict = {}
-    for o in olaylari_oku():
-        eposta = (o.get("eposta") or "").strip().lower()
-        ad = (o.get("analist") or "").strip()
-        if not eposta and not ad:
+    """Kullanım verisinden BENZERSİZ analistler: [{ad, eposta}]. Owner Yetki ekranı rol atamak
+    için çeker. HEM remote.jsonl (ekip, Uzaktan Çek) HEM events.jsonl (yerel — owner'ın kendi
+    kimlik olayı round-trip beklemeden) okunur. Aynı kişi çift görünmez: e-postalı kayıt için
+    e-posta anahtar; e-postasız isim, AYNI isim e-postalı bir kayıtta varsa GİZLENİR (yoksa Yetki'de
+    kişi 'atanabilir owner' + 'e-posta bekleniyor' diye iki kez çıkardı)."""
+    epostali: dict = {}          # eposta → {ad, eposta}
+    epostali_adlar: set = set()  # e-postası olan normalize ad'lar
+    adsiz: dict = {}             # ad_lower → {ad, eposta:""}
+    for yol in (UZAK_DOSYA, EVENTS_DOSYA):
+        if not yol.exists():
             continue
-        anahtar = eposta or ("ad::" + ad.lower())
-        if anahtar not in gorulen:
-            gorulen[anahtar] = {"ad": ad, "eposta": eposta}
-        elif ad and not gorulen[anahtar]["ad"]:
-            gorulen[anahtar]["ad"] = ad
-    return sorted(gorulen.values(), key=lambda x: (x["ad"] or x["eposta"]).lower())
+        try:
+            satirlar = yol.read_text(encoding="utf-8").splitlines()
+        except Exception:
+            continue
+        for satir in satirlar:
+            try:
+                o = json.loads(satir)
+            except Exception:
+                continue
+            eposta = (o.get("eposta") or "").strip().lower()
+            ad = (o.get("analist") or "").strip()
+            if eposta:
+                if eposta not in epostali:
+                    epostali[eposta] = {"ad": ad, "eposta": eposta}
+                elif ad and not epostali[eposta]["ad"]:
+                    epostali[eposta]["ad"] = ad
+                if ad:
+                    epostali_adlar.add(ad.lower())
+            elif ad:
+                adsiz.setdefault(ad.lower(), {"ad": ad, "eposta": ""})
+    liste = list(epostali.values()) + [v for k, v in adsiz.items() if k not in epostali_adlar]
+    return sorted(liste, key=lambda x: (x["ad"] or x["eposta"]).lower())
 
 
 def analist_yaz(ad_soyad: str, eposta: str | None = None) -> None:
