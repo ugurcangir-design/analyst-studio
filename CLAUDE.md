@@ -182,10 +182,12 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   bekleniyor" — eski sürümdeki/e-postasız analistler) + bu makinenin kendi kimliğini başa ekler (owner
   kendini hemen görür). `analistler_listesi` HEM `remote.jsonl` (ekip, Uzaktan Çek) HEM `events.jsonl`
   (yerel — owner kimlik olayı round-trip beklemeden) okur + dedup (aynı isim e-postalı+e-postasız tek kez).
-  **NOT (kritik):** e-posta yalnız YENİ (Adım 1+) sürümle üretilen olaylara eklenir — geçmiş kayıtlara işlemez.
-  Analistlerin roster'da e-POSTALI görünmesi için: (1) güncel sürümde Ayarlar→Kaydet (kimlik olayı sink'e) →
-  (2) owner Uzaktan Çek. **Bunu yapmalarına rağmen e-posta gelmiyorsa muhtemel neden: telemetri SINK (Google
-  Apps Script) `eposta` sütununu tutmuyor** → Apps Script'e eposta alanı eklenmeli (owner'ın kendi script'i).
+  **SINK SINIRI + ÇÖZÜM (KANITLANDI):** telemetri sink'i (Apps Script/Sheet) yalnız bilinen sütunları saklar →
+  `eposta` alanını DÜŞÜRÜR (pull'da `eposta` hep None; `baglam` bile sabit `{proje,dokuman}` şemasıyla döner).
+  Bu yüzden `kimlik_bildir` e-postayı, sink'in AYNEN koruduğu **`analist` alanına `'Ad <eposta>'` biçiminde
+  GÖMER**; `analistler_listesi` (`_ANALIST_EPOSTA_DESEN`) geri ayrıştırır. kimlik olayı istatistikten HARİÇ
+  olduğundan Kullanım Raporu kirlenmez, Apps Script'e DOKUNMAYA GEREK YOK. Analistlerin roster'da e-POSTALI
+  görünmesi için: (1) bu gömme-fix'li sürümde Ayarlar→Kaydet → (2) owner Uzaktan Çek → Yetki Yenile.
   Honor-system. Test: `tests/test_roller.py`.
   Yeni gizlenebilir ekran/aksiyon → `GIZLENEBILIR_KATALOG` (app.py). **Owner konsolu (Kullanım Raporu +
   Yetki ekranları) — kilit `.env`'de DEĞİL, gitignore'lu YEREL DOSYADA:** `_owner_konsol_aktif()` yalnız

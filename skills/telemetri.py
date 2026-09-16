@@ -15,6 +15,7 @@ from __future__ import annotations
 import getpass
 import json
 import os
+import re
 import socket
 import time
 from datetime import datetime
@@ -56,6 +57,11 @@ def analist_eposta_oku() -> str:
     return analist_kimlik_oku()["eposta"].lower()
 
 
+# 'Ad Soyad <e-posta>' — kimlik olayının analist alanına gömülü e-postayı ayrıştırır (sink eposta
+# sütununu düşürdüğü için; bkz. kimlik_bildir).
+_ANALIST_EPOSTA_DESEN = re.compile(r"^(.*?)\s*<([^<>@\s]+@[^<>@\s]+)>\s*$")
+
+
 def analistler_listesi() -> list[dict]:
     """Kullanım verisinden BENZERSİZ analistler: [{ad, eposta}]. Owner Yetki ekranı rol atamak
     için çeker. HEM remote.jsonl (ekip, Uzaktan Çek) HEM events.jsonl (yerel — owner'ın kendi
@@ -79,6 +85,13 @@ def analistler_listesi() -> list[dict]:
                 continue
             eposta = (o.get("eposta") or "").strip().lower()
             ad = (o.get("analist") or "").strip()
+            # Sink eposta sütununu düşürdüğü için kimlik olayı e-postayı 'Ad <eposta>' olarak
+            # analist alanına gömer (kimlik_bildir). Burada geri ayrıştır.
+            if not eposta:
+                m = _ANALIST_EPOSTA_DESEN.match(ad)
+                if m:
+                    ad = m.group(1).strip()
+                    eposta = m.group(2).strip().lower()
             if eposta:
                 if eposta not in epostali:
                     epostali[eposta] = {"ad": ad, "eposta": eposta}
@@ -227,11 +240,18 @@ def olay_yaz(
 def kimlik_bildir() -> None:
     """Analist kimliğini (ad + e-posta) sink'e 'kimlik' olayı olarak bildirir → owner Yetki
     ekranında rol atamak için GÖRÜNÜR olsun (analiz çalıştırmayı beklemeden, e-posta girer
-    girmez). E-posta yoksa no-op. best-effort (hata yutulur)."""
+    girmez). E-posta yoksa no-op. best-effort (hata yutulur).
+
+    SINK SINIRI: telemetri sink'i (Apps Script/Sheet) yalnız bilinen sütunları saklar; `eposta`
+    alanını DÜŞÜRÜR (kanıtlandı: pull'da eposta hep None). Bu yüzden e-postayı, sink'in AYNEN
+    koruduğu `analist` alanına 'Ad <eposta>' biçiminde GÖMERİZ; `analistler_listesi` bunu ayrıştırır.
+    kimlik olayı istatistikten HARİÇ olduğundan Kullanım Raporu'nu kirletmez."""
     try:
-        if not analist_eposta_oku():
+        k = analist_kimlik_oku()
+        if not k["eposta"]:
             return
-        olay_yaz("kimlik")   # ad + eposta otomatik eklenir (analist.json'dan)
+        ad = k["ad_soyad"] or k["eposta"]
+        olay_yaz("kimlik", analist=f"{ad} <{k['eposta']}>")
     except Exception:
         pass
 

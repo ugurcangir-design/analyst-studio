@@ -96,12 +96,17 @@ telemetri.UZAK_DOSYA.write_text("\n".join(_json.dumps(o) for o in [
     {"analist": "Emin K", "eposta": ""},                    # aynı isim e-postasız → GİZLENMELİ
     {"analist": "Kübra", "eposta": "kubra@example.com"},
     {"analist": "Adsız", "eposta": ""},                     # e-postasız isim → görünür (atanamaz)
+    # SINK eposta sütununu düşürse bile 'Ad <eposta>' gömülü formatı ayrıştırılır (eposta alanı YOK):
+    {"analist": "Denizhan T <denizhan@example.com>", "olay": "kimlik"},
 ]), encoding="utf-8")
 telemetri.EVENTS_DOSYA.write_text(_json.dumps(
     {"analist": "Owner Yerel", "eposta": "owner@example.com", "olay": "kimlik"}), encoding="utf-8")
 liste = telemetri.analistler_listesi()
 kontrol("telemetri: benzersiz e-posta (remote+local)",
-        {x["eposta"] for x in liste if x["eposta"]} == {"emin@example.com", "kubra@example.com", "owner@example.com"})
+        {x["eposta"] for x in liste if x["eposta"]} ==
+        {"emin@example.com", "kubra@example.com", "owner@example.com", "denizhan@example.com"})
+kontrol("sink eposta düşürse de 'Ad <eposta>' gömülü format ayrıştırılır",
+        any(x["ad"] == "Denizhan T" and x["eposta"] == "denizhan@example.com" for x in liste))
 kontrol("aynı isim e-postalı+e-postasız → tek kez (çift değil)",
         len([x for x in liste if x["ad"] == "Emin K"]) == 1)
 kontrol("owner'ın YEREL kimlik olayı roster'da görünür",
