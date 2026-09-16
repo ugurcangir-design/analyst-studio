@@ -2131,23 +2131,35 @@ def roller_getir():
     yerel = telemetri.analist_kimlik_oku()
     if yerel.get("eposta"):
         kaynak.insert(0, {"ad": yerel.get("ad_soyad", ""), "eposta": yerel["eposta"]})
-    kullanicilar, eposta_gorulen, adsiz_gorulen = [], set(), set()
+    kullanicilar, eposta_gorulen, epostali_adlar = [], set(), set()
+    # 1. geçiş — e-postalı (atanabilir)
     for a in kaynak:
         eposta = (a.get("eposta") or "").strip().lower()
+        if not eposta:
+            continue
+        h = _eposta_hash(eposta)
+        if h in eposta_gorulen:
+            continue
+        eposta_gorulen.add(h)
         ad = (a.get("ad") or "").strip()
-        if eposta:
-            h = _eposta_hash(eposta)
-            if h in eposta_gorulen:
-                continue
-            eposta_gorulen.add(h)
-            kullanicilar.append({"hash": h, "ad": ad, "eposta": eposta, "atanabilir": True,
-                                 "rol": d["kullanicilar"].get(h, "analist")})
-        elif ad:
-            # E-postası henüz telemetride yok (analist güncel sürümde e-posta girmeli) → rol atanamaz.
-            if ad.lower() in adsiz_gorulen:
-                continue
-            adsiz_gorulen.add(ad.lower())
-            kullanicilar.append({"hash": "", "ad": ad, "eposta": "", "atanabilir": False, "rol": "analist"})
+        if ad:
+            epostali_adlar.add(ad.lower())
+        kullanicilar.append({"hash": h, "ad": ad, "eposta": eposta, "atanabilir": True,
+                             "rol": d["kullanicilar"].get(h, "analist")})
+    # 2. geçiş — e-postasız isimler (rol atanamaz). E-POSTALI bir kişiyle AYNI isim GİZLENİR
+    # (ör. owner yerel kimlikten atanabilir gelir; telemetrideki isim-only satırı çift göstermez).
+    adsiz_gorulen = set()
+    for a in kaynak:
+        if (a.get("eposta") or "").strip():
+            continue
+        ad = (a.get("ad") or "").strip()
+        if not ad:
+            continue
+        al = ad.lower()
+        if al in epostali_adlar or al in adsiz_gorulen:
+            continue
+        adsiz_gorulen.add(al)
+        kullanicilar.append({"hash": "", "ad": ad, "eposta": "", "atanabilir": False, "rol": "analist"})
     kullanicilar.sort(key=lambda k: (not k["atanabilir"], (k["ad"] or k["eposta"]).lower()))
     ekranlar = [{"id": k["id"], "ad": k["ad"], "grup": k["grup"], "aciklama": k.get("aciklama", ""),
                  "rol": _ekran_gerekli_rol(k["id"], d["ekran_roller"], gizli_default)}
