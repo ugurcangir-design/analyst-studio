@@ -674,7 +674,7 @@ def _runtime_config_seed() -> None:
     """Makineye özel çalışma-zamanı config dosyaları (context_filter/prompts/sources)
     git'te İZLENMEZ — pull çakışmasını önler. Eksiklerse .example varsayılanından
     oluşturulur. Böylece taze klon + güncelleme sonrası ekip varsayılanları korunur."""
-    for ad in ("context_filter.json", "prompts.json", "sources.json", "kod_kaynagi.json", "analiz_mcp.json", "jira_kopru.json", "owner_konsol.json"):
+    for ad in ("context_filter.json", "prompts.json", "sources.json", "kod_kaynagi.json", "analiz_mcp.json", "jira_kopru.json", "owner_konsol.json", "domain-kurallari.md"):
         gercek = REF_DIR / ad
         ornek = REF_DIR / f"{ad}.example"
         if not gercek.exists() and ornek.exists():

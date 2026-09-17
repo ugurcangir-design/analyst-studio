@@ -20,7 +20,7 @@ haber: ML/bütçe gerektirmez, tamamen bizim kontrolümüzdeki dosya + kurallarl
 
 | Kaldıraç | Yol | Durum | Sahip |
 |---|---|---|---|
-| Domain kuralları + sözlük | `reference/domain-kurallari.md` (tracked) | ✅ mekanizma kuruldu, **doldurulacak** | Owner doldurur |
+| Domain kuralları + sözlük | `reference/domain-kurallari.md` (**gitignore**, `.example` seed) | ✅ mekanizma kuruldu + **El Kitabı/BRD'den ilk sürüm dolduruldu** | Owner genişletir |
 | Skill prompt override | `reference/prompts.json` (gitignore) | `{}` — opsiyonel, fork riskli, önerilmez | — |
 | Swagger/OpenAPI | `reference/services/` (gitignore) | ❌ boş | Owner/MCP |
 | Confluence corpus | `reference/confluence/` (gitignore) | ⚠️ tek PDF; **MBS El Kitabı** hazırlanıyor | Owner |
@@ -30,19 +30,23 @@ haber: ML/bütçe gerektirmez, tamamen bizim kontrolümüzdeki dosya + kurallarl
 
 ## 2. Domain kuralları dosyası — `reference/domain-kurallari.md`
 
-**Kuruldu ve devrede.** MBS'ye özgü terminoloji + iş kuralları + değişmezler (invariants)
-buraya yazılır; `skills/base.py → _domain_kurallari_oku()` bunu HER analiz promptuna
-(süreç/teknik/BRD/kapsam/Jira + özel-prompt yolları) otomatik ekler.
+**Kuruldu, dolduruldu ve devrede.** `skills/base.py → _domain_kurallari_oku()` bunu HER
+analiz promptuna (süreç/teknik/BRD/kapsam/Jira + özel-prompt yolları) otomatik ekler.
 
-- **Git'te İZLENİR** → pull ile tüm ekibe iner (ortak domain bilgisi).
+- **GİTIGNORE** (gizli Trade Panel El Kitabı + Publish Overview BRD'den damıtıldı → git'e
+  GİRMEZ). `.md.example` (jenerik) izlenir; `_runtime_config_seed` seed eder. Ekip dağıtımı
+  git-dışı kanalla (confluence corpus gibi).
 - **PII/sır YASAK.** Yalnız kural + terminoloji. Gerçek veri (tablo dökümü, örnek satır,
   Kafka payload, endpoint listesi) buraya DEĞİL → RAG corpus'una (`confluence/`, `services/`).
-- **Güvenli varsayılan:** `<!-- KURALLAR-BASLANGIC -->` işaretinden sonrası boş/yorum iken
-  hiçbir şey enjekte edilmez → doldurana kadar davranış değişmez.
-- Doldurduktan sonra **Yeniden Başlat** (backend taze okusun).
+- **Güvenli varsayılan:** `rsplit`'le SON `<!-- KURALLAR-BASLANGIC -->` sonrası alınır; boş/yorum
+  iken enjekte edilmez → `.example` seed'i davranışı değiştirmez.
+- İçeriği düzenledikten sonra **Yeniden Başlat** (backend taze okusun).
 
-Önerilen bölümler: (1) Terim Sözlüğü TR/EN, (2) Domain Değişmezleri, (3) Süreç/Durum
-kuralları, (4) Kaynak/İsimlendirme notları. Şablon dosyanın içinde örneklerle var.
+İlk sürüm (El Kitabı'ndan) şu bölümleri içerir: Sistem & Modüller (Trade Panel/EMM/RMM),
+Veri Hiyerarşisi (Sport Type→…→Odd, kalıtım kuralı), Terim Sözlüğü (Provider/Feed/Bülten/
+Event/Market/Outcome/Odd/Bayi/Closed Combination/Odds Multiplier/Risk Factor…), Süreç/Durum
+değişmezleri (bahis kabulü, results akışı, Late Bet Check, Publish=event-bazlı-değil), Ekran
+envanteri, Kaynak/İsimlendirme notları. Owner corpus geldikçe genişletir.
 
 ## 3. MBS El Kitabı (Confluence) — corpus spesifikasyonu
 
@@ -92,7 +96,7 @@ birebir KONMAZ. Few-shot yapısal iskelet olarak damıtılır (derinlik/yapı/ka
 
 ## 7. Sıradaki iş
 
-1. **Owner:** `domain-kurallari.md`'yi doldur (terim sözlüğü + ilk değişmezler) → Yeniden Başlat.
+1. **Owner:** `domain-kurallari.md` ilk sürümü doldu (El Kitabı'ndan) → gözden geçir + eksik terim/kural ekle → Yeniden Başlat.
 2. **Owner:** MBS El Kitabı'nı Confluence'ta bitir → `reference/confluence/`'a al; Swagger'ı `reference/services/`'e koy.
 3. **Agent:** history meta'ya task-linkage ekle + `reference/ornekler/` few-shot hattını kur (owner onayıyla).
 4. **Agent:** corpus geldikçe `domain-kurallari.md`'yi corpus'a atıfla zenginleştir.
@@ -102,3 +106,8 @@ birebir KONMAZ. Few-shot yapısal iskelet olarak damıtılır (derinlik/yapı/ka
 - **2026-09-17** — Yol haritası + `reference/domain-kurallari.md` mekanizması kuruldu
   (`_domain_kurallari_oku` → tüm analiz promptlarına otomatik enjeksiyon; şablonken no-op).
   Teşhis: prompts.json boş + gitignore, services/jira boş, confluence tek PDF. Memory yazıldı.
+- **2026-09-17 (2)** — Güvenlik düzeltmesi: domain-kurallari.md tracked→**gitignore** (gizli
+  El Kitabı/BRD'den damıtılan içerik git'e gitmemeli); `.md.example` seed eklendi (`_runtime_config_seed`).
+  **İlk domain sürümü Trade Panel El Kitabı (268 sf) + Publish Overview BRD'den dolduruldu**
+  (modüller, veri hiyerarşisi + kalıtım, ~15 terim, süreç değişmezleri, ekran envanteri).
+  `rsplit` marker düzeltmesi (üst yönerge marker'ı anınca yanlış bölme → seed no-op bozuluyordu).

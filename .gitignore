@@ -52,6 +52,8 @@ _launcher_bin
 reference/context_filter.json
 reference/prompts.json
 reference/sources.json
+# Domain kuralları — gizli el kitabı/BRD'den damıtılan domain bilgisi içerir → git'e GİRMEZ
+reference/domain-kurallari.md
 
 # ── Canlı uygulama (Chrome MCP): tarayıcı oturumu + üretilen MCP config ──
 .live-app-profile/

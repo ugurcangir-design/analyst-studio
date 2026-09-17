@@ -1,0 +1,37 @@
+# MBS Domain Kuralları & Terim Sözlüğü (ŞABLON — .example)
+
+<!--
+════════════════════════════════════════════════════════════════════════════
+ BU DOSYA NE İŞE YARAR  (bu .example JENERİK'tir — gerçek dosya GİTIGNORE'lu)
+════════════════════════════════════════════════════════════════════════════
+ reference/domain-kurallari.md (gitignore) HER süreç/teknik/BRD/kapsam/Jira
+ analizine otomatik eklenir (skills/base.py → _domain_kurallari_oku). Amaç:
+ agent'ın merkezi bahis (MBS) domain'ini tutarlı/doğru kullanması.
+
+ • Gerçek dosya GİT'e GİRMEZ (gizli el kitabı/BRD'den damıtılan domain bilgisi
+   içerir) → yalnız YEREL. Ekip dağıtımı git-dışı kanalla (confluence corpus gibi).
+ • Bu .example JENERİK kalır — GERÇEK domain verisi KONMAZ. İlk kurulumda
+   _runtime_config_seed bu .example'ı domain-kurallari.md'ye kopyalar.
+ • Gerçek dosyada bile: PII/sır/parola/accountId YASAK. Yalnız KURAL + TERİM.
+   Ham veri (tablo dökümü, örnek satır, Kafka payload, endpoint listesi) → RAG
+   corpus'una (reference/confluence, reference/services), buraya DEĞİL.
+ • Aşağıdaki KURALLAR-BASLANGIC işaretinden SONRASI analizlere enjekte edilir;
+   boş/yorum iken hiçbir şey eklenmez (güvenli no-op). Değişince Yeniden Başlat.
+════════════════════════════════════════════════════════════════════════════
+-->
+
+<!-- KURALLAR-BASLANGIC -->
+
+<!--
+ Örnek biçim (yorumu kaldırıp doldur):
+
+ ### Terim Sözlüğü
+ - **Kupon (coupon):** bir veya çok seçimden oluşan bahis birimi.
+ - **Selection / Outcome:** bir marketteki tek tercih; bir orana bağlıdır.
+
+ ### Domain Değişmezleri (her analizde geçerli)
+ - Pre-match bültende bahis ancak karşılaşma BAŞLAMADAN kabul edilir.
+
+ ### Kaynak / İsimlendirme Notları
+ - Endpoint/alan/tip için tek doğru kaynak Swagger'dır (reference/services/).
+-->

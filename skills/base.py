@@ -184,11 +184,13 @@ MAX_TOKENS_KAPSAM   =  8_000
 
 PROMPTS_PATH = REF_DIR / "prompts.json"
 
-# MBS domain kuralları + terim sözlüğü — owner'ın sürdürdüğü, git'te İZLENEN dosya.
-# Analiz promptlarına (_ORTAK_EK_KURALLAR'ın uygulandığı her skill + özel prompt yolu)
-# otomatik eklenir → her analize tutarlı domain bağlamı taşınır. Boş/şablon iken hiçbir
-# şey enjekte edilmez (davranış değişmez). GERÇEK VERİ (tablo/örnek satır/Kafka payload)
-# buraya DEĞİL RAG corpus'una gider; burada yalnız KURAL + TERMİNOLOJİ olur (PII/sır YASAK).
+# MBS domain kuralları + terim sözlüğü — owner'ın sürdürdüğü dosya. GİTIGNORE'LU
+# (gizli el kitabı/BRD'den damıtılan domain bilgisi içerir → git'e GİRMEZ; .example'dan
+# _runtime_config_seed ile seed edilir). Analiz promptlarına (_ORTAK_EK_KURALLAR'ın
+# uygulandığı her skill + özel prompt yolu) otomatik eklenir → her analize tutarlı domain
+# bağlamı. Boş/şablon iken hiçbir şey enjekte edilmez (davranış değişmez). GERÇEK VERİ
+# (tablo/örnek satır/Kafka payload/endpoint) buraya DEĞİL RAG corpus'una; burada yalnız
+# KURAL + TERMİNOLOJİ olur (PII/sır YASAK).
 DOMAIN_KURALLARI_PATH = REF_DIR / "domain-kurallari.md"
 _DOMAIN_KURAL_MARKER = "<!-- KURALLAR-BASLANGIC -->"
 
@@ -205,7 +207,8 @@ def _domain_kurallari_oku() -> str:
         ham = DOMAIN_KURALLARI_PATH.read_text(encoding="utf-8")
     except Exception:
         return ""
-    icerik = ham.split(_DOMAIN_KURAL_MARKER, 1)[1] if _DOMAIN_KURAL_MARKER in ham else ham
+    # rsplit → SON marker sonrası içerik (üstteki yönerge/şablon marker'ı düz metin ansa bile doğru)
+    icerik = ham.rsplit(_DOMAIN_KURAL_MARKER, 1)[-1] if _DOMAIN_KURAL_MARKER in ham else ham
     icerik = re.sub(r"<!--.*?-->", "", icerik, flags=re.DOTALL).strip()
     if len(icerik) < 20:   # yalnız başlık/boş şablon → enjekte etme
         return ""
