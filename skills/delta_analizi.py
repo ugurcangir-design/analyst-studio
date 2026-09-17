@@ -41,7 +41,7 @@ def delta_analizi_yap(cr_metni: str) -> Path:
     ref_dosyalar = referans_dosyalari_hazirla()
     if ref_dosyalar:
         print(f"  {len(ref_dosyalar)} referans dosya dahil ediliyor...")
-        ref_bloklari, _ = _ref_bloklari_olustur(ref_dosyalar)
+        ref_bloklari, _ = _ref_bloklari_olustur(ref_dosyalar, sorgu_metni=cr_metni)
         icerik_parcalari.extend(ref_bloklari)
 
     # Canlı uygulama gözlemi — CR'nin hedeflediği ekranın GÜNCEL hali için değerli

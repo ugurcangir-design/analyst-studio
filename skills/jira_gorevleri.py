@@ -768,7 +768,9 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
             print(f"  🔍 Bağlam filtresi aktif — {' | '.join(aktif_filtreler)}")
         print(f"  {referans_sayisi} referans dosya dahil ediliyor...")
         if ref_dosyalar:
-            ref_bloklari, _ = _ref_bloklari_olustur(ref_dosyalar)
+            # Sorgu = görevin kendi metni (özet + açıklama) → task'a alakalı referanslar seçilir.
+            gorev_sorgu = f"{gorev.get('summary','')} {gorev.get('description','') or ''}".strip()
+            ref_bloklari, _ = _ref_bloklari_olustur(ref_dosyalar, sorgu_metni=gorev_sorgu)
             stable_bloklar.extend(ref_bloklari)
     except Exception as e:
         print(f"  ⚠ Referanslar dahil edilemedi: {e}")

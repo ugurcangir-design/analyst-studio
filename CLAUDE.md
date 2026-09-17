@@ -136,12 +136,20 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   **GETİRİM SIRASI de kanonikle hizalı (`_ref_bloklari_olustur` TIP_KONFIG):** referans blokları Swagger →
   Canlı Uygulama → Confluence → Jira → Diğer sırasıyla çekilir. Global getirim bütçesi (`_ref_global_butce`;
   CLI ~100k, API ~140k) tipler boyunca birikimli tükenir ve dolunca kalan tipler ATLANIR → en yetkili kaynak
-  (Swagger/canlı gözlem) HER ZAMAN önce girer, bütçe baskısında en düşük öncelikli (Jira/diğer) düşer. Eskiden
-  Confluence önceydi → büyük el kitabı bütçeyi yiyip Swagger'ı starve edebiliyordu. Büyük dosyalarda baştan-kesme
-  yerine **keyword-odaklı çıkarım** (`_keyword_odakli_metin`; context_filter keyword'leri yoksa baştan-kesmeye düşer
-  → derin bölümler kaçabilir, o yüzden corpus'u atomik/başlıklı tut). Tüm analizler (süreç/teknik/BRD/kapsam/delta/
-  jira-görev) `referans_dosyalari_hazirla`+`_ref_bloklari_olustur` çağırır; süreç/teknik/delta/jira-görev ayrıca
-  `canli_uygulama_baglami_hazirla` (MCP canlı gözlem) ekler.
+  (Swagger/canlı gözlem) HER ZAMAN önce girer, bütçe baskısında en düşük öncelikli (Jira/diğer) düşer.
+  **CORPUS-GENELİ OTOMATİK ALAKA GETİRİMİ (Faz 1 — analist keyword girmez):** `_ref_bloklari_olustur(ref, sorgu_metni)`
+  bir sorgu (analiz edilen DOKÜMAN metni) alırsa → `retrieval.en_alakali_corpus`: TÜM referans dosyalarının parçaları
+  tek BM25 indexinde sorguya göre sıralanır ve bütçeye yalnız **en alakalı parçalar** girer (100+ dosya / ~10M
+  karakterden ilgili ~%1; dosya sırası/tesadüf değil). Sorgu = doküman metni (`_ref_sorgu_hazirla`; str veya
+  input_hazirla content-listesi → `_icerik_metni`) + varsa manuel `context_filter` keyword'leri (**5× boost** ile
+  ağırlıklandırılır ama ZORUNLU değil — analist boş bırakır, agent dokümandan kendi bulur; keyword yalnız opsiyonel
+  odak/daraltma). Her analiz KENDİ girdisini sorgu geçirir → süreç: yüklenen doküman · **teknik: kaynak
+  süreç-analizi.md (teknik-lezzetli sorgu)** · BRD/kapsam: input · delta: CR metni · jira-görev: task özet+açıklama.
+  Tip başına limit + kanonik sıra `_ref_alaka_bloklastir`'da korunur. Sorgu yoksa / hiç alaka yoksa / hata →
+  eski **dosya-sıralı, tip-limitli fallback** (keyword-odaklı `_keyword_odakli_metin`). Tüm analizler
+  `referans_dosyalari_hazirla`+`_ref_bloklari_olustur` çağırır; süreç/teknik/delta/jira-görev ayrıca
+  `canli_uygulama_baglami_hazirla` (MCP canlı gözlem) ekler. UI: Bağlam Filtresi alanları "otomatik" rozeti +
+  "boş bırakın, agent bulur" açıklaması; keyword alanı → **"Odak / Yönlendirme (opsiyonel)"**.
 - **Bağlam filtresi — Jira Issue Keys (uzaktan çekme):** ekrandaki "Jira Issue Keys" alanı (`ctx-jira-keys` →
   `context_filter.jira_keys`) `filtrele_referanslar`'da ÖNCE yerel export'ta (`reference/jira/*.json`) aranır;
   yerelde BULUNMAYAN key'ler doğrudan Jira'dan (`_jira_keyleri_uzaktan_cek` → `jira_gorevleri._taze_issue_oku`

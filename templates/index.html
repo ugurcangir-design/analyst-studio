@@ -2470,12 +2470,21 @@ function temaDegistir() {
 
         <!-- Grup 1: Referans filtreleri (RAG) -->
         <div class="ctx-group">
-          <div class="ctx-group-title"><svg class="ico ico-sm"><use href="#i-filter"/></svg> Referans Filtreleri</div>
+          <div class="ctx-group-title"><svg class="ico ico-sm"><use href="#i-filter"/></svg> Referans Filtreleri <span class="ctx-active-badge" style="background:var(--green);color:#fff;font-weight:600">otomatik</span></div>
+          <div class="ctx-field-sub" style="margin:-2px 0 12px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
+            <strong>Bu alanları doldurmanıza gerek yok — boş bırakın.</strong> Agent, yüklediğiniz dokümandan
+            (süreç/teknik/BRD) ilgili terimleri kendisi çıkarıp <b>tüm referans kaynaklarından</b> (Confluence · Jira ·
+            Swagger) o analize <b>en alakalı</b> içeriği otomatik seçer. "Prematch ekranı" gibi anahtar kelime yazmanıza
+            gerek kalmaz.<br>
+            Aşağıdaki alanlar yalnızca <b>opsiyonel yönlendirme</b> içindir: analizi belirli bir konuya <b>daraltmak</b>
+            (ör. yalnız "live"), belirli bir Jira task'ına <b>odaklamak</b> ya da bir konuyu <b>öne çıkarmak</b>
+            istediğinizde kullanın. Yazarsanız agent otomatik seçimini o yöne <b>ağırlıklandırır</b>.
+          </div>
           <div class="ctx-grid2">
             <div>
-              <div class="ctx-field-label">Anahtar Kelimeler</div>
-              <div class="ctx-field-sub">Confluence sayfalarda ve Jira task'larda bu kelimeleri ara</div>
-              <input class="ctx-input" id="ctx-keywords" type="text" placeholder="örn: ödeme, payment, sipariş" oninput="updateCtxBadge()">
+              <div class="ctx-field-label">Odak / Yönlendirme <span style="color:var(--text2);font-weight:400">(opsiyonel)</span></div>
+              <div class="ctx-field-sub">Boş bırakın → agent dokümandan otomatik bulur. Doldurursanız bu konu(lar) öne çıkarılır (daraltma/odak).</div>
+              <input class="ctx-input" id="ctx-keywords" type="text" placeholder="boş bırakın — veya ör: yalnız live, cashout" oninput="updateCtxBadge()">
             </div>
             <div>
               <div class="ctx-field-label">Jira Issue Keys</div>

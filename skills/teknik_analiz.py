@@ -188,7 +188,8 @@ def teknik_analiz_yap() -> tuple[Path, Path]:
 
     if ref_dosyalar:
         print(f"  {len(ref_dosyalar)} referans dosya dahil ediliyor...")
-        ref_bloklari, kullanilan_referanslar = _ref_bloklari_olustur(ref_dosyalar)
+        # Sorgu = kaynak süreç analizi (teknik varlıklar/ID'ler) → teknik-lezzetli alaka getirimi.
+        ref_bloklari, kullanilan_referanslar = _ref_bloklari_olustur(ref_dosyalar, sorgu_metni=surec_metni)
         stable_bloklar.extend(ref_bloklari)
 
     canli_baglam = canli_uygulama_baglami_hazirla()

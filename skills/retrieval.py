@@ -98,6 +98,57 @@ class BM25:
         return skorlar
 
 
+def en_alakali_corpus(dokumanlar: list[dict], sorgu: str, butce: int,
+                      tip_limitleri: dict | None = None, parca_boyut: int = 1200) -> dict:
+    """CORPUS-GENELİ retrieval: birden çok referans dosyasının TÜM parçalarını tek BM25
+    indexinde `sorgu`ya göre sıralar ve global `butce` + tip başına limit içinde EN ALAKALI
+    parçaları seçer. Böylece 100+ dosya / 10M karakterlik corpus'tan analize yalnız ilgili
+    ~%1 girer (dosya sırası/tesadüf değil, alaka belirler).
+
+    dokumanlar: [{"tip": str, "rel": str, "metin": str}] — okunmuş + (jira→md) hazır metin.
+    tip_limitleri: {tip: max_char} — bir tipin toplam payı (kanonik önceliği korumak için).
+    Dönen: {"secilen": [{tip, rel, metin, skor, _i}...] (alaka sırasında),
+            "kullanilan": [rel...], "alaka_yok": bool}. alaka_yok=True → çağıran fallback yapar.
+    """
+    sorgu_tok = _tokenle(sorgu or "")
+    if not sorgu_tok:
+        return {"secilen": [], "kullanilan": [], "alaka_yok": True}
+
+    parcalar: list[dict] = []
+    for d in dokumanlar:
+        for p in parcala(d.get("metin", ""), boyut=parca_boyut):
+            parcalar.append({"tip": d["tip"], "rel": d["rel"], "metin": p["metin"], "_i": p["indeks"]})
+    if not parcalar:
+        return {"secilen": [], "kullanilan": [], "alaka_yok": True}
+
+    bm = BM25([_tokenle(p["metin"]) for p in parcalar])
+    sirali = bm.sirala(sorgu_tok)
+    if not sirali or sirali[0][1] <= 0:
+        return {"secilen": [], "kullanilan": [], "alaka_yok": True}   # hiç alaka yok → fallback
+
+    tip_kullanilan: dict[str, int] = {}
+    secilen: list[dict] = []
+    kullanilan_rel: list[str] = []
+    toplam = 0
+    for idx, skor in sirali:
+        if skor <= 0 or toplam >= butce:
+            break
+        p = parcalar[idx]
+        clen = len(p["metin"])
+        tlim = (tip_limitleri or {}).get(p["tip"])
+        if tlim is not None and tip_kullanilan.get(p["tip"], 0) + clen > tlim:
+            continue                       # bu tipin payı doldu → sıradaki parça (başka tip) denenir
+        if toplam + clen > butce:
+            continue                       # global bütçeye sığmıyor → daha küçük bir sonraki parça sığabilir
+        secilen.append({"tip": p["tip"], "rel": p["rel"], "metin": p["metin"],
+                        "skor": round(skor, 3), "_i": p["_i"]})
+        tip_kullanilan[p["tip"]] = tip_kullanilan.get(p["tip"], 0) + clen
+        toplam += clen
+        if p["rel"] not in kullanilan_rel:
+            kullanilan_rel.append(p["rel"])
+    return {"secilen": secilen, "kullanilan": kullanilan_rel, "alaka_yok": not secilen}
+
+
 def en_alakali_parcalar(metin: str, sorgu: str, k: int = 6, butce: int = 12000) -> dict:
     """`metin`i parçalayıp `sorgu`ya en alakalı parçaları BM25 ile döndürür.
 

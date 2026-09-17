@@ -25,7 +25,7 @@ def brd_analizi_yap() -> tuple[Path, Path]:
     ref_dosyalar = referans_dosyalari_hazirla()
     if ref_dosyalar:
         print(f"  {len(ref_dosyalar)} referans dosya dahil ediliyor...")
-        ref_bloklari, kullanilan_referanslar = _ref_bloklari_olustur(ref_dosyalar)
+        ref_bloklari, kullanilan_referanslar = _ref_bloklari_olustur(ref_dosyalar, sorgu_metni=icerik)
         if ref_bloklari:
             # Son referans bloğuna cache breakpoint — aynı BRD için birden fazla analiz yapılırsa cache hit
             ref_bloklari[-1]["cache_control"] = {"type": "ephemeral"}

@@ -106,6 +106,13 @@ birebir KONMAZ. Few-shot yapısal iskelet olarak damıtılır (derinlik/yapı/ka
 - **2026-09-17** — Yol haritası + `reference/domain-kurallari.md` mekanizması kuruldu
   (`_domain_kurallari_oku` → tüm analiz promptlarına otomatik enjeksiyon; şablonken no-op).
   Teşhis: prompts.json boş + gitignore, services/jira boş, confluence tek PDF. Memory yazıldı.
+- **2026-09-17 (3)** — **Corpus-geneli otomatik alaka getirimi (Faz 1)** canlı: corpus 167 dosya /
+  ~10.6M karaktere çıkınca (162 Confluence + 5 Jira projesi) bütçe (~100k) dosya-sırasına göre doluyordu →
+  alaka değil tesadüf belirliyordu. Artık `_ref_bloklari_olustur` analiz dokümanını SORGU alıp
+  `retrieval.en_alakali_corpus` (tek BM25 index, tüm parçalar) ile en alakalı ~%1'i seçer. Analist keyword
+  GİRMEZ (opsiyonel odak/daraltma; 5× boost). Süreç/teknik/BRD/kapsam/delta/jira-görev bağlandı. UI: "otomatik"
+  rozeti + net açıklama. Fallback: sorgu/alaka yoksa eski dosya-sıralı davranış. (Referans oto-sync + getirim
+  sırası kanonik önceliği daha önce eklendi.)
 - **2026-09-17 (2)** — Güvenlik düzeltmesi: domain-kurallari.md tracked→**gitignore** (gizli
   El Kitabı/BRD'den damıtılan içerik git'e gitmemeli); `.md.example` seed eklendi (`_runtime_config_seed`).
   **İlk domain sürümü Trade Panel El Kitabı (268 sf) + Publish Overview BRD'den dolduruldu**

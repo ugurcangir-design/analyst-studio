@@ -47,7 +47,7 @@ def surec_analizi_yap() -> Path:
     ref_dosyalar = referans_dosyalari_hazirla()
     if ref_dosyalar:
         print(f"  {len(ref_dosyalar)} referans dosya dahil ediliyor...")
-        ref_bloklari, kullanilan_referanslar = _ref_bloklari_olustur(ref_dosyalar)
+        ref_bloklari, kullanilan_referanslar = _ref_bloklari_olustur(ref_dosyalar, sorgu_metni=icerik)
         if ref_bloklari:
             icerik_parcalari.extend(ref_bloklari)
 

@@ -34,7 +34,7 @@ def kapsam_analizi_yap() -> tuple[Path, Path]:
     ref_dosyalar = referans_dosyalari_hazirla()
     if ref_dosyalar:
         print(f"  {len(ref_dosyalar)} referans dosya dahil ediliyor...")
-        ref_bloklari, kullanilan_referanslar = _ref_bloklari_olustur(ref_dosyalar)
+        ref_bloklari, kullanilan_referanslar = _ref_bloklari_olustur(ref_dosyalar, sorgu_metni=revize_icerik)
         if ref_bloklari:
             ref_bloklari[-1]["cache_control"] = {"type": "ephemeral"}
             icerik_parcalari.extend(ref_bloklari)

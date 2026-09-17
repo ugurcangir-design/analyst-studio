@@ -1884,8 +1884,100 @@ def _jira_json_to_md(dosya: Path, limit: int) -> str:
     return "\n".join(satirlar)
 
 
-def _ref_bloklari_olustur(ref_dosyalar: list[Path]) -> tuple[list[dict], list[str]]:
+def _icerik_metni(icerik) -> str:
+    """str VEYA content-block listesinden (input_hazirla çıktısı: text + görsel blokları)
+    düz metni çıkarır. Görseller atlanır."""
+    if isinstance(icerik, str):
+        return icerik
+    if isinstance(icerik, list):
+        parts = []
+        for p in icerik:
+            if isinstance(p, dict) and p.get("type") == "text":
+                parts.append(str(p.get("text", "")))
+            elif isinstance(p, str):
+                parts.append(p)
+        return "\n".join(parts)
+    return str(icerik or "")
+
+
+def _ref_sorgu_hazirla(sorgu_metni, kw: list, kap: int = 30_000, kw_boost: int = 5) -> str:
+    """Corpus-geneli getirim SORGUSU: analiz edilen dokümanın metni (otomatik; str ya da
+    input_hazirla content-listesi) + varsa analistin girdiği manuel keyword'ler (kw_boost kez
+    tekrarlanarak AĞIRLIKLANDIRILIR → girildiğinde güçlü yönlendirir). İkisi de boşsa "" →
+    çağıran dosya-sıralı fallback yapar."""
+    parcalar = []
+    metin = _icerik_metni(sorgu_metni)
+    if metin:
+        parcalar.append(metin[:kap])
+    if kw:
+        parcalar.append((" " + " ".join(str(k) for k in kw)) * max(1, kw_boost))
+    return " ".join(parcalar).strip()
+
+
+def _ref_dokuman_metinleri(tip_konfig: list, kap: int = 300_000) -> list[dict]:
+    """Tüm referans dosyalarını okunmuş metne çevirir (corpus-geneli BM25 indexi için):
+    [{"tip","rel","metin"}]. Jira JSON→md, Swagger geçerlilik kontrolü, PDF-farkında okuma;
+    pathological büyük dosyalar `kap` ile sınırlanır."""
+    docs: list[dict] = []
+    for tipkey, _b, _a, dosya_listesi, _lim, jira_modu in tip_konfig:
+        for f in dosya_listesi:
+            try:
+                rel = str(f.relative_to(REF_DIR)).replace("\\", "/")
+            except ValueError:
+                rel = f.name
+            if rel.startswith("services/"):
+                try:
+                    _s = json.loads(f.read_text(encoding="utf-8", errors="ignore"))
+                    if not (isinstance(_s, dict) and (_s.get("paths") or _s.get("openapi") or _s.get("swagger"))):
+                        continue
+                except Exception:
+                    continue
+            try:
+                if jira_modu and f.suffix.lower() == ".json":
+                    metin = _jira_json_to_md(f, kap)
+                else:
+                    metin = _filtre_metni_oku(f) or dosya_oku(f, kap)
+                    if metin and len(metin) > kap:
+                        metin = metin[:kap]
+            except Exception:
+                continue
+            if metin and metin.strip():
+                docs.append({"tip": tipkey, "rel": rel, "metin": metin})
+    return docs
+
+
+def _ref_alaka_bloklastir(secilen: list[dict], tip_konfig: list) -> tuple[list[dict], list[str]]:
+    """Corpus-geneli seçilen parçaları KANONİK tip sırasında bloklara diz. Aynı dosyanın
+    parçaları belge-sırasına (`_i`) göre birleştirilir; her tip kendi başlığı+atıf talimatını alır."""
+    per_tip: dict[str, dict[str, list]] = {}
+    for s in secilen:
+        per_tip.setdefault(s["tip"], {}).setdefault(s["rel"], []).append(s)
+    bloklari: list[dict] = []
+    kullanilan: list[str] = []
+    for tipkey, baslik, aciklama, _dl, _lim, _jm in tip_konfig:   # kanonik sıra
+        if tipkey not in per_tip:
+            continue
+        dosya_metinleri = []
+        for rel, chunks in per_tip[tipkey].items():              # dict = ilk-görülen (alaka) sırası
+            birlesik = "\n\n[…]\n\n".join(c["metin"] for c in sorted(chunks, key=lambda x: x["_i"]))
+            dosya_metinleri.append(f"#### {rel}\n{birlesik}")
+            if rel not in kullanilan:
+                kullanilan.append(rel)
+        bloklari.append({
+            "type": "text",
+            "text": f"### {baslik}\n{aciklama}\n\n" + "\n\n---\n\n".join(dosya_metinleri),
+        })
+    return bloklari, kullanilan
+
+
+def _ref_bloklari_olustur(ref_dosyalar: list[Path], sorgu_metni: str = "") -> tuple[list[dict], list[str]]:
     """Referans dosyalarını kaynak tipine göre gruplar, formatlar ve içerik bloklarına dönüştürür.
+
+    `sorgu_metni` verilirse (analiz edilen doküman) → CORPUS-GENELİ ALAKA GETİRİMİ: tüm
+    dosyaların parçaları tek BM25 indexinde sorguya göre sıralanır ve bütçeye yalnız en
+    alakalı parçalar girer (100+ dosya / 10M karakterden ilgili ~%1). Manuel keyword'ler
+    (context_filter) sorguyu GÜÇLENDİRİR ama ZORUNLU değildir. Sorgu yoksa/alaka bulunamazsa
+    aşağıdaki dosya-sıralı, tip-limitli davranışa (fallback) düşer.
 
     Kaynak tipleri ve davranışları:
     - confluence/*.md  → Markdown sayfa metni; MAX_CHARS_CONF_TOT toplam limit
@@ -1935,7 +2027,7 @@ def _ref_bloklari_olustur(ref_dosyalar: list[Path]) -> tuple[list[dict], list[st
         else:
             gruplari["diger"].append(f)
 
-    # (baslik, aciklama_icin_model, dosya_listesi, tip_toplam_limit, jira_modu)
+    # (tipkey, baslik, aciklama_icin_model, dosya_listesi, tip_toplam_limit, jira_modu)
     # SIRA = KANONİK KAYNAK ÖNCELİĞİ (Swagger > Canlı Uygulama > Confluence > Jira > Diğer).
     # Getirim bütçesi (özellikle CLI modunda ~100k) tipler boyunca birikimli tükenir ve dolunca
     # kalan tipler ATLANIR → EN YETKİLİ kaynak (Swagger/canlı gözlem) HER ZAMAN önce çekilsin,
@@ -1943,6 +2035,7 @@ def _ref_bloklari_olustur(ref_dosyalar: list[Path]) -> tuple[list[dict], list[st
     # büyük el kitabı bütçeyi yiyip Swagger'ı starve edebiliyordu — kanonik önceliğe aykırıydı.)
     TIP_KONFIG = [
         (
+            "servisler",
             "API / SWAGGER TANIMLARI",
             "Mevcut servis endpoint'leri, HTTP metotları, request/response şemaları ve entegrasyon detayları. "
             "SADECE burada geçen endpoint'leri teknik analizde kullan — uydurma yasak. "
@@ -1950,6 +2043,7 @@ def _ref_bloklari_olustur(ref_dosyalar: list[Path]) -> tuple[list[dict], list[st
             gruplari["servisler"], MAX_CHARS_SERVIS_TOT, False,
         ),
         (
+            "canli_uygulama",
             "CANLI UYGULAMA GÖZLEMİ",
             "Claude MCP + Chrome ile gezilmiş gerçek uygulama ekranları, kullanıcı akışları, validasyon mesajları "
             "ve network istek/yanıt özetleri. Ekran davranışlarını `[K: Canlı UI:<route>]`, servis davranışlarını "
@@ -1958,6 +2052,7 @@ def _ref_bloklari_olustur(ref_dosyalar: list[Path]) -> tuple[list[dict], list[st
             gruplari["canli_uygulama"], MAX_CHARS_LIVE_APP_TOT, False,
         ),
         (
+            "confluence",
             "CONFLUENCE DOKÜMANTASYONU",
             "Mevcut sistem dokümantasyonu, mimari kararlar, DB şeması, RBAC ve teknik detaylar. "
             "İlgili sayfalardaki bilgileri `[K: Confluence:<sayfa-adı>]` ile işaretle. "
@@ -1965,6 +2060,7 @@ def _ref_bloklari_olustur(ref_dosyalar: list[Path]) -> tuple[list[dict], list[st
             gruplari["confluence"], MAX_CHARS_CONF_TOT, False,
         ),
         (
+            "jira",
             "JİRA TASK GEÇMİŞİ",
             "Geçmiş geliştirme kararları, tamamlanan işler ve mevcut devam eden task'lar. "
             "İlgili task'ları `[K: Jira:KEY-123]` ile işaretle. "
@@ -1972,20 +2068,41 @@ def _ref_bloklari_olustur(ref_dosyalar: list[Path]) -> tuple[list[dict], list[st
             gruplari["jira"], MAX_CHARS_JIRA_TOT, True,
         ),
         (
+            "diger",
             "DİĞER REFERANSLAR",
             "Ek referans belgeler.",
             gruplari["diger"], MAX_CHARS_DIGER_TOT, False,
         ),
     ]
 
-    bloklari: list[dict] = []
-    kullanilan: list[str] = []
     # Getirim bütçesi (madde 3): tüm tipler boyunca birikimli tavan. <=0 → sınırsız.
     # CLI modunda cache olmadığından daha sıkı CLI tavanı uygulanır (_ref_global_butce).
     _butce = _ref_global_butce()
+
+    # ── CORPUS-GENELİ ALAKA GETİRİMİ (Faz 1) — sorgu (analiz dokümanı + boostlu keyword) varsa ──
+    sorgu = _ref_sorgu_hazirla(sorgu_metni, _kw_odak)
+    if sorgu:
+        try:
+            hazir = _ref_dokuman_metinleri(TIP_KONFIG)
+            tip_limitleri = {tk: lim for tk, _b, _a, _dl, lim, _jm in TIP_KONFIG}
+            eff_butce = _butce if _butce > 0 else sum(tip_limitleri.values())
+            from .retrieval import en_alakali_corpus
+            r = en_alakali_corpus(hazir, sorgu, eff_butce, tip_limitleri)
+            if not r.get("alaka_yok") and r.get("secilen"):
+                b, k = _ref_alaka_bloklastir(r["secilen"], TIP_KONFIG)
+                logger.info("Corpus-geneli alaka getirimi: %d dosya taranıp %d ilgili parça seçildi "
+                            "(sorgu-güdümlü; %d dosya).", len(hazir), len(r["secilen"]), len(k))
+                return b, k
+            logger.info("Corpus-geneli getirim: alaka bulunamadı → dosya-sıralı fallback.")
+        except Exception as e:
+            logger.warning("Corpus-geneli getirim başarısız → dosya-sıralı fallback: %s", e)
+
+    # ── FALLBACK: dosya-sıralı, tip-limitli davranış (sorgu yok / alaka yok / hata) ──
+    bloklari: list[dict] = []
+    kullanilan: list[str] = []
     global_kalan = _butce if _butce > 0 else None
 
-    for baslik, aciklama, dosya_listesi, tip_limit, jira_modu in TIP_KONFIG:
+    for tipkey, baslik, aciklama, dosya_listesi, tip_limit, jira_modu in TIP_KONFIG:
         if not dosya_listesi:
             continue
         if global_kalan is not None and global_kalan <= 0:
