@@ -3,6 +3,7 @@
 from pathlib import Path
 from .base import (
     _api_cagri, _kaydet, input_hazirla, prompt_yukle, ozel_prompt_oku,
+    _domain_kurallari_oku,
     OZEL_PROMPT_DOGRULUK_EKI, belirsizlik_denetimi, ai_ara_sozleri_temizle,
     referans_dosyalari_hazirla, _ref_bloklari_olustur,
     canli_uygulama_baglami_hazirla,
@@ -20,7 +21,7 @@ def _surec_prompt_olustur() -> str:
     ozel = ozel_prompt_oku("surec")
     if ozel:
         print("  ✏️ Özel süreç analizi promptu kullanılıyor (varsayılan atlandı).")
-        return ozel + OZEL_PROMPT_DOGRULUK_EKI
+        return ozel + OZEL_PROMPT_DOGRULUK_EKI + _domain_kurallari_oku()
     rol = prompt_yukle("surec_analizi_rol")
     bolumler = prompt_yukle("surec_analizi")
     # Mermaid akış diyagramı — Süreç Adımları bölümüne görsel özet (ChatPRD/Keeborg

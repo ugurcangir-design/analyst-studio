@@ -184,6 +184,40 @@ MAX_TOKENS_KAPSAM   =  8_000
 
 PROMPTS_PATH = REF_DIR / "prompts.json"
 
+# MBS domain kuralları + terim sözlüğü — owner'ın sürdürdüğü, git'te İZLENEN dosya.
+# Analiz promptlarına (_ORTAK_EK_KURALLAR'ın uygulandığı her skill + özel prompt yolu)
+# otomatik eklenir → her analize tutarlı domain bağlamı taşınır. Boş/şablon iken hiçbir
+# şey enjekte edilmez (davranış değişmez). GERÇEK VERİ (tablo/örnek satır/Kafka payload)
+# buraya DEĞİL RAG corpus'una gider; burada yalnız KURAL + TERMİNOLOJİ olur (PII/sır YASAK).
+DOMAIN_KURALLARI_PATH = REF_DIR / "domain-kurallari.md"
+_DOMAIN_KURAL_MARKER = "<!-- KURALLAR-BASLANGIC -->"
+
+
+def _domain_kurallari_oku() -> str:
+    """reference/domain-kurallari.md'deki domain kurallarını prompt bloğu olarak döndürür.
+
+    Yalnız MARKER'dan SONRAKİ içerik kural sayılır (öncesi şablon/yönerge → yok sayılır).
+    HTML yorumları temizlenir. Anlamlı içerik yoksa "" → enjeksiyon olmaz (güvenli varsayılan).
+    Dosya her çağrıda okunur → owner düzenleyince (restart gerekse de) taze gelir."""
+    try:
+        if not DOMAIN_KURALLARI_PATH.exists():
+            return ""
+        ham = DOMAIN_KURALLARI_PATH.read_text(encoding="utf-8")
+    except Exception:
+        return ""
+    icerik = ham.split(_DOMAIN_KURAL_MARKER, 1)[1] if _DOMAIN_KURAL_MARKER in ham else ham
+    icerik = re.sub(r"<!--.*?-->", "", icerik, flags=re.DOTALL).strip()
+    if len(icerik) < 20:   # yalnız başlık/boş şablon → enjekte etme
+        return ""
+    return (
+        "\n\n## EK KURALLAR — MBS Domain Bilgisi (Sözlük + Değişmezler)\n\n"
+        "Aşağıdaki domain kuralları ve terminoloji bu projeye (merkezi bahis sistemi) "
+        "özgüdür ve HER analizde geçerlidir. Terimleri bu sözlüğe göre tutarlı kullan; "
+        "belirtilen değişmezlere (invariant) uy; kaynaklarla çelişki görürsen sessizce "
+        "birleştirme, Açık Sorular'a taşı.\n\n" + icerik
+    )
+
+
 # Ortak EK KURALLAR sabiti — tekrarlayan bloğu tek yerde tut.
 # prompt_yukle() bu sabitler içeriklerini belirli skill_id'lere otomatik ekler.
 _ORTAK_EK_KURALLAR = (
@@ -1443,13 +1477,13 @@ def prompt_yukle(skill_id: str) -> str:
             if skill_id in data:
                 icerik = data[skill_id]
                 if skill_id in _EK_KURAL_SKILL_IDS:
-                    icerik = icerik + _ORTAK_EK_KURALLAR
+                    icerik = icerik + _ORTAK_EK_KURALLAR + _domain_kurallari_oku()
                 return icerik
     except Exception:
         pass
     icerik = VARSAYILAN_PROMPTLAR[skill_id]["icerik"]
     if skill_id in _EK_KURAL_SKILL_IDS:
-        icerik = icerik + _ORTAK_EK_KURALLAR
+        icerik = icerik + _ORTAK_EK_KURALLAR + _domain_kurallari_oku()
     return icerik
 
 

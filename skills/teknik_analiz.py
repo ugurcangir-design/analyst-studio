@@ -14,6 +14,7 @@ from .base import (
     _api_cagri, _kaydet, _xml_ayir, _metin_sikistir,
     dosya_oku, referans_dosyalari_hazirla, _ref_bloklari_olustur,
     canli_uygulama_baglami_hazirla, prompt_yukle, teknik_ozel_prompt_oku,
+    _domain_kurallari_oku,
     OZEL_PROMPT_DOGRULUK_EKI, MODEL_HAFIF, ai_ara_sozleri_temizle,
     belirsizlik_denetimi, izlenebilirlik_matrisi_olustur,
     extended_thinking_acik, hizli_mod_acik, surec_id_kapsam,
@@ -39,6 +40,7 @@ def _teknik_prompt_olustur(mockup_var: bool = False) -> str:
             ozel + OZEL_PROMPT_DOGRULUK_EKI + "\n"
             "ÇIKTI BİÇİMİ (zorunlu): Raporun tamamını TEK bir <teknik_analiz> XML bloğu "
             "içinde ver: <teknik_analiz> ... </teknik_analiz>. Blok dışına metin yazma."
+            + _domain_kurallari_oku()
         )
     rol = prompt_yukle("teknik_analiz_rol")
     bolumler = prompt_yukle("teknik_analiz_bolumler")
