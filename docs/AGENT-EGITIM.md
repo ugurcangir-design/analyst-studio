@@ -20,11 +20,12 @@ haber: ML/bütçe gerektirmez, tamamen bizim kontrolümüzdeki dosya + kurallarl
 
 | Kaldıraç | Yol | Durum | Sahip |
 |---|---|---|---|
-| Domain kuralları + sözlük | `reference/domain-kurallari.md` (**gitignore**, `.example` seed) | ✅ mekanizma kuruldu + **El Kitabı/BRD'den ilk sürüm dolduruldu** | Owner genişletir |
+| Domain kuralları + sözlük | `reference/domain-kurallari.md` (**gitignore**, `.example` seed) | ✅ **mbs2 El Kitabı'na göre yeniden yazıldı** (kod adları, mimari değişmezler, kanıt dereceleri, hiyerarşiler, Kafka, ortam) | Owner genişletir |
+| MBS El Kitabı (analist referansı) | `reference/confluence/mbs2/*` (RAG) | ✅ **oluşturuldu + sync'li** (A/B/C/D/E/F/G yapısı; RAG-dostu) — Faz 1 otomatik çeker | Owner günceller |
+| Swagger/OpenAPI | `reference/services/` | ❌ **BOŞ — en büyük kalan fırsat** (3 BFF swagger + baseline dosyaları var) | Owner ekler |
 | Skill prompt override | `reference/prompts.json` (gitignore) | `{}` — opsiyonel, fork riskli, önerilmez | — |
-| Swagger/OpenAPI | `reference/services/` (gitignore) | ❌ boş | Owner/MCP |
-| Confluence corpus | `reference/confluence/` (gitignore) | ⚠️ tek PDF; **MBS El Kitabı** hazırlanıyor | Owner |
-| Jira export + yorumlar | `reference/jira/` + `context_filter.jira_keys` | ❌ boş (mekanizma çalışıyor) | Owner |
+| Confluence corpus | `reference/confluence/` (gitignore) | ✅ 162 sayfa (mbs2 El Kitabı + ekran/servis dokümanları); Faz 1 alaka ile çeker | Owner |
+| Jira export + yorumlar | `reference/jira/` (5 proje sync'li) | ✅ AUTH/CORE/MBSOPS/MBSTRADE/TERMINAL çekiliyor; jira_keys opsiyonel | Owner |
 | Canlı uygulama gözlemi | `context_filter.live_app` | ✅ yapılandırılmış (dev-sky-panel) | Owner |
 | Few-shot (onaylı+task) | `reference/ornekler/` (öneri) | ❌ hat yok (history budanıyor + task-linkage yok) | Kod + owner |
 
@@ -106,6 +107,17 @@ birebir KONMAZ. Few-shot yapısal iskelet olarak damıtılır (derinlik/yapı/ka
 - **2026-09-17** — Yol haritası + `reference/domain-kurallari.md` mekanizması kuruldu
   (`_domain_kurallari_oku` → tüm analiz promptlarına otomatik enjeksiyon; şablonken no-op).
   Teşhis: prompts.json boş + gitignore, services/jira boş, confluence tek PDF. Memory yazıldı.
+- **2026-09-17 (4)** — **MBS El Kitabı işlendi.** mbs2 Confluence'ta RAG-dostu yapılandırılmış el kitabı
+  oluşturuldu (MBS El Kitabı index + A1 Domain Kataloğu · A2 Akışlar · A4 Ortamlar · C1 Kafka Aileleri ·
+  F1 Task/Süreç kullanımı · F2 RAG Besleme Recipe · G0 Sözlük · G1 Açık Sorular · G2 Kaynak Önceliği).
+  Zaten mbs2 sync kapsamında → RAG'de, Faz 1 alaka ile çekiyor. **domain-kurallari.md yeniden yazıldı**
+  (her analize enjekte edilen çekirdek): domain kod adları (tradoria/wagoria/rita/nebula/spectron/…),
+  mimari değişmezler (FK yok · yazma=server action · audit_outbox→Kafka · api-gateway · enum=DOMAIN ·
+  timestamptz · 3 BFF), kanıt dereceleri (✅/⚠️/🔗/⬜), bülten+bayi hiyerarşileri, Kafka çekirdek hat
+  (SANS_* + fan-out), ortam/URL deseni. **Kalan en büyük fırsat: `reference/services/` (Swagger) HÂLÂ BOŞ**
+  — G2/A4 3 BFF swagger URL'i + baseline dosyalarını (mbs-services-baseline vb.) işaret ediyor; kanonik #1
+  kaynak buraya girmeli. Ayrıca takım Confluence sayfaları (Business Terimler Sözlüğü, Services Info,
+  Database Standartları, Topology) mbs2 dışında — sources'a eklenebilir.
 - **2026-09-17 (3)** — **Corpus-geneli otomatik alaka getirimi (Faz 1)** canlı: corpus 167 dosya /
   ~10.6M karaktere çıkınca (162 Confluence + 5 Jira projesi) bütçe (~100k) dosya-sırasına göre doluyordu →
   alaka değil tesadüf belirliyordu. Artık `_ref_bloklari_olustur` analiz dokümanını SORGU alıp
