@@ -2380,6 +2380,44 @@ def _disk_temizlik_baslat() -> None:
         logger.info("Zamanlanmış disk temizliği açık (aralık %ss; iş yokken çalışır).", a["aralik_sn"])
 
 
+# ─── Referans oto-sync (günlük) ───────────────────────────────────────────────
+# Agent ilk aktif olduğunda (boot) + GÜNDE BİR KEZ Confluence/Jira kaynaklarını çeker
+# → RAG referansları güncel kalır. Elle "Güncelle" butonu AYNEN durur (aynı işi yapar).
+# AUTO_REF_SYNC=false ile kapatılır. Bugün zaten sync olduysa (last_sync tarihi bugün)
+# ATLAR. Kaynak yok / Jira bağlı değil / iş sürüyor / sync zaten çalışıyor → sessizce erteler.
+def _bugun_referans_sync_yapildi_mi() -> bool:
+    try:
+        ls = (_load_sources().get("last_sync") or "").strip()
+        return ls.startswith(time.strftime("%d/%m/%Y"))   # last_sync formatı: dd/mm/YYYY HH:MM
+    except Exception:
+        return False
+
+
+def _referans_oto_sync_dongusu() -> None:
+    time.sleep(20)   # boot'u rahat bırak (Jira bağlantısı/oturum otursun)
+    while True:
+        try:
+            sources = _load_sources()
+            kaynak_var = bool(sources.get("confluence_spaces") or sources.get("jira_projects"))
+            cloud_id = _env_oku().get("JIRA_CLOUD_ID", "")
+            if (kaynak_var and cloud_id and not _bugun_referans_sync_yapildi_mi()
+                    and not _sync_state["running"] and not _mesgul_mu()):
+                logger.info("Referans oto-sync (günlük) başlatılıyor...")
+                _referans_sync_calistir("oto-gunluk")
+        except Exception as e:
+            logger.warning("Referans oto-sync hatası: %s", e)
+        # Saatlik kontrol → gün değişince, kaynak eklenince ya da Jira sonradan bağlanınca yakalar
+        time.sleep(3600)
+
+
+def _referans_oto_sync_baslat() -> None:
+    if _env_oku().get("AUTO_REF_SYNC", "true").strip().lower() == "false":
+        logger.info("Referans oto-sync KAPALI (AUTO_REF_SYNC=false).")
+        return
+    threading.Thread(target=_referans_oto_sync_dongusu, daemon=True, name="ref-oto-sync").start()
+    logger.info("Referans oto-sync açık (günde bir; agent ilk aktif olduğunda çeker).")
+
+
 @app.route("/api/disk/durum", methods=["GET"])
 @admin_gerekli
 def disk_durum():
@@ -3798,59 +3836,66 @@ def sources_sync_durum():
         })
 
 
+def _referans_sync_calistir(kaynak: str = "elle") -> bool:
+    """Confluence + Jira kaynaklarını referans klasörüne çeker; `_sync_state`'i günceller.
+    Hem elle (endpoint) hem günlük oto-sync bunu çağırır. Zaten çalışıyorsa False.
+    kaynak: 'elle' | 'oto-gunluk' (yalnız log/atıf)."""
+    with _sync_lock:
+        if _sync_state["running"]:
+            return False
+        _sync_state.update({"running": True, "log": [], "error": None})
+    try:
+        env = _env_oku()
+        cloud_id = env.get("JIRA_CLOUD_ID", "")
+        if not cloud_id:
+            raise Exception("Cloud ID bulunamadı. Önce Jira ile Bağlan butonuna tıklayın.")
+        sources = _load_sources()
+
+        for space in sources.get("confluence_spaces", []):
+            k = space["key"]
+            with _sync_lock:
+                _sync_state["log"].append(f"Confluence [{k}] çekiliyor...")
+            count = _fetch_confluence_space(k, cloud_id)
+            with _sync_lock:
+                _sync_state["log"].append(f"✓ Confluence [{k}]: {count} sayfa")
+
+        for proj in sources.get("jira_projects", []):
+            k = proj["key"]
+            with _sync_lock:
+                _sync_state["log"].append(f"Jira [{k}] çekiliyor...")
+            count, elenen = _fetch_jira_project(k, cloud_id)
+            mesaj = f"✓ Jira [{k}]: {count} issue"
+            if elenen:
+                mesaj += f" ({elenen} elendi: Backlog/To Do/Cancel)"
+            with _sync_lock:
+                _sync_state["log"].append(mesaj)
+
+        last_sync = time.strftime("%d/%m/%Y %H:%M")
+        sources["last_sync"] = last_sync
+        _save_sources(sources)
+        with _sync_lock:
+            _sync_state["log"].append(f"✓ Tamamlandı — {last_sync}")
+            _sync_state["last_sync"] = last_sync
+        logger.info("Veri kaynakları sync tamamlandı (%s).", kaynak)
+        return True
+    except Exception as e:
+        msg = str(e)[:300]
+        with _sync_lock:
+            _sync_state["log"].append(f"❌ Hata: {msg}")
+            _sync_state["error"] = msg
+        logger.error(f"Sync hatası ({kaynak}): {msg}")
+        return False
+    finally:
+        with _sync_lock:
+            _sync_state["running"] = False
+
+
 @app.route("/api/sources/sync", methods=["POST"])
 def sources_sync_baslat():
     with _sync_lock:
         if _sync_state["running"]:
             return jsonify({"ok": False, "error": "Zaten çalışıyor"}), 400
-        _sync_state.update({"running": True, "log": [], "error": None})
-
-    def _do_sync():
-        try:
-            env = _env_oku()
-            cloud_id = env.get("JIRA_CLOUD_ID", "")
-            if not cloud_id:
-                raise Exception("Cloud ID bulunamadı. Önce Jira ile Bağlan butonuna tıklayın.")
-            sources = _load_sources()
-
-            for space in sources.get("confluence_spaces", []):
-                k = space["key"]
-                with _sync_lock:
-                    _sync_state["log"].append(f"Confluence [{k}] çekiliyor...")
-                count = _fetch_confluence_space(k, cloud_id)
-                with _sync_lock:
-                    _sync_state["log"].append(f"✓ Confluence [{k}]: {count} sayfa")
-
-            for proj in sources.get("jira_projects", []):
-                k = proj["key"]
-                with _sync_lock:
-                    _sync_state["log"].append(f"Jira [{k}] çekiliyor...")
-                count, elenen = _fetch_jira_project(k, cloud_id)
-                mesaj = f"✓ Jira [{k}]: {count} issue"
-                if elenen:
-                    mesaj += f" ({elenen} elendi: Backlog/To Do/Cancel)"
-                with _sync_lock:
-                    _sync_state["log"].append(mesaj)
-
-            last_sync = time.strftime("%d/%m/%Y %H:%M")
-            sources["last_sync"] = last_sync
-            _save_sources(sources)
-            with _sync_lock:
-                _sync_state["log"].append(f"✓ Tamamlandı — {last_sync}")
-                _sync_state["last_sync"] = last_sync
-            logger.info("Veri kaynakları sync tamamlandı.")
-
-        except Exception as e:
-            msg = str(e)[:300]
-            with _sync_lock:
-                _sync_state["log"].append(f"❌ Hata: {msg}")
-                _sync_state["error"] = msg
-            logger.error(f"Sync hatası: {msg}")
-        finally:
-            with _sync_lock:
-                _sync_state["running"] = False
-
-    threading.Thread(target=_do_sync, daemon=True).start()
+    threading.Thread(target=_referans_sync_calistir, args=("elle",), daemon=True).start()
     return jsonify({"ok": True})
 
 
@@ -5290,6 +5335,7 @@ if __name__ == "__main__":
         logger.info(f"Analyst Studio başlatılıyor → http://localhost:{port}  (sadece yerel; LAN için .env'de HOST=0.0.0.0)")
     _oto_guncelleme_baslat()   # v2 Faz 2.5 — bildirimli otomatik güncelleme (AUTO_UPDATE=false ile kapatılır)
     _disk_temizlik_baslat()    # v2 Faz 3 — zamanlanmış disk temizliği (DISK_TEMIZLIK=false ile kapatılır)
+    _referans_oto_sync_baslat()  # Referans kaynaklarını günde bir (agent ilk aktifken) çek (AUTO_REF_SYNC=false ile kapatılır)
     _jira_kopru_baslat()       # Jira Köprüsü — komutlu yorum polling (JIRA_KOPRU=false ile KAPALI, vars.)
     _analiz_bildirim_baslat()  # Analiz bitti/hata → yerel masaüstü bildirimi (BILDIRIM=false ile kapatılır)
     app.run(host=host, port=port, debug=False)

@@ -133,6 +133,15 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   gerçek veri (Swagger sözleşmesi + MCP canlı gözlem), tarif edilen istekten (BRD) ÜSTÜNDÜR** — BRD
   hatalı/güncel-olmayan olabilir. Olgusal çelişkide (endpoint/alan/tip/gerçek davranış) gerçek veri kazanır,
   çelişki yine Açık Sorular/Tutarsızlıklar'a raporlanır. Ana doküman analizin KONUSU/izlenebilirlik çapası olarak durur.
+  **GETİRİM SIRASI de kanonikle hizalı (`_ref_bloklari_olustur` TIP_KONFIG):** referans blokları Swagger →
+  Canlı Uygulama → Confluence → Jira → Diğer sırasıyla çekilir. Global getirim bütçesi (`_ref_global_butce`;
+  CLI ~100k, API ~140k) tipler boyunca birikimli tükenir ve dolunca kalan tipler ATLANIR → en yetkili kaynak
+  (Swagger/canlı gözlem) HER ZAMAN önce girer, bütçe baskısında en düşük öncelikli (Jira/diğer) düşer. Eskiden
+  Confluence önceydi → büyük el kitabı bütçeyi yiyip Swagger'ı starve edebiliyordu. Büyük dosyalarda baştan-kesme
+  yerine **keyword-odaklı çıkarım** (`_keyword_odakli_metin`; context_filter keyword'leri yoksa baştan-kesmeye düşer
+  → derin bölümler kaçabilir, o yüzden corpus'u atomik/başlıklı tut). Tüm analizler (süreç/teknik/BRD/kapsam/delta/
+  jira-görev) `referans_dosyalari_hazirla`+`_ref_bloklari_olustur` çağırır; süreç/teknik/delta/jira-görev ayrıca
+  `canli_uygulama_baglami_hazirla` (MCP canlı gözlem) ekler.
 - **Bağlam filtresi — Jira Issue Keys (uzaktan çekme):** ekrandaki "Jira Issue Keys" alanı (`ctx-jira-keys` →
   `context_filter.jira_keys`) `filtrele_referanslar`'da ÖNCE yerel export'ta (`reference/jira/*.json`) aranır;
   yerelde BULUNMAYAN key'ler doğrudan Jira'dan (`_jira_keyleri_uzaktan_cek` → `jira_gorevleri._taze_issue_oku`
@@ -202,6 +211,12 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   **Otomatik güncelleme (2.5):** boot'ta `_oto_guncelleme_baslat()` — iş yokken `pull --ff-only` + restart;
   dirty tree / push edilmemiş commit varsa yalnız bildirir. `.env` `AUTO_UPDATE=false` kapatır,
   `AUTO_UPDATE_INTERVAL` (sn). Banner: `screens/_guncelleme.html`. `/api/update` elle akış aynen durur.
+  **Referans oto-sync (günlük):** boot'ta `_referans_oto_sync_baslat()` → `_referans_oto_sync_dongusu`
+  (saatlik kontrol) → **agent ilk aktif olduğunda + günde bir kez** Confluence/Jira kaynaklarını çeker
+  (`_referans_sync_calistir`, elle "Güncelle" butonu = `/api/sources/sync` ile ORTAK gövde). Bugün zaten
+  sync olduysa (`sources.json last_sync` tarihi bugün → `_bugun_referans_sync_yapildi_mi`) ATLAR; kaynak yok /
+  Jira bağlı değil (`JIRA_CLOUD_ID`) / iş sürüyor (`_mesgul_mu`) / sync çalışıyor → sessizce erteler. Saatlik
+  kontrol gün-değişimi + sonradan kaynak/bağlantı ekleme durumunu yakalar. `.env` `AUTO_REF_SYNC=false` kapatır.
   **2.6:** Sistem Sağlığı `/api/saglik` + `screens/saglik.html`; komut paleti ⌘K `screens/_palet.html`.
   **Faz 3 — rol-duyarlı pano + disk temizliği:** `GET /api/pano` (herkes) → Ana Sayfa "Sıradaki iş" kartları
   (`_panoIs`: bekleyen onay adımı + "Onay adımına git" · açık/kritik soru · bekleyen revizyon · çalışan iş);

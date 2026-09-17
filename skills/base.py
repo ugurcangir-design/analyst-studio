@@ -1936,21 +1936,12 @@ def _ref_bloklari_olustur(ref_dosyalar: list[Path]) -> tuple[list[dict], list[st
             gruplari["diger"].append(f)
 
     # (baslik, aciklama_icin_model, dosya_listesi, tip_toplam_limit, jira_modu)
+    # SIRA = KANONİK KAYNAK ÖNCELİĞİ (Swagger > Canlı Uygulama > Confluence > Jira > Diğer).
+    # Getirim bütçesi (özellikle CLI modunda ~100k) tipler boyunca birikimli tükenir ve dolunca
+    # kalan tipler ATLANIR → EN YETKİLİ kaynak (Swagger/canlı gözlem) HER ZAMAN önce çekilsin,
+    # bütçe baskısında en DÜŞÜK öncelikli (Jira geçmişi, diğer) düşsün. (Eskiden Confluence önceydi →
+    # büyük el kitabı bütçeyi yiyip Swagger'ı starve edebiliyordu — kanonik önceliğe aykırıydı.)
     TIP_KONFIG = [
-        (
-            "CONFLUENCE DOKÜMANTASYONU",
-            "Mevcut sistem dokümantasyonu, mimari kararlar, DB şeması, RBAC ve teknik detaylar. "
-            "İlgili sayfalardaki bilgileri `[K: Confluence:<sayfa-adı>]` ile işaretle. "
-            "Burada geçen tablo/kolon/servis adlarını teknik analizde aynen kullan.",
-            gruplari["confluence"], MAX_CHARS_CONF_TOT, False,
-        ),
-        (
-            "JİRA TASK GEÇMİŞİ",
-            "Geçmiş geliştirme kararları, tamamlanan işler ve mevcut devam eden task'lar. "
-            "İlgili task'ları `[K: Jira:KEY-123]` ile işaretle. "
-            "Geçmiş kararlara atıfta bulun; çelişen karar varsa Açık Sorular'a taşı.",
-            gruplari["jira"], MAX_CHARS_JIRA_TOT, True,
-        ),
         (
             "API / SWAGGER TANIMLARI",
             "Mevcut servis endpoint'leri, HTTP metotları, request/response şemaları ve entegrasyon detayları. "
@@ -1965,6 +1956,20 @@ def _ref_bloklari_olustur(ref_dosyalar: list[Path]) -> tuple[list[dict], list[st
             "`[K: Network:<METHOD> <path>]` ile işaretle. Token, cookie, kişisel veri ve gizli header değerlerini "
             "asla ana çıktıya taşıma; yalnızca maskelenmiş özet kullan.",
             gruplari["canli_uygulama"], MAX_CHARS_LIVE_APP_TOT, False,
+        ),
+        (
+            "CONFLUENCE DOKÜMANTASYONU",
+            "Mevcut sistem dokümantasyonu, mimari kararlar, DB şeması, RBAC ve teknik detaylar. "
+            "İlgili sayfalardaki bilgileri `[K: Confluence:<sayfa-adı>]` ile işaretle. "
+            "Burada geçen tablo/kolon/servis adlarını teknik analizde aynen kullan.",
+            gruplari["confluence"], MAX_CHARS_CONF_TOT, False,
+        ),
+        (
+            "JİRA TASK GEÇMİŞİ",
+            "Geçmiş geliştirme kararları, tamamlanan işler ve mevcut devam eden task'lar. "
+            "İlgili task'ları `[K: Jira:KEY-123]` ile işaretle. "
+            "Geçmiş kararlara atıfta bulun; çelişen karar varsa Açık Sorular'a taşı.",
+            gruplari["jira"], MAX_CHARS_JIRA_TOT, True,
         ),
         (
             "DİĞER REFERANSLAR",
