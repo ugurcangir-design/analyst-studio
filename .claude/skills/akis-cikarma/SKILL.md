@@ -9,6 +9,17 @@ Bir hedef uygulamayı **Claude in Chrome** (analistin girişli tarayıcısı) il
 kullanıcı akışını yapılandırılmış **adım tablosu + Mermaid diyagram** olarak çıkarır ve **Confluence**'a
 yayımlar. Agent tarayıcıyı sürer ve gözlemler; **analist hassas adımları yapar ve yönlendirir**.
 
+## Analist Hızlı Başlangıç (5 adım — bunu yap)
+1. **Claude Code'u aç** (bu araç) ve `brd-analyst-agent-v2` projesinde ol. **Claude in Chrome** eklentisi bağlı olsun.
+2. **Chrome'da hedef uygulamada giriş yap** (VPN gerekiyorsa bağlan). Girişli sekme açık kalsın.
+3. Claude Code'a yaz: **"<uygulama> akışlarını çıkaralım, URL: <adres>"** (ya da `/akis-cikarma`). Bu skill devreye girer.
+4. Claude ekranları gezerken **login/OTP/parola gibi hassas girişleri SEN yaparsın** ("tamam" deyince devam eder);
+   belirsiz yerde yön verirsin ("şimdi iade sekmesine geç").
+5. Claude her akışı **adım tablosu + Mermaid diyagram** olarak üretir; onaylayınca **Confluence'a yazar**. Sıradaki akışa geç.
+
+> İlk seansta önce **akış envanteri** çıkarılır (uygulamadaki tüm ekran/modüller listelenir), sonra iki analist
+> **modül bazlı böler**. Bir şey iyi çalışmazsa bu dosyayı düzenle + commit et (bkz. §7) — herkeste güncellenir.
+
 ## 0) Roller ve GÜVENLİK SINIRI (değişmez)
 - **Agent (sen):** tarayıcıyı sürer (navigate/oku/tıkla/ekran görüntüsü/network), ekran yapısını + alanları
   + validasyonları + gözlemlenen API çağrılarını çıkarır, diyagram + doküman üretir, Confluence'a yazar.
