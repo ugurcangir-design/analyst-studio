@@ -432,6 +432,7 @@ Görev başında geniş dizinleri (`reference/`, `venv/`, `logs/`, `output/`) ta
 - Auth / CSRF / güvenlik / dağıtım / onboarding → **`docs/GUVENLIK-DAGITIM.md`**
 - Faz / değişiklik geçmişi → **`docs/DEGISIKLIK-GECMISI.md`** (özet index + son işler); eski işlerin tam metni → **`docs/DEGISIKLIK-ARSIV.md`**
 - Agent'ı MBS (spor bahsi) domain'i için eğitme (context-engineering) yol haritası + kürasyon günlüğü → **`docs/AGENT-EGITIM.md`**
+- **Akış çıkarma (flow analizi):** bir uygulamayı **Claude in Chrome** ile ekran-ekran gezip kullanıcı akışlarını adım tablosu + Mermaid diyagram olarak çıkarıp Confluence'a yayınlayan **düzenlenebilir skill** → `.claude/skills/akis-cikarma/` (SKILL.md + şablonlar). Agent sürer, **analist parola/OTP/hassas girişi yapar** (agent yazmaz). Analistler skill'i kullandıkça geliştirir (edit + commit). Yayın: Atlassian MCP ya da `/api/confluence/publish`.
 - Belirli iş mantığı → ilgili tek `skills/<modül>.py` (önce o dosyayı oku, base.py'yi sadece gerekirse).
 
 ## CLAUDE.md / docs bakımı (zorunlu)
