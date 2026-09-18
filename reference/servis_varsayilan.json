@@ -1,0 +1,8 @@
+{
+  "_aciklama": "Owner tarafından YAYINLANAN varsayılan servis (BFF/Swagger) tanımları. Boot'ta yerel sources.json services[] listesine EKSİK olanlar merge edilir (_servis_varsayilanlari_birlestir) → her analist tek tek eklemez; güncellemeyle iner. YALNIZ name+url (auth YOK — auth her analistin kendi makinesinde yereldir/sırdır). URL'ler iç ağdır; erişim VPN/yetki gerektirebilir.",
+  "services": [
+    {"name": "sky-panel-bff", "url": "https://dev-sky-panel-bff-service.sanstech.dev/v3/api-docs"},
+    {"name": "sky-operation-bff", "url": "https://dev-sky-operation-bff-service.sanstech.dev/v3/api-docs"},
+    {"name": "rita-terminal-bff", "url": "https://dev-rita-terminal-bff-service.sanstech.dev/v3/api-docs"}
+  ]
+}

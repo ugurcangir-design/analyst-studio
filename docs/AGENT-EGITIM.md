@@ -107,6 +107,12 @@ birebir KONMAZ. Few-shot yapısal iskelet olarak damıtılır (derinlik/yapı/ka
 - **2026-09-17** — Yol haritası + `reference/domain-kurallari.md` mekanizması kuruldu
   (`_domain_kurallari_oku` → tüm analiz promptlarına otomatik enjeksiyon; şablonken no-op).
   Teşhis: prompts.json boş + gitignore, services/jira boş, confluence tek PDF. Memory yazıldı.
+- **2026-09-18 (3)** — **Servis yayını (owner→ekip) + Referanslar UI sadeleştirme.** (1) `reference/servis_varsayilan.json`
+  (TRACKED, auth'suz BFF `{name,url}`) boot'ta yerel sources'a merge (`_servis_varsayilanlari_birlestir`) → **analistler
+  BFF'leri tek tek girmez**, güncellemeyle otomatik alır (auth yerel/opsiyonel). Owner 3 BFF'i yayınladı. (2) UI: servis
+  **çoklaması giderildi** — ayrı `#be-service-list` kaldırıldı, tek birleşik "Servis Tanımları (Swagger)" listesi
+  (URL + endpoint + Sil=kayıt+dosya). (3) Referans dosya listeleri **katlanır** (`<details>`; >8'de kapalı) → 162+
+  Confluence sayfası ekranı boğmaz. Canlı doğrulandı (be-service-list yok, Confluence 185 dosya collapse, servisler tek liste).
 - **2026-09-18 (2)** — **Servis Swagger oto-sync.** Mevcut `/api/reference/fetch-be` (swagger URL→spec→
   `services/`) genişletildi: başarılı çekim `sources.json services[]`'e **upsert** edilir (`_servis_kaydet`) →
   günlük oto-sync artık servisleri de tazeler (`_servisleri_sync_et`, Cloud ID gerektirmez, best-effort). UI:

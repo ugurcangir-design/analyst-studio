@@ -726,6 +726,37 @@ def _servis_sil(name: str) -> None:
         pass
 
 
+SERVIS_VARSAYILAN_PATH = REF_DIR / "servis_varsayilan.json"
+
+
+def _servis_varsayilanlari_birlestir() -> None:
+    """Owner'ın YAYINLADIĞI varsayılan servisleri (tracked `servis_varsayilan.json`) yerel
+    `sources.json` services[]'e merge eder: EKSİK olanı ekler, mevcut kaydı (ve auth'unu) EZMEZ.
+    → analistler BFF/Swagger tanımlarını tek tek girmez; güncelleme + restart ile otomatik alır.
+    auth yayınlanmaz (her analistin kendi yereli). Boot'ta çağrılır."""
+    try:
+        if not SERVIS_VARSAYILAN_PATH.exists():
+            return
+        varsayilan = (json.loads(SERVIS_VARSAYILAN_PATH.read_text(encoding="utf-8")) or {}).get("services", [])
+        if not varsayilan:
+            return
+        s = _load_sources()
+        lst = s.setdefault("services", [])
+        mevcut = {e.get("name") for e in lst}
+        eklenen = 0
+        for v in varsayilan:
+            ad = (v.get("name") or "").strip()
+            url = (v.get("url") or "").strip()
+            if ad and url and ad not in mevcut:
+                lst.append({"name": ad, "url": url, "auth": ""})
+                eklenen += 1
+        if eklenen:
+            _save_sources(s)
+            logger.info("Yayınlanan varsayılan servis merge edildi: %d yeni.", eklenen)
+    except Exception as e:
+        logger.warning("Servis varsayılan merge hatası: %s", e)
+
+
 def _html_to_text(html_str: str) -> str:
     import html as _html
     text = re.sub(r"<[^>]+>", " ", html_str)
@@ -5415,6 +5446,7 @@ if __name__ == "__main__":
         logger.info(f"Analyst Studio başlatılıyor → http://localhost:{port}  (sadece yerel; LAN için .env'de HOST=0.0.0.0)")
     _oto_guncelleme_baslat()   # v2 Faz 2.5 — bildirimli otomatik güncelleme (AUTO_UPDATE=false ile kapatılır)
     _disk_temizlik_baslat()    # v2 Faz 3 — zamanlanmış disk temizliği (DISK_TEMIZLIK=false ile kapatılır)
+    _servis_varsayilanlari_birlestir()  # Owner'ın yayınladığı BFF servislerini yerel sources'a merge et (analist tek tek girmez)
     _referans_oto_sync_baslat()  # Referans kaynaklarını günde bir (agent ilk aktifken) çek (AUTO_REF_SYNC=false ile kapatılır)
     _jira_kopru_baslat()       # Jira Köprüsü — komutlu yorum polling (JIRA_KOPRU=false ile KAPALI, vars.)
     _analiz_bildirim_baslat()  # Analiz bitti/hata → yerel masaüstü bildirimi (BILDIRIM=false ile kapatılır)

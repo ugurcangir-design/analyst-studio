@@ -3512,8 +3512,8 @@ function temaDegistir() {
 
       <!-- Servis Tanımları -->
       <div class="ref-section">
-        <h3><svg class="ico"><use href="#i-server"/></svg> Servis Tanımları</h3>
-        <p>BFF ve domain servis OpenAPI/Swagger spec'leri. Büyük dosyalarda keyword filtresi uygulanır.</p>
+        <h3><svg class="ico"><use href="#i-server"/></svg> Servis Tanımları (Swagger)</h3>
+        <p>BFF ve domain servis OpenAPI/Swagger spec'leri — teknik analizin en yetkili kaynağı. Aşağıdaki liste hem URL ile eklenenleri (her gün otomatik güncellenir) hem elle yüklenen spec'leri gösterir. Silme, kayıt + dosyayı birlikte kaldırır.</p>
         <div class="ref-file-list" id="ref-list-services"></div>
         <div class="ref-upload-bar">
           <input type="file" id="ref-input-services" multiple accept=".json,.yaml,.yml" style="display:none" onchange="refYukle('services',this)">
@@ -3525,9 +3525,8 @@ function temaDegistir() {
 
         <hr class="divider" style="margin:16px 0">
 
-        <div class="field-label">BE Servisi Ekle / Güncelle (Swagger URL)</div>
-        <div class="ctx-field-sub" style="margin-bottom:8px">Swagger/OpenAPI (BFF) adresini girin (ör. <code>…/v3/api-docs</code> veya <code>…/swagger-ui</code>). Endpoint sözleşmesi teknik analizin <b>en yetkili kaynağıdır</b>. Eklenen servisler <b>her gün otomatik güncellenir</b> (agent açıldığında). İç ağ adresleri agent'ın çalıştığı makineden erişilebilir olmalıdır (VPN/auth gerekebilir).</div>
-        <div id="be-service-list"></div>
+        <div class="field-label">Swagger URL ile Ekle / Güncelle</div>
+        <div class="ctx-field-sub" style="margin-bottom:8px">Swagger/OpenAPI (BFF) adresini girin (ör. <code>…/v3/api-docs</code> veya <code>…/swagger-ui</code>) → spec çekilip yukarıdaki listeye eklenir ve <b>her gün otomatik güncellenir</b>. Endpoint sözleşmesi teknik analizin <b>en yetkili kaynağıdır</b>. İç ağ adresleri agent'ın çalıştığı makineden erişilebilir olmalıdır (VPN/auth gerekebilir). <b>Ekip varsayılanı BFF'ler otomatik gelir</b> — yalnız gerekiyorsa auth token'ı girin.</div>
         <div style="margin-bottom:8px">
           <div class="ctx-field-label">Servis Adı</div>
           <input type="text" id="ref-be-name" placeholder="örn. payment-service, risk-api" autocomplete="off" class="ctx-input">
@@ -8916,21 +8915,6 @@ async function loadSources() {
           </div>`).join('')
       : '<div style="color:var(--text3);font-size:12px;padding:4px 0 6px">Henüz proje eklenmemiş</div>';
 
-    const svcList = document.getElementById('be-service-list');
-    if (svcList) {
-      const svcs = s.services || [];
-      svcList.innerHTML = svcs.length
-        ? svcs.map(v => `
-            <div class="source-item">
-              <div class="source-item-info">
-                <div class="source-item-key">${escHtml(v.name)}</div>
-                <div class="source-item-name">${escHtml(v.url)}${v.auth ? ' · 🔒 auth' : ''}</div>
-              </div>
-              <button class="ref-delete-btn" onclick="deleteBeService('${escHtml(v.name)}')">Sil</button>
-            </div>`).join('')
-        : '<div style="color:var(--text3);font-size:12px;padding:4px 0 6px">Henüz servis (Swagger) eklenmemiş</div>';
-    }
-
     const ls = document.getElementById('src-last-sync');
     if (ls) ls.textContent = s.last_sync ? `Son güncelleme: ${s.last_sync}` : '';
   } catch {}
@@ -8939,7 +8923,7 @@ async function loadSources() {
 async function deleteBeService(name) {
   if (!confirm(`"${name}" servisi silinsin mi? (Swagger dosyası + kayıt kaldırılır)`)) return;
   const r = await fetch('/api/reference/services/' + encodeURIComponent(name), { method:'DELETE' });
-  if (r.ok) { toast('Servis silindi', 'info'); loadSources(); loadRefDocs(); }
+  if (r.ok) { toast('Servis silindi', 'info'); loadRefDocs(); }
   else toast('Silinemedi', 'error');
 }
 
@@ -9032,25 +9016,50 @@ async function pollSync() {
 // ─── Referans Dokümanlar ─────────────────────────────────────────────────────
 async function loadRefDocs() {
   try {
+    // Servis kayıtları (URL/auth) → dosya listesinde URL göstermek ve kayıt+dosya birlikte silmek için
+    let servMap = {};
+    try {
+      const sd = await (await fetch('/api/sources')).json();
+      (sd.sources && sd.sources.services || []).forEach(v => { servMap[v.name] = v; });
+    } catch {}
     const r = await fetch('/api/reference/list');
     const data = await r.json();
-    ['confluence','jira','services'].forEach(k => renderRefList(k, data[k] || []));
+    renderRefList('confluence', data.confluence || []);
+    renderRefList('jira', data.jira || []);
+    renderRefList('services', data.services || [], servMap);
   } catch {}
 }
 
-function renderRefList(kategori, dosyalar) {
+function renderRefList(kategori, dosyalar, servMap) {
   const el = document.getElementById(`ref-list-${kategori}`);
   if (!el) return;
   if (!dosyalar.length) {
     el.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:4px 0">Henüz dosya yok</div>';
     return;
   }
-  el.innerHTML = dosyalar.map(f => `
-    <div class="ref-file-row">
+  const rows = dosyalar.map(f => {
+    if (kategori === 'services') {
+      const stem = f.ad.replace(/\.[^.]+$/, '');
+      const reg = servMap && servMap[stem];
+      const url = reg ? `<span class="rf-name" style="flex:1;min-width:0;color:var(--text3);font-size:11px" title="${escHtml(reg.url)}">${escHtml(reg.url)}${reg.auth ? ' · 🔒' : ''}</span>` : '';
+      return `<div class="ref-file-row">
+        <span class="rf-name" title="${f.yol}">${f.ad}</span>${url}
+        <span class="rf-size">${formatBytes(f.boyut)}</span>
+        <span class="rf-del" onclick="deleteBeService('${escHtml(stem)}')" title="Sil (kayıt + dosya)">✕</span>
+      </div>`;
+    }
+    return `<div class="ref-file-row">
       <span class="rf-name" title="${f.yol}">${f.ad}</span>
       <span class="rf-size">${formatBytes(f.boyut)}</span>
       <span class="rf-del" onclick="refSil('${kategori}','${f.yol}')" title="Sil">✕</span>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+  // Çok dosyada (ör. 162 Confluence) ekranı boğmasın → 8'den fazlaysa katlanır (varsayılan kapalı)
+  const acik = dosyalar.length <= 8 ? ' open' : '';
+  el.innerHTML = `<details${acik} style="border:1px solid var(--border);border-radius:8px;background:var(--surface2)">
+      <summary style="cursor:pointer;padding:7px 10px;font-size:12px;color:var(--text2);user-select:none">${dosyalar.length} dosya <span style="color:var(--text3)">— göster/gizle</span></summary>
+      <div style="padding:2px 8px 8px">${rows}</div>
+    </details>`;
 }
 
 async function refYukle(kategori, input) {
@@ -9097,7 +9106,6 @@ async function addBeService() {
     document.getElementById('ref-be-auth').value = '';
     toast(`${name} servisi eklendi — her gün otomatik güncellenir`, 'success');
     loadRefDocs();
-    loadSources();
   }
 }
 
