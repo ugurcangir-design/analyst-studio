@@ -530,9 +530,15 @@ JIRA_URL=https://&lt;sitename&gt;.atlassian.net   # Atlassian SİTE adresiniz �
         (örn. <em>"✓ Jira [PROJ]: 142 issue (38 elendi: Backlog/To&nbsp;Do/Cancel)"</em>).
       </div>
       <div class="box tip">
-        <strong>Süre</strong>
-        Space/proje büyüklüğüne göre 2-10 dakika. Tek seferlik yapılır; sonradan haftada bir
-        / değişiklik olduğunda <em>Güncelle</em> tekrar basılır.
+        <strong>Süre + otomatik güncelleme</strong>
+        Space/proje büyüklüğüne göre 2-10 dakika. <strong>Her gün agent ilk açıldığında otomatik güncellenir</strong>
+        (elle <em>Güncelle</em> de her zaman çalışır); dilediğinizde de basabilirsiniz.
+      </div>
+      <div class="box info">
+        <strong>Servis Swagger'ları (BFF / OpenAPI)</strong>
+        Referanslar → <em>Servis Tanımları</em>'nda BFF swagger adresini girerek (ör. <code>…/v3/api-docs</code>)
+        endpoint sözleşmesini eklersiniz — teknik analizin <strong>en yetkili kaynağıdır</strong>. Eklenen servisler
+        her gün otomatik tazelenir. Ekip varsayılanı BFF'ler otomatik gelir; yalnız gerekiyorsa auth token'ı girilir.
       </div>
     </div>
 
@@ -1450,16 +1456,21 @@ Doküman yükle <span class="arr">→</span> Süreç Analizi <span class="arr">�
 
     <!-- ============== 11 FİLTRE ============== -->
     <h2 id="filtre">13. Bağlam Filtresi <span class="pill new">İleri</span></h2>
-    <p>
-      Referans klasörü çok büyüdüyse (yüzlerce Confluence sayfası, binlerce Jira issue),
-      her analizde hepsini AI'a göndermek hem yavaş hem maliyetli olur.
-      <strong>Bağlam filtresi</strong> ile sadece ilgili olanları dahil edersiniz.
-    </p>
-    <p>Panel iki gruba ayrılır — <strong>Referans Filtreleri</strong> (RAG) ve
-    <strong>Canlı Uygulama (Chrome MCP)</strong>:</p>
+    <div class="box tip">
+      <strong>Otomatik — anahtar kelime girmenize gerek yok</strong>
+      Referans klasörü çok büyük olsa da (100+ Confluence sayfası) her analizde <strong>hepsi
+      gönderilmez</strong>. Agent, <strong>yüklediğiniz dokümandan</strong> ilgili terimleri kendisi çıkarıp
+      <strong>tüm kaynaklardan</strong> (Confluence · Jira · Swagger) o analize <strong>en alakalı</strong>
+      içeriği otomatik seçer (corpus-geneli alaka getirimi). "Prematch ekranı" gibi anahtar kelime yazmanıza
+      gerek kalmaz.
+    </div>
+    <p>Aşağıdaki alanlar yalnızca <strong>opsiyonel yönlendirme</strong> içindir: analizi belirli bir konuya
+    <strong>daraltmak</strong>, bir Jira task'ına <strong>odaklamak</strong> ya da bir konuyu <strong>öne
+    çıkarmak</strong> istediğinizde kullanın. Boş bırakırsanız agent otomatik seçer. Panel iki gruba ayrılır —
+    <strong>Referans Filtreleri</strong> (RAG) ve <strong>Canlı Uygulama (Chrome MCP)</strong>:</p>
     <table>
       <tr><th>Grup / Alan</th><th>Örnek</th><th>Etkisi</th></tr>
-      <tr><td>Anahtar kelimeler</td><td><code>sipariş, ödeme, fatura</code></td><td>Bu kelimeleri içeren dokümanlar/issue'lar gelir</td></tr>
+      <tr><td>Odak / Yönlendirme <em>(opsiyonel)</em></td><td><code>yalnız live, cashout</code></td><td>Boş bırak → agent otomatik bulur. Doldurursan bu konu(lar) öne çıkarılır (5× ağırlık)</td></tr>
       <tr><td>Jira Keys</td><td><code>PROJ-123, PROJ-145</code></td><td>Sadece bu spesifik issue'lar</td></tr>
       <tr><td>Confluence Pages</td><td><code>Sipariş Mimarisi</code></td><td>Sayfa adında bu metin geçenler</td></tr>
       <tr><td>Ana Uygulama URL</td><td><code>https://dev.example.com/order</code></td><td>Claude MCP/Chrome bu ekrandan başlayarak canlı gözlem toplar</td></tr>
