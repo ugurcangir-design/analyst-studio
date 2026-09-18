@@ -20,8 +20,8 @@ haber: ML/bütçe gerektirmez, tamamen bizim kontrolümüzdeki dosya + kurallarl
 
 | Kaldıraç | Yol | Durum | Sahip |
 |---|---|---|---|
-| Domain kuralları + sözlük | `reference/domain-kurallari.md` (**gitignore**, `.example` seed) | ✅ **mbs2 El Kitabı'na göre yeniden yazıldı** (kod adları, mimari değişmezler, kanıt dereceleri, hiyerarşiler, Kafka, ortam) | Owner genişletir |
-| MBS El Kitabı (analist referansı) | `reference/confluence/mbs2/*` (RAG) | ✅ **oluşturuldu + sync'li** (A/B/C/D/E/F/G yapısı; RAG-dostu) — Faz 1 otomatik çeker | Owner günceller |
+| Domain kuralları + sözlük | `reference/domain-kurallari.md` (**gitignore**, `.example` seed) | ✅ **El Kitabı v2.1'e göre güncellendi** (9.4k; kanonik adlar, durum makineleri, düzeltilen hiyerarşi/sayılar, API sözleşmesi) | Owner genişletir |
+| MBS El Kitabı (analist referansı) | `reference/confluence/mbs2/*` (RAG) | ✅ **v2.1 · 184 sayfa** (0/A/B/C/D/E/F/G; RAG-dostu, kanıt-dereceli) — Faz 1 otomatik çeker | Owner günceller |
 | Swagger/OpenAPI | `reference/services/` | ❌ **BOŞ — en büyük kalan fırsat** (3 BFF swagger + baseline dosyaları var) | Owner ekler |
 | Skill prompt override | `reference/prompts.json` (gitignore) | `{}` — opsiyonel, fork riskli, önerilmez | — |
 | Confluence corpus | `reference/confluence/` (gitignore) | ✅ 162 sayfa (mbs2 El Kitabı + ekran/servis dokümanları); Faz 1 alaka ile çeker | Owner |
@@ -107,6 +107,16 @@ birebir KONMAZ. Few-shot yapısal iskelet olarak damıtılır (derinlik/yapı/ka
 - **2026-09-17** — Yol haritası + `reference/domain-kurallari.md` mekanizması kuruldu
   (`_domain_kurallari_oku` → tüm analiz promptlarına otomatik enjeksiyon; şablonken no-op).
   Teşhis: prompts.json boş + gitignore, services/jira boş, confluence tek PDF. Memory yazıldı.
+- **2026-09-18** — **El Kitabı v2.1 → domain-kurallari.md güncellendi.** El kitabı büyük genişleme
+  (162→184 sayfa; yeni: 0·Başlangıç/Standartlar, 0.1 Baseline, 0.3 API Konvansiyonları, A6 Domain Modeli
+  (5 bağlam), A7 Durum Makineleri (6), A8 Çapraz-Domain ID, A9 İzlenebilirlik, B0 Servis Kataloğu, C0/C2/C3,
+  D0, E0-E6 ekran haritaları, E6 İzin Matrisi, F3 İş Kuralı Kataloğu 115 BR). domain-kurallari.md çekirdeği
+  buna göre düzeltildi: **hiyerarşi Category→Groups (`tournament_group`)**, **risk yüzeyi yalnız Trade Panel**,
+  kanonik ad↔takma ad (Fixture=Event, Competition=tournament, Ticket→Wager→Selection, Four-eyes L0-L3),
+  6 durum makinesi (enum'lar), 5 bağlam, güncel sayılar (804 ep/Panel 396, 292 tablo, 24 audit, 72 ekran,
+  11 tribe), API sözleşmesi (route/sayfalama/**tutarsız tarih biçimi**), F3 BR-xxx atfı, risk motoru
+  (effective=base×risk_factor). (Not: domain gerçekleri yalnız gitignore domain-kurallari.md + RAG'de;
+  tracked kodda tutulmaz.)
 - **2026-09-17 (4)** — **MBS El Kitabı işlendi.** mbs2 Confluence'ta RAG-dostu yapılandırılmış el kitabı
   oluşturuldu (MBS El Kitabı index + A1 Domain Kataloğu · A2 Akışlar · A4 Ortamlar · C1 Kafka Aileleri ·
   F1 Task/Süreç kullanımı · F2 RAG Besleme Recipe · G0 Sözlük · G1 Açık Sorular · G2 Kaynak Önceliği).
