@@ -107,6 +107,12 @@ birebir KONMAZ. Few-shot yapısal iskelet olarak damıtılır (derinlik/yapı/ka
 - **2026-09-17** — Yol haritası + `reference/domain-kurallari.md` mekanizması kuruldu
   (`_domain_kurallari_oku` → tüm analiz promptlarına otomatik enjeksiyon; şablonken no-op).
   Teşhis: prompts.json boş + gitignore, services/jira boş, confluence tek PDF. Memory yazıldı.
+- **2026-09-19** — **El Kitabı v2.2 → domain-kurallari.md güncellendi.** Handbook v2.2 (P2 — referans derinliği +
+  Terminal; ~190 sayfa). Yeni sayfalar: E7 Terminal Ekran/Akış (57 ekran, 36/36 BFF), B·Hata Kodu (fault_catalog 27 kod),
+  B·Config Anahtarı (horizon 34 + nasus 16), A10 ADR (10 karar), C4 Olay Sözleşmeleri (topic katalog), G4 SSS.
+  Servis kartı düzeltmesi: fiora/spectron simetri→**asimetri** (Kafka olayları). domain-kurallari.md çekirdeği güncellendi:
+  Terminal artık tam eşlenmiş (E7); §14 navigasyona A10/B-Fault/B-Config/C4/E7/G4 eklendi; §12'ye hata kodu + config
+  anahtarı referansları. Sayılar (804/292/364/72/11) değişmedi. (domain-kurallari.md gitignore — commit'te yok.)
 - **2026-09-18 (3)** — **Servis yayını (owner→ekip) + Referanslar UI sadeleştirme.** (1) `reference/servis_varsayilan.json`
   (TRACKED, auth'suz BFF `{name,url}`) boot'ta yerel sources'a merge (`_servis_varsayilanlari_birlestir`) → **analistler
   BFF'leri tek tek girmez**, güncellemeyle otomatik alır (auth yerel/opsiyonel). Owner 3 BFF'i yayınladı. (2) UI: servis
