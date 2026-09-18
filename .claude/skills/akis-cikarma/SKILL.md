@@ -70,30 +70,53 @@ API'ler · Açık sorular/uç durumlar. **Kanıt işareti** kullan: ✅ canlı g
 Kaynağı `[K: Canlı UI:<route>]` / `[K: Network:<METHOD> <path>]` ile işaretle. Hassas veri = maskeli.
 
 ## 5) Confluence'a yayınlama + birleştirme
-**Yapı:** bir **index (ana) sayfa** ("[Uygulama] Akış Analizi" — tüm akışların tablosu: ad·sahip·durum·link) +
-**her akış = index'in ALT sayfası**. Şablon: `sablon-index.md`.
+**Yapı:** bir **index (ana) sayfa** ("[Uygulama] Akış Analizi") + **her akış = index'in ALT sayfası**.
+Şablon: `sablon-index.md`. **İki analist aynı space/parent'ı kullanır.**
 
 **Yayın yolu (biri):**
-- **A. Atlassian MCP (tercih, doğrudan):** analistin Atlassian connector'ı bağlıysa `createConfluencePage` /
-  `updateConfluencePage` (parent olarak index sayfa id'si). Space/parent id'lerini analistten al.
-- **B. Ürün endpoint'i:** dokümanı `output/<akis-adi>.md`'ye yaz, sonra:
+- **A. Atlassian MCP (tercih):** `createConfluencePage` / `updateConfluencePage` (parent = index sayfa id).
+- **B. Ürün endpoint'i:** dokümanı `output/<akis-adi>.md`'ye yaz →
   `curl -s -X POST http://localhost:5003/api/confluence/publish -H "Content-Type: application/json" -d '{"dosya":"<akis-adi>.md","space_key":"<KEY>","parent_id":"<INDEX_ID>","title":"<Başlık>"}'`
-  (ürünün Atlassian OAuth'unu kullanır; `Cloud ID` bağlı olmalı.)
-- **C. Elle:** yayın hazır değilse markdown çıktısını analiste ver, o yapıştırsın.
+- **C. Elle:** markdown/storage çıktısını analiste ver, yapıştırsın.
 
-Her yayından sonra **index tablosuna** satırı ekle/güncelle (ad · sahip · durum=Taslak/Onaylı · link).
+### ÇAKIŞMA & SIRA KONTROLÜ (iki analist paralel — KRİTİK)
+- **Her akış AYRI sayfadır** → farklı sayfalara paralel yayın **çakışmaz**; sıra önemsiz. Bunu garanti etmek için:
+  **modül bazlı bölüşüm** + **benzersiz başlık konvansiyonu** `"<Uygulama> - <Modül> - <Akış>"` (iki analist aynı
+  başlığı üretmez → Confluence'ın "aynı space'te aynı başlık" reddi de tetiklenmez).
+- **Confluence'ın kendi kilidi:** her sayfanın **sürüm numarası** var; aynı sayfaya eşzamanlı iki güncelleme →
+  ikincisi **409 (stale version)** alır, **sessiz üzerine yazma OLMAZ**. Kural: güncellemeden önce **güncel sürümü
+  OKU → yaz; 409 alırsan yeniden oku + kendi değişikliğini merge et + tekrar dene** (blind overwrite yapma).
+- **Index tek çekişme noktasıdır** → ikisinden birini uygula:
+  1. **(Tercih) Index elle düzenlenmez:** alt sayfaları Confluence'ın **"Children Display" makrosu** ile
+     otomatik-listele → yeni akış sayfası açılınca index kendiliğinden gösterir → **sıfır çakışma**.
+  2. Elle durum tablosu şartsa: index'i **tek kişi** (owner ya da atanan) günceller, ya da yukarıdaki
+     **409-oku-merge-tekrar-dene** döngüsünü uygula.
+- **"Hangi sıra?"** yanıtı: ayrı akış sayfalarında sıra yok (bağımsız); index'te ya makro (sırasız/otomatik) ya
+  da sürüm-kontrollü sıralı yazım (ilk yazan v.N+1, ikinci 409 → merge → v.N+2). Kimse kimsenin yazımını EZMEZ.
+
+### DİYAGRAM CONFLUENCE'TA GÖRÜNÜR OLMALI (ham mermaid render OLMAZ)
+Confluence eklenti yoksa ```mermaid'i **render etmez**. Bu yüzden her diyagramı **İKİ biçimde** koy:
+1. **Görsel (zorunlu):** mermaid'i **PNG/SVG'ye çevir** → sayfaya **ek (attachment)** yükle + `<ac:image>` ile göm.
+   Render: yerelde `@mermaid-js/mermaid-cli` (`mmdc -i x.mmd -o x.png`) VARSA onunla; yoksa mermaid.js'li bir HTML'i
+   tarayıcıda render edip **screenshot**. **DIŞ servise (mermaid.ink vb.) gönderme** — şirket ekran adları dışarı çıkmasın.
+2. **Kaynak (düzenlenebilir):** mermaid metnini bir **kod bloğu / expand** içinde de bırak (sonraki güncellemede düzenlenebilsin).
+- Confluence'ta **Mermaid/PlantUML makrosu** KURULUYSA: mermaid metnini o makroya koy → görsele gerek kalmaz (önce öğren).
 
 ## 6) İki analist + birleştirme
 - Backlog modül bazlı bölünür; herkes kendi alt sayfalarını yayımlar → **çakışma yok**.
 - Haftalık: index'te durum takibi; gün sonunda kısa "hangi akışlar bitti" özeti index'e.
 - Kapanışta: tutarlılık turu (aynı terim/kanonik ad), varsa **uçtan-uca birleşik diyagram** (akışları bağlayan).
 
-## 7) Bu skill'i GELİŞTİRME (analistler için)
-Bu dosya (`.claude/skills/akis-cikarma/SKILL.md`) ekibindir — kullandıkça iyileştir:
-- Bir adım eksik/yanlış çalıştıysa buraya kuralı ekle (ör. "şu uygulamada OTP ekranı 30 sn'de kapanır → önce
-  hazırla"). Şablonları (`sablon-akis.md`/`sablon-index.md`) ihtiyaca göre düzenle.
-- Değişikliği commit et: `git add .claude/skills/akis-cikarma && git commit -m "akis-cikarma: <iyileştirme>"` →
-  güncelleme/pull ile diğer analiste de iner. Böylece yöntem her seansta olgunlaşır.
+## 7) Bu skill'i GELİŞTİRME — ORTAK, tek kaynak (analistler için)
+Bu klasör (`.claude/skills/akis-cikarma/`) **git'te tek kaynaktır** → her analistte AYNI skill geçerlidir.
+Format/şablon **hızlı** değiştirilebilir ve **herkese yayılır**:
+- Analist Claude'a der: *"akış şablonuna şu kolonu ekle / diyagramı şöyle yap"* → **Claude** `SKILL.md` veya
+  `sablon-akis.md`/`sablon-index.md`'yi düzenler → **commit + push** eder (bir cümlede olur).
+- **Diğer analiste geçmesi:** ürünün **AUTO_UPDATE**'i `origin/main`'i çeker (ya da analist `git pull` yapar) →
+  **sonraki Claude Code seansında** yeni format geçerli olur. (Açık bir seansta anında değil — yeni seans/pull gerekir.)
+- **Çakışmayı önle (iki editör):** format değişiklikleri tek dosyada toplansın (`sablon-akis.md`); büyük değişiklikten
+  önce diğer analiste kısa haber + `git pull`. Küçük dosya olduğundan git merge nadiren ve kolay çözülür.
+- Böylece "seninle hızlı düzenle" = Claude'a söyle → o düzenler+push eder; "diğer analistte geçerli" = pull/AUTO_UPDATE.
 
 ## Notlar
 - Uygulama iç ağ/VPN'deyse yalnız analistin makinesinden erişilir (Claude in Chrome bunu kullanır).
