@@ -22,7 +22,7 @@ haber: ML/bütçe gerektirmez, tamamen bizim kontrolümüzdeki dosya + kurallarl
 |---|---|---|---|
 | Domain kuralları + sözlük | `reference/domain-kurallari.md` (**gitignore**, `.example` seed) | ✅ **El Kitabı v2.1'e göre güncellendi** (9.4k; kanonik adlar, durum makineleri, düzeltilen hiyerarşi/sayılar, API sözleşmesi) | Owner genişletir |
 | MBS El Kitabı (analist referansı) | `reference/confluence/mbs2/*` (RAG) | ✅ **v2.1 · 184 sayfa** (0/A/B/C/D/E/F/G; RAG-dostu, kanıt-dereceli) — Faz 1 otomatik çeker | Owner günceller |
-| Swagger/OpenAPI | `reference/services/` | ❌ **BOŞ — en büyük kalan fırsat** (3 BFF swagger + baseline dosyaları var) | Owner ekler |
+| Swagger/OpenAPI | `reference/services/` | ⚙️ **mekanizma hazır** — Referanslar → "BE Servisi Ekle" ile 3 BFF URL'i girilir, günlük oto-sync tazeler; **owner URL+auth girmeli** (iç ağ) | Owner ekler |
 | Skill prompt override | `reference/prompts.json` (gitignore) | `{}` — opsiyonel, fork riskli, önerilmez | — |
 | Confluence corpus | `reference/confluence/` (gitignore) | ✅ 162 sayfa (mbs2 El Kitabı + ekran/servis dokümanları); Faz 1 alaka ile çeker | Owner |
 | Jira export + yorumlar | `reference/jira/` (5 proje sync'li) | ✅ AUTH/CORE/MBSOPS/MBSTRADE/TERMINAL çekiliyor; jira_keys opsiyonel | Owner |
@@ -107,6 +107,13 @@ birebir KONMAZ. Few-shot yapısal iskelet olarak damıtılır (derinlik/yapı/ka
 - **2026-09-17** — Yol haritası + `reference/domain-kurallari.md` mekanizması kuruldu
   (`_domain_kurallari_oku` → tüm analiz promptlarına otomatik enjeksiyon; şablonken no-op).
   Teşhis: prompts.json boş + gitignore, services/jira boş, confluence tek PDF. Memory yazıldı.
+- **2026-09-18 (2)** — **Servis Swagger oto-sync.** Mevcut `/api/reference/fetch-be` (swagger URL→spec→
+  `services/`) genişletildi: başarılı çekim `sources.json services[]`'e **upsert** edilir (`_servis_kaydet`) →
+  günlük oto-sync artık servisleri de tazeler (`_servisleri_sync_et`, Cloud ID gerektirmez, best-effort). UI:
+  Referanslar → "BE Servisi Ekle" + kayıtlı servis listesi + Sil (`deleteBeService`, `DELETE /api/reference/services/<name>`).
+  **Owner 3 BFF swagger URL'ini bir kez girer** (`{env}-sky-panel-bff-service…/v3/api-docs`,
+  `…-sky-operation-bff-service…`, `…-rita-terminal-bff-service…`) → her gün otomatik güncellenir. NOT: iç ağ →
+  agent makinesinden erişim (VPN/auth) gerekir; Claude bu oturumdan `sanstech.dev`'e erişemez, çekme owner'ın makinesinde çalışır.
 - **2026-09-18** — **El Kitabı v2.1 → domain-kurallari.md güncellendi.** El kitabı büyük genişleme
   (162→184 sayfa; yeni: 0·Başlangıç/Standartlar, 0.1 Baseline, 0.3 API Konvansiyonları, A6 Domain Modeli
   (5 bağlam), A7 Durum Makineleri (6), A8 Çapraz-Domain ID, A9 İzlenebilirlik, B0 Servis Kataloğu, C0/C2/C3,

@@ -220,11 +220,19 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   dirty tree / push edilmemiş commit varsa yalnız bildirir. `.env` `AUTO_UPDATE=false` kapatır,
   `AUTO_UPDATE_INTERVAL` (sn). Banner: `screens/_guncelleme.html`. `/api/update` elle akış aynen durur.
   **Referans oto-sync (günlük):** boot'ta `_referans_oto_sync_baslat()` → `_referans_oto_sync_dongusu`
-  (saatlik kontrol) → **agent ilk aktif olduğunda + günde bir kez** Confluence/Jira kaynaklarını çeker
-  (`_referans_sync_calistir`, elle "Güncelle" butonu = `/api/sources/sync` ile ORTAK gövde). Bugün zaten
-  sync olduysa (`sources.json last_sync` tarihi bugün → `_bugun_referans_sync_yapildi_mi`) ATLAR; kaynak yok /
-  Jira bağlı değil (`JIRA_CLOUD_ID`) / iş sürüyor (`_mesgul_mu`) / sync çalışıyor → sessizce erteler. Saatlik
-  kontrol gün-değişimi + sonradan kaynak/bağlantı ekleme durumunu yakalar. `.env` `AUTO_REF_SYNC=false` kapatır.
+  (saatlik kontrol) → **agent ilk aktif olduğunda + günde bir kez** Confluence/Jira + **servis Swagger'larını**
+  çeker (`_referans_sync_calistir`, elle "Güncelle" butonu = `/api/sources/sync` ile ORTAK gövde). Bugün zaten
+  sync olduysa (`sources.json last_sync` tarihi bugün → `_bugun_referans_sync_yapildi_mi`) ATLAR; iş sürüyor
+  (`_mesgul_mu`) / sync çalışıyor → erteler. **Confluence/Jira `JIRA_CLOUD_ID` (OAuth) gerektirir** (yoksa uyarıyla
+  atlanır); **servis Swagger'ları Cloud ID GEREKTİRMEZ** → yalnız servis varsa da sync çalışır. Saatlik kontrol
+  gün-değişimi + sonradan kaynak/bağlantı ekleme durumunu yakalar. `.env` `AUTO_REF_SYNC=false` kapatır.
+  **Servis Swagger (BFF/OpenAPI → `reference/services/`):** `/api/reference/fetch-be {name,url,auth?}` →
+  `_swagger_spec_cek` (swagger-ui HTML'inden `/v3/api-docs` vb. çözer, OpenAPI doğrular) → `services/<name>.json`
+  YAZAR **ve `sources.json` `services[]` listesine upsert eder** (`_servis_kaydet`) → günlük oto-sync onu tazeler
+  (`_servisleri_sync_et`, best-effort: erişilemezse mevcut spec korunur). `DELETE /api/reference/services/<name>`
+  (`_servis_sil`) kayıt + dosyayı siler. UI: Referanslar → "BE Servisi Ekle" formu + kayıtlı servis listesi
+  (`#be-service-list`, `deleteBeService`). NOT: iç ağ (`*.sanstech.dev`) adresleri **agent'ın çalıştığı makineden**
+  erişilebilir olmalı (VPN/auth); auth token'ı `sources.json`'da (gitignore) yerelde tutulur, expire olabilir.
   **2.6:** Sistem Sağlığı `/api/saglik` + `screens/saglik.html`; komut paleti ⌘K `screens/_palet.html`.
   **Faz 3 — rol-duyarlı pano + disk temizliği:** `GET /api/pano` (herkes) → Ana Sayfa "Sıradaki iş" kartları
   (`_panoIs`: bekleyen onay adımı + "Onay adımına git" · açık/kritik soru · bekleyen revizyon · çalışan iş);

@@ -702,6 +702,30 @@ def _save_sources(data: dict) -> None:
     SOURCES_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _servis_kaydet(name: str, url: str, auth: str = "") -> None:
+    """Servis Swagger'ını sources.json `services` listesine upsert eder (günlük oto-sync tazeler).
+    sources.json gitignore'lu → auth (varsa) yalnız yerelde kalır."""
+    s = _load_sources()
+    lst = s.setdefault("services", [])
+    for e in lst:
+        if e.get("name") == name:
+            e["url"], e["auth"] = url, auth
+            break
+    else:
+        lst.append({"name": name, "url": url, "auth": auth})
+    _save_sources(s)
+
+
+def _servis_sil(name: str) -> None:
+    s = _load_sources()
+    s["services"] = [e for e in s.get("services", []) if e.get("name") != name]
+    _save_sources(s)
+    try:
+        (SERVIS_DIR / f"{name}.json").unlink()
+    except Exception:
+        pass
+
+
 def _html_to_text(html_str: str) -> str:
     import html as _html
     text = re.sub(r"<[^>]+>", " ", html_str)
@@ -2398,9 +2422,12 @@ def _referans_oto_sync_dongusu() -> None:
     while True:
         try:
             sources = _load_sources()
-            kaynak_var = bool(sources.get("confluence_spaces") or sources.get("jira_projects"))
             cloud_id = _env_oku().get("JIRA_CLOUD_ID", "")
-            if (kaynak_var and cloud_id and not _bugun_referans_sync_yapildi_mi()
+            conf_jira_var = bool(sources.get("confluence_spaces") or sources.get("jira_projects"))
+            servis_var = bool(sources.get("services"))
+            # Çekilecek bir şey var mı: (Confluence/Jira + Cloud ID) VEYA servis Swagger (Cloud ID gerekmez)
+            calisir = (conf_jira_var and cloud_id) or servis_var
+            if (calisir and not _bugun_referans_sync_yapildi_mi()
                     and not _sync_state["running"] and not _mesgul_mu()):
                 logger.info("Referans oto-sync (günlük) başlatılıyor...")
                 _referans_sync_calistir("oto-gunluk")
@@ -3836,8 +3863,44 @@ def sources_sync_durum():
         })
 
 
+def _servisleri_sync_et(servisler: list) -> None:
+    """Kayıtlı servis Swagger'larını (BFF/OpenAPI) yeniden çeker → reference/services/.
+    Best-effort: bir servis erişilemezse (iç ağ/VPN/auth) MEVCUT spec korunur, uyarı loglanır.
+    Cloud ID gerektirmez — Confluence/Jira'dan bağımsızdır."""
+    if not servisler:
+        return
+    try:
+        import requests as _req
+    except ImportError:
+        with _sync_lock:
+            _sync_state["log"].append("⚠ Servis Swagger atlandı: requests yok.")
+        return
+    SERVIS_DIR.mkdir(parents=True, exist_ok=True)
+    for svc in servisler:
+        name = (svc.get("name") or "").strip()
+        url = (svc.get("url") or "").strip()
+        if not name or not url:
+            continue
+        headers = {"Authorization": svc["auth"]} if svc.get("auth") else {}
+        with _sync_lock:
+            _sync_state["log"].append(f"Swagger [{name}] çekiliyor...")
+        try:
+            spec, _kaynak = _swagger_spec_cek(url, headers, _req)
+            if spec and _gecerli_spec_mi(spec) and spec.get("paths"):
+                (SERVIS_DIR / f"{name}.json").write_text(
+                    json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
+                with _sync_lock:
+                    _sync_state["log"].append(f"✓ Swagger [{name}]: {len(spec['paths'])} endpoint")
+            else:
+                with _sync_lock:
+                    _sync_state["log"].append(f"⚠ Swagger [{name}] alınamadı (erişim/auth?) — mevcut korunur.")
+        except Exception as e:
+            with _sync_lock:
+                _sync_state["log"].append(f"⚠ Swagger [{name}] hata: {str(e)[:120]} — mevcut korunur.")
+
+
 def _referans_sync_calistir(kaynak: str = "elle") -> bool:
-    """Confluence + Jira kaynaklarını referans klasörüne çeker; `_sync_state`'i günceller.
+    """Confluence + Jira + servis Swagger'larını referans klasörüne çeker; `_sync_state`'i günceller.
     Hem elle (endpoint) hem günlük oto-sync bunu çağırır. Zaten çalışıyorsa False.
     kaynak: 'elle' | 'oto-gunluk' (yalnız log/atıf)."""
     with _sync_lock:
@@ -3847,28 +3910,35 @@ def _referans_sync_calistir(kaynak: str = "elle") -> bool:
     try:
         env = _env_oku()
         cloud_id = env.get("JIRA_CLOUD_ID", "")
-        if not cloud_id:
-            raise Exception("Cloud ID bulunamadı. Önce Jira ile Bağlan butonuna tıklayın.")
         sources = _load_sources()
+        conf_jira_var = bool(sources.get("confluence_spaces") or sources.get("jira_projects"))
 
-        for space in sources.get("confluence_spaces", []):
-            k = space["key"]
+        # Confluence + Jira → Cloud ID (OAuth) gerektirir. Yoksa uyar, atla (servisler yine çekilir).
+        if conf_jira_var and not cloud_id:
             with _sync_lock:
-                _sync_state["log"].append(f"Confluence [{k}] çekiliyor...")
-            count = _fetch_confluence_space(k, cloud_id)
-            with _sync_lock:
-                _sync_state["log"].append(f"✓ Confluence [{k}]: {count} sayfa")
+                _sync_state["log"].append("⚠ Jira bağlantısı yok (Cloud ID) — Confluence/Jira atlandı.")
+        elif cloud_id:
+            for space in sources.get("confluence_spaces", []):
+                k = space["key"]
+                with _sync_lock:
+                    _sync_state["log"].append(f"Confluence [{k}] çekiliyor...")
+                count = _fetch_confluence_space(k, cloud_id)
+                with _sync_lock:
+                    _sync_state["log"].append(f"✓ Confluence [{k}]: {count} sayfa")
 
-        for proj in sources.get("jira_projects", []):
-            k = proj["key"]
-            with _sync_lock:
-                _sync_state["log"].append(f"Jira [{k}] çekiliyor...")
-            count, elenen = _fetch_jira_project(k, cloud_id)
-            mesaj = f"✓ Jira [{k}]: {count} issue"
-            if elenen:
-                mesaj += f" ({elenen} elendi: Backlog/To Do/Cancel)"
-            with _sync_lock:
-                _sync_state["log"].append(mesaj)
+            for proj in sources.get("jira_projects", []):
+                k = proj["key"]
+                with _sync_lock:
+                    _sync_state["log"].append(f"Jira [{k}] çekiliyor...")
+                count, elenen = _fetch_jira_project(k, cloud_id)
+                mesaj = f"✓ Jira [{k}]: {count} issue"
+                if elenen:
+                    mesaj += f" ({elenen} elendi: Backlog/To Do/Cancel)"
+                with _sync_lock:
+                    _sync_state["log"].append(mesaj)
+
+        # Servis Swagger'ları (BFF/OpenAPI) → Cloud ID GEREKTİRMEZ; kayıtlı her servisi tazeler.
+        _servisleri_sync_et(sources.get("services", []))
 
         last_sync = time.strftime("%d/%m/%Y %H:%M")
         sources["last_sync"] = last_sync
@@ -4015,12 +4085,22 @@ def reference_fetch_be():
         hedef = SERVIS_DIR / f"{name}.json"
         hedef.write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
         boyut = hedef.stat().st_size
+        # Kalıcılaştır → günlük oto-sync bu servisi her gün otomatik tazeler
+        _servis_kaydet(name, url, auth)
         logger.info(f"Servis spec alındı: {name} ← {kaynak} ({endpoint_sayisi} endpoint)")
         not_ = "" if kaynak == url else f"\n  (spec çözüldü: {kaynak})"
         return jsonify({"ok": True, "output":
-                        f"✓ {name}.json kaydedildi\n  {boyut:,} bytes | {endpoint_sayisi} endpoint{not_}"})
+                        f"✓ {name}.json kaydedildi\n  {boyut:,} bytes | {endpoint_sayisi} endpoint{not_}"
+                        "\n  Kayıtlı — her gün otomatik güncellenir."})
     except Exception as e:
         return jsonify({"ok": False, "output": f"Hata: {e}"})
+
+
+@app.route("/api/reference/services/<name>", methods=["DELETE"])
+def reference_service_sil(name):
+    """Kayıtlı servis Swagger'ını sil (sources.json'dan + services/<name>.json dosyasını)."""
+    _servis_sil((name or "").strip())
+    return jsonify({"ok": True})
 
 
 # ─── Bağlam Filtresi ──────────────────────────────────────────────────────────

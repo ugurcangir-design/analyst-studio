@@ -3526,6 +3526,8 @@ function temaDegistir() {
         <hr class="divider" style="margin:16px 0">
 
         <div class="field-label">BE Servisi Ekle / Güncelle (Swagger URL)</div>
+        <div class="ctx-field-sub" style="margin-bottom:8px">Swagger/OpenAPI (BFF) adresini girin (ör. <code>…/v3/api-docs</code> veya <code>…/swagger-ui</code>). Endpoint sözleşmesi teknik analizin <b>en yetkili kaynağıdır</b>. Eklenen servisler <b>her gün otomatik güncellenir</b> (agent açıldığında). İç ağ adresleri agent'ın çalıştığı makineden erişilebilir olmalıdır (VPN/auth gerekebilir).</div>
+        <div id="be-service-list"></div>
         <div style="margin-bottom:8px">
           <div class="ctx-field-label">Servis Adı</div>
           <input type="text" id="ref-be-name" placeholder="örn. payment-service, risk-api" autocomplete="off" class="ctx-input">
@@ -8914,9 +8916,31 @@ async function loadSources() {
           </div>`).join('')
       : '<div style="color:var(--text3);font-size:12px;padding:4px 0 6px">Henüz proje eklenmemiş</div>';
 
+    const svcList = document.getElementById('be-service-list');
+    if (svcList) {
+      const svcs = s.services || [];
+      svcList.innerHTML = svcs.length
+        ? svcs.map(v => `
+            <div class="source-item">
+              <div class="source-item-info">
+                <div class="source-item-key">${escHtml(v.name)}</div>
+                <div class="source-item-name">${escHtml(v.url)}${v.auth ? ' · 🔒 auth' : ''}</div>
+              </div>
+              <button class="ref-delete-btn" onclick="deleteBeService('${escHtml(v.name)}')">Sil</button>
+            </div>`).join('')
+        : '<div style="color:var(--text3);font-size:12px;padding:4px 0 6px">Henüz servis (Swagger) eklenmemiş</div>';
+    }
+
     const ls = document.getElementById('src-last-sync');
     if (ls) ls.textContent = s.last_sync ? `Son güncelleme: ${s.last_sync}` : '';
   } catch {}
+}
+
+async function deleteBeService(name) {
+  if (!confirm(`"${name}" servisi silinsin mi? (Swagger dosyası + kayıt kaldırılır)`)) return;
+  const r = await fetch('/api/reference/services/' + encodeURIComponent(name), { method:'DELETE' });
+  if (r.ok) { toast('Servis silindi', 'info'); loadSources(); loadRefDocs(); }
+  else toast('Silinemedi', 'error');
 }
 
 async function addConfluenceSpace() {
@@ -9071,8 +9095,9 @@ async function addBeService() {
     document.getElementById('ref-be-name').value = '';
     document.getElementById('ref-be-url').value  = '';
     document.getElementById('ref-be-auth').value = '';
-    toast(`${name} servisi eklendi`, 'success');
+    toast(`${name} servisi eklendi — her gün otomatik güncellenir`, 'success');
     loadRefDocs();
+    loadSources();
   }
 }
 
