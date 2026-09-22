@@ -99,3 +99,5 @@ output/.gozlem-durum.json
 /*-modal.yml
 /snapshot*.yml
 /*.snapshot.yml
+/expanded.yml
+/*.a11y.yml
