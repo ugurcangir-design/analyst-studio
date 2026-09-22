@@ -4592,6 +4592,7 @@ function jgScListeCiz() {
       <div class="jg-item-actions">
         <button onclick="jgFormatla('${escHtml(g.key)}')">Standart Formatla</button>
         <button onclick="jgAnaliz('${escHtml(g.key)}')">Teknik Analiz Et</button>
+        <button onclick="jgFeBeAyir('${escHtml(g.key)}')" title="Görev hem FE hem BE içeriyorsa: iki AYRI katman-özel analiz → BE bu task'a, FE yeni task'a (BE→FE Blocks)">FE+BE Ayrı</button>
       </div>
     </div>`;
   }).join('');
@@ -4930,6 +4931,7 @@ function _jgKartHtml(g, sinif) {
     <div class="jg-item-actions">
       <button onclick="jgFormatla('${escHtml(g.key)}')">Standart Formatla</button>
       <button onclick="jgAnaliz('${escHtml(g.key)}')">Teknik Analiz Et</button>
+      <button onclick="jgFeBeAyir('${escHtml(g.key)}')" title="Görev hem FE hem BE içeriyorsa: iki AYRI katman-özel analiz → BE bu task'a, FE yeni task'a (BE→FE Blocks)">FE+BE Ayrı</button>
     </div>
   </div>`;
 }
@@ -5060,6 +5062,11 @@ function _jgSurenChipGuncelle(gorunur, metin) {
 // Bir analiz sonucunu editör/sorular alanına döker + aktif yapar + switcher'ı günceller.
 function _jgSonucGoster(key) {
   if (_jgMesgul()) return;   // iş sürerken task içeriği GÖSTERİLMEZ (çift güvenlik)
+  // Geçiş öncesi mevcut editör içeriğini aktif entry'e KAYDET → FE/BE arası geçişte edit kaybolmaz
+  if (_jgAktifAnalizKey && _jgAnalizSeti[_jgAktifAnalizKey] && !_jgAnalizSeti[_jgAktifAnalizKey].hata) {
+    const _ed = document.getElementById('jg-preview-editor');
+    if (_ed && _ed.style.display !== 'none') _jgAnalizSeti[_jgAktifAnalizKey].markdown = _ed.value;
+  }
   const s = _jgAnalizSeti[key] || {};
   _jgAktifAnalizKey = key;
   _jgCurrent = { key: key, summary: s.summary || '' };
@@ -5089,7 +5096,8 @@ function _jgSwitcherRender() {
   sw.innerHTML = '<span class="jg-sw-lbl">Analizler:</span>' + keys.map(k => {
     const s = _jgAnalizSeti[k];
     const rol = s.katman && s.katman !== 'belirsiz' ? ' [' + s.katman.toUpperCase() + ']' : '';
-    return `<button class="${k === _jgAktifAnalizKey ? 'aktif' : ''}" onclick="_jgSonucGoster('${escHtml(k)}')">${escHtml(k)}${rol}${s.hata ? ' <span class="jg-sw-hata">⚠</span>' : ''}</button>`;
+    const disp = k.replace('::FE', '') + (s.feBeYeni ? ' (yeni)' : '');   // FE+BE ayrımında okunur etiket
+    return `<button class="${k === _jgAktifAnalizKey ? 'aktif' : ''}" onclick="_jgSonucGoster('${escHtml(k)}')">${escHtml(disp)}${rol}${s.hata ? ' <span class="jg-sw-hata">⚠</span>' : ''}</button>`;
   }).join('');
   if (_jgMesgul()) _jgSwitcherKilit(true);   // iş sürerken yeniden çizilirse kilitli kalsın
 }
@@ -5126,7 +5134,15 @@ async function _jgPollDurum() {
   // Gelen sonuçları sete MERGE et (tek-task yeniden üretiminde diğer analizler korunur)
   for (const k of (d.keyler || [])) {
     const rs = (d.sonuclar || {})[k];
-    if (rs) _jgAnalizSeti[k] = { markdown: rs.markdown || '', acik_sorular: rs.acik_sorular || '', summary: rs.summary || '', katman: rs.katman || (d.katmanlar || {})[k] || '', hata: rs.hata };
+    if (!rs) continue;
+    if (rs.fe_be) {
+      // FE+BE ayrı analiz → İKİ entry: BE (orijinal task'a yazılır) + FE (yeni task açılır)
+      const fb = rs.fe_be;
+      _jgAnalizSeti[k] = { markdown: (fb.be || {}).markdown || '', acik_sorular: (fb.be || {}).acik_sorular || '', summary: rs.summary || '', katman: 'be', feBeKaynak: k, hata: rs.hata };
+      _jgAnalizSeti[k + '::FE'] = { markdown: (fb.fe || {}).markdown || '', acik_sorular: (fb.fe || {}).acik_sorular || '', summary: rs.summary || '', katman: 'fe', feBeKaynak: k, feBeYeni: true };
+    } else {
+      _jgAnalizSeti[k] = { markdown: rs.markdown || '', acik_sorular: rs.acik_sorular || '', summary: rs.summary || '', katman: rs.katman || (d.katmanlar || {})[k] || '', hata: rs.hata };
+    }
   }
   if (d.durum === 'calisiyor') {
     const cok = (d.toplam || 1) > 1;
@@ -5324,6 +5340,8 @@ document.addEventListener('keydown', e => {
 async function jgJiraGuncelle() {
   if (!_jgCurrent) return;
   if (_jgMesgul()) { toast('İşlem sürüyor — bitince Jira güncellenebilir', 'info'); return; }   // op bitmeden Jira'ya YAZMA
+  // FE+BE ayrı analiz akışı → tek task güncelleme yerine iki-task (BE orijinale, FE yeni) yolu
+  if ((_jgAnalizSeti[_jgAktifAnalizKey] || {}).feBeKaynak) return jgFeBeOnayla();
   const markdown = document.getElementById('jg-preview-editor').value.trim();
   if (!markdown) { _jgMsg('jg-preview-msg', 'İçerik boş.', 'err'); return; }
   if (!confirm(`${_jgCurrent.key} görevinin Jira açıklaması ÜZERİNE YAZILACAK. Devam edilsin mi?`)) return;
@@ -5343,6 +5361,40 @@ async function jgJiraGuncelle() {
     _jgMsg('jg-preview-msg', 'Bağlantı hatası: ' + e, 'err');
     btn.disabled = false;
   }
+}
+
+// FE+BE ayrı analiz onayı: BE → ORİJİNAL task'a yazılır (başlık "BE - "), FE → YENİ Task açılır
+// (başlık "FE - "), BE→FE Blocks bağı kurulur. GERİ DÖNDÜRÜLEMEZ.
+async function jgFeBeOnayla() {
+  if (_jgMesgul()) { toast('İşlem sürüyor', 'info'); return; }
+  // Aktif editör içeriğini (BE ya da FE) sete kaydet — analistin düzenlemesi kaybolmasın
+  const ed = document.getElementById('jg-preview-editor');
+  if (ed && _jgAnalizSeti[_jgAktifAnalizKey]) _jgAnalizSeti[_jgAktifAnalizKey].markdown = ed.value;
+  const kaynak = (_jgAnalizSeti[_jgAktifAnalizKey] || {}).feBeKaynak;
+  const be = _jgAnalizSeti[kaynak] || {}, fe = _jgAnalizSeti[kaynak + '::FE'] || {};
+  const be_md = (be.markdown || '').trim(), fe_md = (fe.markdown || '').trim();
+  if (!be_md || !fe_md) { _jgMsg('jg-preview-msg', 'BE ve FE analizleri dolu olmalı.', 'err'); return; }
+  if (!confirm(`${kaynak}: BE analizi bu task'a yazılacak (başlık "BE - …"), FE analizi YENİ bir Task olarak açılacak (başlık "FE - …") ve BE→FE Blocks bağı kurulacak. Devam edilsin mi?`)) return;
+  const btn = document.getElementById('jg-approve-btn'); btn.disabled = true;
+  _jgMsg('jg-preview-msg', 'İki task işleniyor (BE güncelle + FE aç)…');
+  try {
+    const r = await fetch('/api/jira/gorev/fe-be-olustur', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: kaynak, be_markdown: be_md, fe_markdown: fe_md, summary: be.summary || '' })
+    });
+    const d = await r.json();
+    if (!d.ok) { _jgMsg('jg-preview-msg', d.error || 'Hata', 'err'); btn.disabled = false; return; }
+    const linkTxt = d.link ? ' · BE→FE Blocks ✓' : (d.link_uyari ? ' · ⚠ ' + d.link_uyari : '');
+    _jgMsg('jg-preview-msg', `✓ BE: ${d.be_key} güncellendi · FE: ${d.fe_key} açıldı${linkTxt}`, 'ok');
+    toast(`FE/BE ayrıldı: ${d.be_key} (BE) + ${d.fe_key} (FE)`, 'success');
+  } catch (e) { _jgMsg('jg-preview-msg', 'Bağlantı hatası: ' + e, 'err'); btn.disabled = false; }
+}
+
+// Tek görevi FE+BE olarak İKİ AYRI katman-özel analize böl (arka plan iş).
+function jgFeBeAyir(key) {
+  if (_jgMesgul()) { toast('İşlem sürüyor', 'info'); return; }
+  const g = _jgGorevler[key] || {};
+  _jgIsBaslat([{ key: key, mode: 'fe-be-ayir', gorev: g }], 'FE + BE ayrı analiz üretiliyor · ' + key, key, true);
 }
 
 // ─── UAT Mutabakat ──────────────────────────────────────────────────────

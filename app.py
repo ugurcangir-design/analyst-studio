@@ -4749,7 +4749,8 @@ def _gorev_is_calistir(job_id: str) -> None:
         # Her adım kendi pool thread'inde çalışır. Gerçek 'Durdur' (madde 4) için thread ident'i
         # job'a yaz ki Durdur endpoint'i o an süren claude CLI'ı killpg edebilsin (paralelde çoklu).
         from skills.jira_gorevleri import (gorev_analiz_et, gorev_analiz_duzelt,
-                                           gorev_standart_formatla, gorev_getir)
+                                           gorev_standart_formatla, gorev_getir,
+                                           gorev_fe_be_analiz)
         from skills.base import DurdurulduError as _DurdurulduError
         with _gorev_is_lock:
             if job.get("iptal"):
@@ -4771,6 +4772,11 @@ def _gorev_is_calistir(job_id: str) -> None:
             elif mode == "duzelt":
                 md = gorev_analiz_duzelt(gorev, adim.get("markdown", ""), adim.get("talimat", ""))
                 sonuc = {"markdown": md, "acik_sorular": adim.get("acik_sorular", "")}
+            elif mode == "fe-be-ayir":
+                # Tek görevi FE ve BE olarak İKİ AYRI katman-özel analize böl (Option A).
+                r = gorev_fe_be_analiz(gorev, cevaplar=adim.get("cevaplar", ""),
+                                       onceki_sorular=adim.get("onceki_sorular", ""))
+                sonuc = {"fe_be": r}
             else:
                 iliskili = []
                 for ik in adim.get("iliskili_keys", []):
@@ -5032,6 +5038,36 @@ def jira_gorev_guncelle():
         _telemetri_olay("gorev_guncelle", "error", int((time.time() - _bas) * 1000),
                         baglam={"gorev": key.upper()})
         logger.error(f"Görev Jira güncelleme hatası: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/jira/gorev/fe-be-olustur", methods=["POST"])
+def jira_gorev_fe_be_olustur():
+    """FE+BE bölünmüş analizi Jira'ya yazar (Option A): BE → orijinal task ('BE - ' önekli),
+    FE → yeni Task ('FE - '), BE→FE Blocks bağı. GERİ DÖNDÜRÜLEMEZ — yalnız analist onayıyla.
+    Body: {key, be_markdown, fe_markdown, summary?}."""
+    data = request.get_json(silent=True) or {}
+    key = (data.get("key") or "").strip()
+    be_md = data.get("be_markdown") or ""
+    fe_md = data.get("fe_markdown") or ""
+    summary = (data.get("summary") or "").strip()
+    if not key or not be_md.strip() or not fe_md.strip():
+        return jsonify({"ok": False, "error": "key, be_markdown ve fe_markdown gerekli"}), 400
+    hata = _jira_baglanti_eksik()
+    if hata:
+        return jsonify({"ok": False, "error": hata}), 400
+    _bas = time.time()
+    try:
+        from skills.jira_gorevleri import gorev_fe_be_task_olustur
+        r = gorev_fe_be_task_olustur(key, be_md, fe_md, summary=summary)
+        _telemetri_olay("gorev_guncelle", "ok", int((time.time() - _bas) * 1000),
+                        baglam={"gorev": key.upper(), "islem": "fe-be-ayir"},
+                        jira={"toplam": 1, "keyler": [r["be_key"], r["fe_key"]], "islem": "fe-be açıldı"})
+        return jsonify({"ok": True, **r})
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"FE/BE ayrı task oluşturma hatası: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
 
 

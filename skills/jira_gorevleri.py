@@ -885,6 +885,78 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
     return {"markdown": ozet + teknik, "acik_sorular": acik}
 
 
+def gorev_fe_be_analiz(gorev: dict, cevaplar: str = "", onceki_sorular: str = "",
+                       ekran_baglami: bool = True, rag_ctx: dict | None = None,
+                       canli_baglam_override: str | None = None) -> dict:
+    """Tek bir görevi HEM BE HEM FE olarak İKİ AYRI katman-özel analize böler (görev hem
+    sunucu hem istemci işi içeriyorsa). Önce **BE** analizi (veri modeli/endpoint/iş kuralı +
+    'Bağımlılık ve Arayüz' başlığında BE'nin SUNDUĞU sözleşme), sonra **FE** analizi — BE
+    sözleşmesini KARŞI-KATMAN bağlamı olarak alır, BE'nin iç implementasyonunu TEKRARLAMAZ,
+    yalnız tükettiği arayüzü yazar. İki içerik ayrışır → 'aynı analiz iki taskta' sorunu çözülür.
+    Dönen: {"be": {markdown, acik_sorular}, "fe": {markdown, acik_sorular}}."""
+    be = gorev_analiz_et(gorev, cevaplar=cevaplar, katman="be", onceki_sorular=onceki_sorular,
+                         ekran_baglami=ekran_baglami, rag_ctx=rag_ctx,
+                         canli_baglam_override=canli_baglam_override)
+    # FE, BE'nin ürettiği FE↔BE sözleşmesini bağlam alsın (aynı görevin karşı katmanı).
+    be_baglam = {"key": gorev.get("key", ""),
+                 "summary": (gorev.get("summary", "") + " — BE tarafı (sözleşme)"),
+                 "description": be.get("markdown", ""), "katman": "be"}
+    fe = gorev_analiz_et(gorev, cevaplar=cevaplar, katman="fe", iliskili=[be_baglam],
+                         onceki_sorular=onceki_sorular, ekran_baglami=ekran_baglami,
+                         rag_ctx=rag_ctx, canli_baglam_override=canli_baglam_override)
+    return {"be": {"markdown": be.get("markdown", ""), "acik_sorular": be.get("acik_sorular", "")},
+            "fe": {"markdown": fe.get("markdown", ""), "acik_sorular": fe.get("acik_sorular", "")}}
+
+
+def gorev_fe_be_task_olustur(key: str, be_markdown: str, fe_markdown: str,
+                             summary: str = "") -> dict:
+    """FE+BE bölünmüş analizi Jira'ya yazar (Option A — iki bağlı task):
+    - **BE** analizi ORİJİNAL task'a yazılır, başlık 'BE - <özet>' önekli.
+    - **FE** analizi YENİ bir Task olarak açılır, başlık 'FE - <özet>'.
+    - **BE → FE Blocks** bağı kurulur (BE bloklar, FE bloklanan).
+    Her task YALNIZ kendi katman analizini içerir (tekrar yok; ortak olan arayüz sözleşmesi).
+    Dönen: {be_key, fe_key, link, link_uyari?}."""
+    from .jira_tasks import _issue_olustur, _proje_bilgi, _katman_prefix
+    from .jira_fe_be import _blocks_bagla, _blocks_link_tipi
+    key = (key or "").strip().upper()
+    if not _ID_DESENI.match(key):
+        raise ValueError(f"Geçersiz Jira anahtarı: '{key}'")
+    orig = gorev_getir(key) or {}
+    ozet = (summary or orig.get("summary", "")).strip() or key
+    cloud_id = _cloud_id()
+
+    # 1) BE → orijinal task (başlık 'BE - ' önekli, idempotent)
+    gorev_jiraya_yaz(key, be_markdown, summary=_katman_prefix("be", ozet))
+
+    # 2) FE → yeni Task (aynı temizlik: TL;DR + canlı gözlem + [K:] etiketleri çıkarılır)
+    fe_temiz = kanit_etiketlerini_temizle(
+        canli_gozlem_kapsamini_cikar(yonetici_ozetini_cikar(fe_markdown or "")))
+    adf = markdown_to_adf(fe_temiz)
+    if not adf:
+        raise ValueError("FE içeriği boş; yeni task açılamadı.")
+    proje = key.split("-")[0]
+    pbilgi = _proje_bilgi(proje, cloud_id)
+    task_id = pbilgi.get("task_id")
+    if not task_id:
+        raise ValueError(f"'{proje}' projesinde Task tipi bulunamadı.")
+    fe_key = _issue_olustur(_katman_prefix("fe", ozet),
+                            {"type": "doc", "version": 1, "content": adf},
+                            task_id, proje, cloud_id)
+
+    # 3) BE (orijinal) → FE Blocks bağı (link tipi runtime doğrulanır; yoksa uyarıyla atlanır)
+    link_ok, link_uyari = False, ""
+    tip = _blocks_link_tipi(cloud_id)
+    if tip:
+        try:
+            _blocks_bagla(key, fe_key, tip, cloud_id)
+            link_ok = True
+        except Exception as e:
+            link_uyari = f"Blocks bağı kurulamadı: {str(e)[:120]}"
+    else:
+        link_uyari = "Projede 'Blocks' link tipi yok — bağ atlandı."
+    return {"be_key": key, "fe_key": fe_key, "link": link_ok, "link_uyari": link_uyari}
+
+
 _GOREV_DUZELT_SISTEM = (
     "Kıdemli teknik analistsin. Sana MEVCUT bir Jira görev teknik analizi + tek bir DÜZELTME TALİMATI "
     "verilecek. Talimatın istediği kısmı düzelt; DOKUNULMAYAN bölümleri AYNEN koru — yeniden yazma, "
