@@ -862,6 +862,9 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
     )
     yanit = _api_cagri(sistem, [{"role": "user", "content": icerik}],
                        max_tokens=MAX_TOKENS_COMBINED, thinking=extended_thinking_acik(),
+                       # CANLI GÖZLEM = MEVCUT DURUM → cache OKUMA (yeniden analizde UAT'ı taze gözle,
+                       # bayat/eski-ortam sonucu dönmesin). Gözlem yoksa cache normal çalışır.
+                       onbellek=(not canli_baglam),
                        canli_uygulama_kapsami=("gorev" if canli_baglam else None))
     teknik = _meta_notlari_temizle(_xml_ayir(_metin_sikistir(yanit), "teknik_analiz"))
 

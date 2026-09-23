@@ -95,7 +95,10 @@ def _teknik_uret_tam(sistem: str, mesajlar: list, max_deneme: int = 2,
         # 1. deneme önbelleği kullanabilir; kesik gelirse 2+ denemede önbelleği
         # BYPASS et (yoksa cache aynı kesik yanıtı döndürür → retry işlevsiz kalır).
         ham = _api_cagri(sistem, mesajlar, max_tokens=MAX_TOKENS_COMBINED,
-                         thinking=extended_thinking_acik(), onbellek=(deneme == 1),
+                         thinking=extended_thinking_acik(),
+                         # Canlı gözlem varken cache OKUMA (mevcut durum; yeniden analizde taze gözle);
+                         # gözlem yoksa 1. deneme cache kullanır, kesikse 2+ bypass (retry işlevsiz kalmasın).
+                         onbellek=(deneme == 1 and not canli_uygulama_kapsami),
                          canli_uygulama_kapsami=canli_uygulama_kapsami)
         if "</teknik_analiz>" in ham:
             if deneme > 1:

@@ -69,6 +69,8 @@ def surec_analizi_yap() -> Path:
     sistem = _surec_prompt_olustur()
     mesajlar = [{"role": "user", "content": icerik_parcalari}]
     yanit = _api_cagri(sistem, mesajlar, max_tokens=MAX_TOKENS_UZUN, thinking=extended_thinking_acik(),
+                       # Canlı gözlem = mevcut durum → gözlem varken cache OKUMA (yeniden çalıştırmada taze gözle).
+                       onbellek=(not canli_baglam),
                        canli_uygulama_kapsami=("surec" if canli_baglam else None))
     # AI'ın süreç anlatımı ara sözlerini ("Şimdi raporu yazıyorum." vb.) çıkar.
     yanit = ai_ara_sozleri_temizle(yanit)
