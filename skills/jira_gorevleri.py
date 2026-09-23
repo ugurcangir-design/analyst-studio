@@ -960,6 +960,120 @@ def gorev_fe_be_task_olustur(key: str, be_markdown: str, fe_markdown: str,
     return {"be_key": key, "fe_key": fe_key, "link": link_ok, "link_uyari": link_uyari}
 
 
+def _analiz_adf(markdown: str) -> dict:
+    """Analiz markdown'ını Jira gövdesine uygun ADF'ye çevirir (aynı temizlik:
+    TL;DR + canlı gözlem kapsamı + [K:] kanıt etiketleri çıkarılır)."""
+    temiz = kanit_etiketlerini_temizle(
+        canli_gozlem_kapsamini_cikar(yonetici_ozetini_cikar(markdown or "")))
+    adf = markdown_to_adf(temiz)
+    if not adf:
+        raise ValueError("İçerik boş; task açılamadı.")
+    return {"type": "doc", "version": 1, "content": adf}
+
+
+def issue_ozet(key: str) -> dict:
+    """Bir Jira issue'nun özet bilgisini döndürür (üst öğe doğrulaması için):
+    {key, summary, tip, proje}. Bulunamazsa RuntimeError/ValueError."""
+    from .atlassian import atlassian_get
+    key = (key or "").strip().upper()
+    if not _ID_DESENI.match(key):
+        raise ValueError(f"Geçersiz Jira anahtarı: '{key}'")
+    cloud_id = _cloud_id()
+    data = atlassian_get(f"/rest/api/3/issue/{key}?fields=summary,issuetype,project", cloud_id)
+    f = data.get("fields", {}) or {}
+    return {
+        "key": data.get("key", key),
+        "summary": f.get("summary", ""),
+        "tip": ((f.get("issuetype") or {}).get("name", "")),
+        "proje": ((f.get("project") or {}).get("key", "")),
+    }
+
+
+def gorev_yeni_task_olustur(proje: str, mode: str = "tek", markdown: str = "",
+                            be_markdown: str = "", fe_markdown: str = "",
+                            baslik: str = "", ust_key: str = "",
+                            kaynak_key: str = "") -> dict:
+    """Analiz OK sonrası YENİ Task(lar) açar (hep **Task** tipinde; analist sonra
+    tipini değiştirebilir) ve girilen Epic/Story/Task'a **ilişkili** (Relates) bağlar.
+
+    - mode='tek'   → tek Task; gövde=markdown.
+    - mode='fe-be' → İKİ yeni Task (BE + FE, başlıkları 'BE - '/'FE - ' önekli);
+                     ikisi birbirine (Blocks varsa Blocks, yoksa Relates) bağlanır.
+    Her açılan task, verilmişse üst öğeye (ust_key) ve kaynak analiz task'ına
+    (kaynak_key) Relates ile bağlanır. Üst öğe hiyerarşi 'parent'ı DEĞİL — Task,
+    Story'nin child'ı olamaz; 'ilişkili' istendiği için issue-link kullanılır.
+
+    Dönen: {tasklar:[{key,katman,summary}], ust_key, febe_link, uyarilar:[...]}.
+    """
+    from .jira_tasks import _issue_olustur, _proje_bilgi, _katman_prefix
+    from .jira_fe_be import _blocks_bagla, _blocks_link_tipi
+    from .jira_kopru import jira_issue_link
+
+    proje = (proje or "").strip().upper()
+    if not proje:
+        raise ValueError("Proje seçilmedi.")
+    cloud_id = _cloud_id()
+    pbilgi = _proje_bilgi(proje, cloud_id)
+    task_id = pbilgi.get("task_id")
+    if not task_id:
+        raise ValueError(f"'{proje}' projesinde 'Task' tipi bulunamadı.")
+
+    ust_key = (ust_key or "").strip().upper()
+    kaynak_key = (kaynak_key or "").strip().upper()
+    if ust_key and not _ID_DESENI.match(ust_key):
+        raise ValueError(f"Geçersiz üst öğe anahtarı: '{ust_key}'")
+    ozet = (baslik or "").strip() or "Yeni görev"
+    uyarilar: list[str] = []
+    tasklar: list[dict] = []
+
+    def _baglan(yeni_key: str) -> None:
+        # Üst öğe (epic/story/task) ilişkisi — Relates (yeni task ilgili öğeye bağlı)
+        if ust_key and ust_key != yeni_key:
+            try:
+                jira_issue_link(yeni_key, ust_key, tip="Relates")
+            except Exception as e:
+                uyarilar.append(f"{yeni_key} → {ust_key} bağı kurulamadı: {str(e)[:100]}")
+        # Kaynak analiz task'ı ilişkisi (izlenebilirlik) — best-effort
+        if kaynak_key and kaynak_key not in (yeni_key, ust_key):
+            try:
+                jira_issue_link(yeni_key, kaynak_key, tip="Relates")
+            except Exception:
+                pass
+
+    if mode == "fe-be":
+        if not (be_markdown or "").strip() or not (fe_markdown or "").strip():
+            raise ValueError("BE ve FE analizleri dolu olmalı.")
+        # BE ÖNCE (blocker), sonra FE — deterministik sıra
+        be_key = _issue_olustur(_katman_prefix("be", ozet), _analiz_adf(be_markdown),
+                                task_id, proje, cloud_id)
+        tasklar.append({"key": be_key, "katman": "BE", "summary": _katman_prefix("be", ozet)})
+        fe_key = _issue_olustur(_katman_prefix("fe", ozet), _analiz_adf(fe_markdown),
+                                task_id, proje, cloud_id)
+        tasklar.append({"key": fe_key, "katman": "FE", "summary": _katman_prefix("fe", ozet)})
+        # BE ↔ FE bağı — 'Blocks' varsa BE bloklar FE, yoksa Relates (ASLA atlanmaz)
+        febe_link = False
+        tip = _blocks_link_tipi(cloud_id)
+        try:
+            if tip:
+                _blocks_bagla(be_key, fe_key, tip, cloud_id)
+            else:
+                jira_issue_link(be_key, fe_key, tip="Relates")
+            febe_link = True
+        except Exception as e:
+            uyarilar.append(f"BE↔FE bağı kurulamadı: {str(e)[:100]}")
+        _baglan(be_key)
+        _baglan(fe_key)
+        return {"tasklar": tasklar, "ust_key": ust_key, "febe_link": febe_link, "uyarilar": uyarilar}
+
+    # mode == "tek"
+    if not (markdown or "").strip():
+        raise ValueError("Analiz içeriği boş.")
+    yeni_key = _issue_olustur(ozet, _analiz_adf(markdown), task_id, proje, cloud_id)
+    tasklar.append({"key": yeni_key, "katman": "", "summary": ozet})
+    _baglan(yeni_key)
+    return {"tasklar": tasklar, "ust_key": ust_key, "febe_link": None, "uyarilar": uyarilar}
+
+
 _GOREV_DUZELT_SISTEM = (
     "Kıdemli teknik analistsin. Sana MEVCUT bir Jira görev teknik analizi + tek bir DÜZELTME TALİMATI "
     "verilecek. Talimatın istediği kısmı düzelt; DOKUNULMAYAN bölümleri AYNEN koru — yeniden yazma, "

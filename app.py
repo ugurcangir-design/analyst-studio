@@ -5071,6 +5071,92 @@ def jira_gorev_fe_be_olustur():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@app.route("/api/jira/projeler", methods=["GET"])
+def jira_projeler():
+    """Yeni Task Aç panelindeki board/proje dropdown'ı için görünür projeleri listeler.
+    Döner: {ok, projeler:[{key,name,id}], varsayilan}."""
+    env = _env_oku()
+    cloud_id = env.get("JIRA_CLOUD_ID", "")
+    if not cloud_id or not env.get("JIRA_ACCESS_TOKEN"):
+        return jsonify({"ok": False, "error": "Jira bağlantısı yok. Ayarlar → Jira ile bağlanın."}), 400
+    try:
+        from skills.atlassian import atlassian_get
+        projeler, start = [], 0
+        while True:
+            data = atlassian_get(
+                f"/rest/api/3/project/search?maxResults=50&startAt={start}&orderBy=name", cloud_id)
+            values = data.get("values", []) or []
+            for p in values:
+                projeler.append({"key": p.get("key", ""), "name": p.get("name", ""), "id": p.get("id", "")})
+            if data.get("isLast", True) or not values or start > 500:
+                break
+            start += len(values)
+        return jsonify({"ok": True, "projeler": projeler, "varsayilan": env.get("JIRA_PROJECT_KEY", "")})
+    except Exception as e:
+        logger.error(f"Jira proje listesi hatası: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/jira/issue-ozet", methods=["GET"])
+def jira_issue_ozet():
+    """Girilen üst öğe (Epic/Story/Task) key'ini doğrular; tip+başlık döner.
+    Query: ?key=MBSTRADE-123. Döner: {ok, key, summary, tip, proje}."""
+    key = (request.args.get("key") or "").strip()
+    if not key:
+        return jsonify({"ok": False, "error": "key gerekli"}), 400
+    hata = _jira_baglanti_eksik()
+    if hata:
+        return jsonify({"ok": False, "error": hata}), 400
+    try:
+        from skills.jira_gorevleri import issue_ozet
+        return jsonify({"ok": True, **issue_ozet(key)})
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception:
+        return jsonify({"ok": False, "error": f"'{key.upper()}' bulunamadı ya da erişilemiyor."}), 404
+
+
+@app.route("/api/jira/gorev/yeni-task", methods=["POST"])
+def jira_gorev_yeni_task():
+    """Analiz OK sonrası YENİ Task açar (Task tipinde), verilen Epic/Story/Task'a Relates bağlar.
+    mode='fe-be' ise BE+FE İKİ yeni task açıp birbirine (Blocks/Relates) + üst öğeye bağlar.
+    GERİ DÖNDÜRÜLEMEZ — yalnız analist onayıyla. Body:
+    {proje, mode, markdown?|be_markdown+fe_markdown, baslik?, ust_key?, kaynak_key?}."""
+    data = request.get_json(silent=True) or {}
+    proje = (data.get("proje") or "").strip()
+    mode = (data.get("mode") or "tek").strip()
+    if not proje:
+        return jsonify({"ok": False, "error": "Proje seçin."}), 400
+    if mode == "fe-be":
+        if not (data.get("be_markdown") or "").strip() or not (data.get("fe_markdown") or "").strip():
+            return jsonify({"ok": False, "error": "BE ve FE analizleri gerekli."}), 400
+    elif not (data.get("markdown") or "").strip():
+        return jsonify({"ok": False, "error": "Analiz içeriği boş."}), 400
+    hata = _jira_baglanti_eksik()
+    if hata:
+        return jsonify({"ok": False, "error": hata}), 400
+    _bas = time.time()
+    try:
+        from skills.jira_gorevleri import gorev_yeni_task_olustur
+        r = gorev_yeni_task_olustur(
+            proje=proje, mode=mode,
+            markdown=data.get("markdown") or "",
+            be_markdown=data.get("be_markdown") or "", fe_markdown=data.get("fe_markdown") or "",
+            baslik=(data.get("baslik") or "").strip(),
+            ust_key=(data.get("ust_key") or "").strip(),
+            kaynak_key=(data.get("kaynak_key") or "").strip())
+        keyler = [t["key"] for t in r.get("tasklar", [])]
+        _telemetri_olay("gorev_guncelle", "ok", int((time.time() - _bas) * 1000),
+                        baglam={"gorev": (data.get("kaynak_key") or proje).upper(), "islem": "yeni-task"},
+                        jira={"toplam": len(keyler), "keyler": keyler, "islem": "yeni task açıldı"})
+        return jsonify({"ok": True, **r})
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"Yeni task oluşturma hatası: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 # ─── Confluence Yayımla ───────────────────────────────────────────────────────
 
 @app.route("/api/confluence/publish", methods=["POST"])

@@ -63,6 +63,15 @@ POST /api/jira/gorev/is/durdur     {job} → kalan adımlar çalışmaz + o an s
 POST /api/jira/gorev/duzelt        İteratif düzelt (önizleme, YAZMAZ): {gorev, markdown, talimat} → yalnız ilgili kısmı
                                    düzeltilmiş tam analiz (HTML prototip 'sohbetle düzelt' deseninin görev karşılığı)
 POST /api/jira/gorev/guncelle      Onaydan sonra görev description'ını Jira'da güncelle (markdown→ADF)
+POST /api/jira/gorev/fe-be-olustur FE+BE ayrı analizi yazar (Option A): BE→ORİJİNAL task ('BE - '), FE→YENİ Task ('FE - '),
+                                   BE→FE Blocks bağı. {key, be_markdown, fe_markdown, summary?}
+GET  /api/jira/projeler            Yeni Task Aç dropdown'ı için görünür projeler: {ok, projeler:[{key,name,id}], varsayilan}
+GET  /api/jira/issue-ozet          ?key=… → üst öğe (Epic/Story/Task) doğrulama: {ok, key, summary, tip, proje} (yoksa 404)
+POST /api/jira/gorev/yeni-task     Analiz OK → YENİ Task açar (hep Task tipi; analist sonra değiştirir), verilen Epic/Story/Task'a
+                                   İLİŞKİLİ (Relates). mode='tek' → tek task (markdown); mode='fe-be' → İKİ yeni task (be_markdown+
+                                   fe_markdown; BE+FE başlıkları 'BE - '/'FE - ', ikisi birbirine Blocks/Relates ile bağlı). Body:
+                                   {proje, mode, markdown?|be_markdown+fe_markdown, baslik?, ust_key?, kaynak_key?}. Kaynak task'ın
+                                   ÜZERİNE YAZMAZ (fe-be-olustur'dan farkı — orada BE orijinale yazılır). GERİ DÖNDÜRÜLEMEZ.
 ```
 UI (Task Analizi, 0 token / tamamen frontend): "Tüm Görevler" ana başlığı + Jira
 statü filtresi (çoklu seçim chip'ler); "Analist Notu" alanı (kalıcı, gorev_analist_notu).

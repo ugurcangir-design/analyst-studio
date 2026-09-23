@@ -1959,6 +1959,23 @@ html[data-theme="light"] .suspend-overlay { background: rgba(245,247,250,.92); }
 /* Görev paneli GÖMÜLÜ mod (pop-up değil): Task Analizi ekranı içinde kart olarak akar */
 #jg-preview-card.jg-inline { position: static; inset: auto; background: transparent; padding: 0; z-index: auto; }
 #jg-preview-card.jg-inline .jg-modal-icerik { width: 100%; max-width: none; max-height: none; box-shadow: none; margin: 0 0 14px; }
+/* Yeni Task Aç paneli (analiz OK → board/proje + üst öğe seçip ilişkili yeni Task açar) */
+.jg-yenitask { margin: 4px 22px 0; padding: 14px 16px; border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 10px; }
+.jg-yt-head { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text); margin-bottom: 12px; }
+.jg-yt-head .ico { width: 15px; height: 15px; color: var(--accent); }
+.jg-yt-mode { margin-left: auto; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--accent); background: var(--surface2); border: 1px solid var(--border-strong); padding: 3px 9px; border-radius: 999px; }
+.jg-yt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.jg-yt-field { display: flex; flex-direction: column; gap: 5px; }
+.jg-yt-field > span:first-child { font-size: 12px; color: var(--text2); line-height: 1.4; }
+.jg-yt-wide { grid-column: 1 / -1; }
+.jg-yt-ust-row { display: flex; gap: 8px; align-items: center; }
+.jg-yt-ust-row .setting-input { flex: 1; }
+.jg-yt-ust-bilgi { font-size: 12px; min-height: 16px; color: var(--text2); }
+.jg-yt-ust-bilgi.ok { color: var(--green); }
+.jg-yt-ust-bilgi.err { color: var(--run); }
+.jg-yt-not { font-size: 12px; color: var(--text2); line-height: 1.55; margin: 12px 0 0; }
+.jg-yt-akt { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+@media (max-width: 640px) { .jg-yt-grid { grid-template-columns: 1fr; } .jg-yt-ust-row { flex-direction: column; align-items: stretch; } }
 /* Arka planda süren analiz çipi (panel kapalıyken) */
 .jg-suren-chip { display: none; align-items: center; gap: 10px; margin: 0 0 12px; padding: 9px 12px; border: 1px solid var(--run); background: rgba(239,68,68,.08); border-radius: 9px; font-size: 12.5px; color: var(--text2); }
 .jg-suren-chip.acik { display: flex; }
@@ -2970,6 +2987,39 @@ function temaDegistir() {
             </div>
           </div>
         </div>
+        <!-- Yeni Task Aç — analiz OK ise seçilen proje/board'a, girilen Epic/Story/Task'a
+             İLİŞKİLİ (Relates) yeni Task açar. FE+BE analizinde İKİ yeni task (birbirine de bağlı). -->
+        <div class="jg-yenitask" id="jg-yenitask-panel" style="display:none">
+          <div class="jg-yt-head">
+            <svg class="ico"><use href="#i-plus"/></svg>
+            <strong>Yeni Task Aç</strong>
+            <span class="jg-yt-mode" id="jg-yt-mode">Tek Task</span>
+          </div>
+          <div class="jg-yt-grid">
+            <label class="jg-yt-field">
+              <span>Proje / Board</span>
+              <select class="setting-input" id="jg-yt-proje"><option value="">Yükleniyor…</option></select>
+            </label>
+            <label class="jg-yt-field">
+              <span>Üst öğe — Epic / Story / Task key (opsiyonel)</span>
+              <span class="jg-yt-ust-row">
+                <input type="text" class="setting-input" id="jg-yt-ust" placeholder="örn. MBSTRADE-1133" autocomplete="off" oninput="_jgYtUstBilgiTemizle()" onkeydown="if(event.key==='Enter'){event.preventDefault();jgYtUstDogrula();}">
+                <button class="btn btn-outline btn-sm" type="button" onclick="jgYtUstDogrula()">Doğrula</button>
+              </span>
+              <span class="jg-yt-ust-bilgi" id="jg-yt-ust-bilgi"></span>
+            </label>
+            <label class="jg-yt-field jg-yt-wide">
+              <span>Başlık</span>
+              <input type="text" class="setting-input" id="jg-yt-baslik" placeholder="Yeni task başlığı" autocomplete="off">
+            </label>
+          </div>
+          <div class="jg-yt-not" id="jg-yt-not">Açılan task <b>Task</b> tipindedir (tipini sonra değiştirebilirsiniz). Üst öğe girilirse yeni task o Epic/Story/Task'a <b>Relates</b> ile bağlanır.</div>
+          <div class="jg-yt-akt">
+            <button class="btn btn-outline btn-sm" type="button" onclick="jgYeniTaskKapat()">Vazgeç</button>
+            <button class="btn btn-primary btn-sm" id="jg-yt-btn" onclick="jgYeniTaskAc()"><svg class="ico"><use href="#i-plus"/></svg> Task Aç</button>
+          </div>
+          <div class="jg-msg" id="jg-yt-msg" style="margin-top:8px"></div>
+        </div>
         <div class="jg-modal-aksiyon">
           <!-- İteratif düzelt sohbeti (ilgili kısmı düzelt; tam yeniden yazma değil) -->
           <div class="jg-duzelt-row" id="jg-duzelt-row" style="display:none">
@@ -2978,6 +3028,9 @@ function temaDegistir() {
           </div>
           <span class="jg-warn">⚠ Onayla'ya basınca Jira görevinin açıklaması ÜZERİNE YAZILIR (geri alınamaz). Açık Sorular Jira'ya YAZILMAZ.</span>
           <button class="btn btn-outline btn-sm" onclick="jgPreviewKapat()">İptal</button>
+          <button class="btn btn-outline" id="jg-yenitask-btn" onclick="jgYeniTaskPanelAc()" title="Analiz OK ise: seçtiğiniz board/proje'ye, girdiğiniz Epic/Story/Task'a İLİŞKİLİ yeni Task açar (kaynak task'ın üzerine yazmaz).">
+            <svg class="ico"><use href="#i-plus"/></svg> Yeni Task Aç
+          </button>
           <button class="btn btn-success" id="jg-approve-btn" onclick="jgJiraGuncelle()">
             <svg class="ico"><use href="#i-check"/></svg> Onayla ve Jira'da Güncelle
           </button>
@@ -5078,6 +5131,9 @@ function _jgSonucGoster(key) {
   document.getElementById('jg-preview-editor').style.display = '';
   document.getElementById('jg-preview-editor').value = s.hata ? '' : (s.markdown || '');
   document.getElementById('jg-approve-btn').disabled = !!s.hata || !s.markdown;
+  const ytBtn = document.getElementById('jg-yenitask-btn');
+  if (ytBtn) ytBtn.disabled = !!s.hata || !s.markdown;
+  jgYeniTaskKapat();   // analiz değişince yeni-task paneli kapansın (içerik yeni analizle yeniden açılır)
   document.getElementById('jg-duzelt-row').style.display = s.hata ? 'none' : '';
   _jgMsg('jg-preview-msg', s.hata ? ('Hata: ' + s.hata) : '', s.hata ? 'err' : '');
   const tab = document.getElementById('jg-modal-tab-sorular');
@@ -5317,6 +5373,7 @@ async function jgAnalizDuzelt() {
 // Paneli KAPAT — iş sürüyorsa arka planda DEVAM EDER (çip gösterilir); iş yoksa temizlenir.
 function jgPreviewKapat() {
   _jgPanelGizle();
+  jgYeniTaskKapat();
   document.body.style.overflow = '';
   if (_jgAktifJob) { _jgSurenChipGuncelle(true); return; }   // iş sürüyor → kesme, çip göster
   _jgProcBitir();
@@ -5388,6 +5445,128 @@ async function jgFeBeOnayla() {
     _jgMsg('jg-preview-msg', `✓ BE: ${d.be_key} güncellendi · FE: ${d.fe_key} açıldı${linkTxt}`, 'ok');
     toast(`FE/BE ayrıldı: ${d.be_key} (BE) + ${d.fe_key} (FE)`, 'success');
   } catch (e) { _jgMsg('jg-preview-msg', 'Bağlantı hatası: ' + e, 'err'); btn.disabled = false; }
+}
+
+// ── Yeni Task Aç — analiz OK sonrası seçilen board/proje'ye, girilen Epic/Story/Task'a
+//    İLİŞKİLİ (Relates) yeni Task açar. FE+BE analizinde İKİ yeni task (birbirine de bağlı). ──
+let _jgProjelerCache = null;   // {projeler:[...], varsayilan}
+
+function _jgYtFebeSet() {
+  // Aktif analiz FE+BE ayrı seti mi? (feBeKaynak varsa BE+FE çifti mevcut)
+  const s = _jgAnalizSeti[_jgAktifAnalizKey] || {};
+  if (!s.feBeKaynak) return null;
+  const be = _jgAnalizSeti[s.feBeKaynak] || {}, fe = _jgAnalizSeti[s.feBeKaynak + '::FE'] || {};
+  return { kaynak: s.feBeKaynak, be, fe };
+}
+
+async function jgYeniTaskPanelAc() {
+  if (!_jgCurrent) return;
+  if (_jgMesgul()) { toast('İşlem sürüyor — bitince yeni task açılabilir', 'info'); return; }
+  // Aktif editör içeriğini sete kaydet (kaybolmasın)
+  const ed = document.getElementById('jg-preview-editor');
+  if (ed && _jgAnalizSeti[_jgAktifAnalizKey] && ed.style.display !== 'none') _jgAnalizSeti[_jgAktifAnalizKey].markdown = ed.value;
+  const panel = document.getElementById('jg-yenitask-panel');
+  panel.style.display = '';
+  _jgMsg('jg-yt-msg', '');
+  document.getElementById('jg-yt-btn').disabled = false;
+  // Mod etiketi + not
+  const fb = _jgYtFebeSet();
+  document.getElementById('jg-yt-mode').textContent = fb ? 'FE + BE → 2 yeni task' : 'Tek Task';
+  document.getElementById('jg-yt-not').innerHTML = fb
+    ? 'Açılacak: <b>BE</b> ve <b>FE</b> iki <b>ayrı Task</b> — ikisi birbirine (Blocks/Relates) bağlanır. Üst öğe girilirse her ikisi de o Epic/Story/Task\'a <b>Relates</b> ile bağlanır. Tip sonra değiştirilebilir.'
+    : 'Açılan task <b>Task</b> tipindedir (tipini sonra değiştirebilirsiniz). Üst öğe girilirse yeni task o Epic/Story/Task\'a <b>Relates</b> ile bağlanır.';
+  // Başlık öntanımı (kaynak başlıktan FE-/BE- öneki çıkarılır)
+  const bas = document.getElementById('jg-yt-baslik');
+  bas.value = (_jgCurrent.summary || '').replace(/^\s*(FE\+BE|FE|BE)\s*[-–—:]\s*/i, '').trim();
+  // Üst öğe alanı temizle
+  document.getElementById('jg-yt-ust').value = '';
+  _jgYtUstBilgiTemizle();
+  panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  await _jgYtProjelerYukle();
+}
+
+function jgYeniTaskKapat() {
+  document.getElementById('jg-yenitask-panel').style.display = 'none';
+}
+
+async function _jgYtProjelerYukle() {
+  const sel = document.getElementById('jg-yt-proje');
+  const varsayilanProje = (_jgCurrent && _jgCurrent.key) ? String(_jgCurrent.key).split('-')[0] : '';
+  const doldur = () => {
+    const c = _jgProjelerCache || { projeler: [], varsayilan: '' };
+    const secili = varsayilanProje || c.varsayilan || '';
+    if (!c.projeler.length) { sel.innerHTML = '<option value="' + escHtml(secili) + '">' + escHtml(secili || '(proje yok)') + '</option>'; return; }
+    sel.innerHTML = c.projeler.map(p =>
+      `<option value="${escHtml(p.key)}" ${p.key === secili ? 'selected' : ''}>${escHtml(p.key)} — ${escHtml(p.name)}</option>`).join('');
+  };
+  if (_jgProjelerCache) { doldur(); return; }
+  sel.innerHTML = '<option value="">Yükleniyor…</option>';
+  try {
+    const d = await (await fetch('/api/jira/projeler')).json();
+    if (d.ok) { _jgProjelerCache = { projeler: d.projeler || [], varsayilan: d.varsayilan || '' }; doldur(); }
+    else { sel.innerHTML = '<option value="' + escHtml(varsayilanProje) + '">' + escHtml(varsayilanProje || '(proje listesi alınamadı)') + '</option>'; _jgMsg('jg-yt-msg', d.error || 'Proje listesi alınamadı — kaynak proje kullanılacak.', 'err'); }
+  } catch (e) {
+    sel.innerHTML = '<option value="' + escHtml(varsayilanProje) + '">' + escHtml(varsayilanProje || '(bağlantı hatası)') + '</option>';
+  }
+}
+
+function _jgYtUstBilgiTemizle() {
+  const el = document.getElementById('jg-yt-ust-bilgi');
+  el.textContent = ''; el.className = 'jg-yt-ust-bilgi';
+}
+
+async function jgYtUstDogrula() {
+  const key = (document.getElementById('jg-yt-ust').value || '').trim().toUpperCase();
+  const el = document.getElementById('jg-yt-ust-bilgi');
+  if (!key) { _jgYtUstBilgiTemizle(); return; }
+  el.textContent = 'Doğrulanıyor…'; el.className = 'jg-yt-ust-bilgi';
+  try {
+    const d = await (await fetch('/api/jira/issue-ozet?key=' + encodeURIComponent(key))).json();
+    if (d.ok) { el.textContent = `✓ ${d.tip || 'Issue'}: ${d.summary || ''}`; el.className = 'jg-yt-ust-bilgi ok'; }
+    else { el.textContent = '⚠ ' + (d.error || 'Bulunamadı'); el.className = 'jg-yt-ust-bilgi err'; }
+  } catch (e) { el.textContent = '⚠ Bağlantı hatası'; el.className = 'jg-yt-ust-bilgi err'; }
+}
+
+async function jgYeniTaskAc() {
+  if (!_jgCurrent) return;
+  if (_jgMesgul()) { toast('İşlem sürüyor', 'info'); return; }
+  const proje = (document.getElementById('jg-yt-proje').value || '').trim();
+  if (!proje) { _jgMsg('jg-yt-msg', 'Proje seçin.', 'err'); return; }
+  const ust = (document.getElementById('jg-yt-ust').value || '').trim();
+  const baslik = (document.getElementById('jg-yt-baslik').value || '').trim();
+  // Aktif editör içeriğini sete kaydet
+  const ed = document.getElementById('jg-preview-editor');
+  if (ed && _jgAnalizSeti[_jgAktifAnalizKey] && ed.style.display !== 'none') _jgAnalizSeti[_jgAktifAnalizKey].markdown = ed.value;
+  const fb = _jgYtFebeSet();
+  let body;
+  if (fb) {
+    const be_md = (fb.be.markdown || '').trim(), fe_md = (fb.fe.markdown || '').trim();
+    if (!be_md || !fe_md) { _jgMsg('jg-yt-msg', 'BE ve FE analizleri dolu olmalı.', 'err'); return; }
+    body = { proje, mode: 'fe-be', be_markdown: be_md, fe_markdown: fe_md, baslik, ust_key: ust, kaynak_key: fb.kaynak };
+  } else {
+    const md = (ed ? ed.value : (_jgAnalizSeti[_jgAktifAnalizKey] || {}).markdown || '').trim();
+    if (!md) { _jgMsg('jg-yt-msg', 'İçerik boş.', 'err'); return; }
+    body = { proje, mode: 'tek', markdown: md, baslik, ust_key: ust, kaynak_key: _jgCurrent.key };
+  }
+  const ustTxt = ust ? ` ve ${ust.toUpperCase()}'a ilişkili` : '';
+  const adet = fb ? '2 yeni Task (BE + FE)' : 'yeni bir Task';
+  if (!confirm(`${proje} projesinde ${adet}${ustTxt} açılacak. Devam edilsin mi?`)) return;
+  const btn = document.getElementById('jg-yt-btn'); btn.disabled = true;
+  _jgMsg('jg-yt-msg', 'Task açılıyor…');
+  try {
+    const r = await fetch('/api/jira/gorev/yeni-task', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    const d = await r.json();
+    if (!d.ok) { _jgMsg('jg-yt-msg', d.error || 'Hata', 'err'); btn.disabled = false; return; }
+    const keyler = (d.tasklar || []).map(t => t.katman ? `${t.key} (${t.katman})` : t.key).join(' · ');
+    let ekstra = '';
+    if (d.febe_link === true) ekstra += ' · BE↔FE bağlı ✓';
+    if (ust) ekstra += ` · ${ust.toUpperCase()}'a bağlı`;
+    if ((d.uyarilar || []).length) ekstra += ' · ⚠ ' + d.uyarilar.join('; ');
+    _jgMsg('jg-yt-msg', `✓ Açıldı: ${keyler}${ekstra}`, 'ok');
+    toast(`Yeni task açıldı: ${keyler}`, 'success');
+  } catch (e) { _jgMsg('jg-yt-msg', 'Bağlantı hatası: ' + e, 'err'); btn.disabled = false; }
 }
 
 // Tek görevi FE+BE olarak İKİ AYRI katman-özel analize böl (arka plan iş).

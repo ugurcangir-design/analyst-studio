@@ -208,6 +208,15 @@ kontrol("gorev/is/durum bilinmeyen → 404",
         istemci.get("/api/jira/gorev/is/durum?job=yok123").status_code == 404)
 kontrol("gorev/is/durdur bilinmeyen → 404",
         istemci.post("/api/jira/gorev/is/durdur", json={"job": "yok123"}, headers=ORIGIN).status_code == 404)
+# Yeni Task Aç — girdi doğrulaması (Jira'ya gitmeden; proje/içerik kontrolü jira-bağlantı kontrolünden ÖNCE)
+kontrol("gorev/yeni-task proje boş → 400",
+        istemci.post("/api/jira/gorev/yeni-task", json={"markdown": "x"}, headers=ORIGIN).status_code == 400)
+kontrol("gorev/yeni-task tek mod içerik boş → 400",
+        istemci.post("/api/jira/gorev/yeni-task", json={"proje": "X", "mode": "tek", "markdown": ""}, headers=ORIGIN).status_code == 400)
+kontrol("gorev/yeni-task fe-be eksik analiz → 400",
+        istemci.post("/api/jira/gorev/yeni-task", json={"proje": "X", "mode": "fe-be", "be_markdown": "", "fe_markdown": ""}, headers=ORIGIN).status_code == 400)
+kontrol("jira/issue-ozet key yok → 400",
+        istemci.get("/api/jira/issue-ozet").status_code == 400)
 
 g = json_al(istemci.get("/api/gorunurluk"))
 kontrol("gorunurluk katalog (owner konsol açık)", g.get("ok") and len(g.get("katalog", [])) >= 10)
