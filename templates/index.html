@@ -5494,8 +5494,15 @@ async function _jgYtProjelerYukle() {
   const varsayilanProje = (_jgCurrent && _jgCurrent.key) ? String(_jgCurrent.key).split('-')[0] : '';
   const doldur = () => {
     const c = _jgProjelerCache || { projeler: [], varsayilan: '' };
-    const secili = varsayilanProje || c.varsayilan || '';
-    if (!c.projeler.length) { sel.innerHTML = '<option value="' + escHtml(secili) + '">' + escHtml(secili || '(proje yok)') + '</option>'; return; }
+    if (!c.projeler.length) {
+      const s = varsayilanProje || c.varsayilan || '';
+      sel.innerHTML = '<option value="' + escHtml(s) + '">' + escHtml(s || '(agent\'a eklenmiş proje yok)') + '</option>';
+      return;
+    }
+    // Seçili = kaynak task'ın projesi (listedeyse) → yoksa ana proje (listedeyse) → ilk proje.
+    const keys = c.projeler.map(p => p.key);
+    let secili = (varsayilanProje && keys.includes(varsayilanProje)) ? varsayilanProje
+      : (c.varsayilan && keys.includes(c.varsayilan)) ? c.varsayilan : keys[0];
     sel.innerHTML = c.projeler.map(p =>
       `<option value="${escHtml(p.key)}" ${p.key === secili ? 'selected' : ''}>${escHtml(p.key)} — ${escHtml(p.name)}</option>`).join('');
   };

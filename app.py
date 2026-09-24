@@ -5071,30 +5071,65 @@ def jira_gorev_fe_be_olustur():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+def _agent_jira_projeleri() -> dict:
+    """Agent'a EKLENMİŞ Jira projelerini toplar (tüm Jira instance'ı DEĞİL — analist
+    ekranda alakasız 100+ board görmesin). Kaynaklar:
+      (1) sources.json `jira_projects` — Ayarlar → Kaynaklar → Senkronla ile eklenen (BİRİNCİL)
+      (2) JIRA_PROJECT_KEY — ana proje
+      (3) Jira Köprüsü `projeler` — köprünün taradığı projeler
+    key→name dedup, sıralı döner."""
+    proj: dict[str, str] = {}
+    try:
+        for p in (_load_sources().get("jira_projects") or []):
+            k = str(p.get("key", "")).strip().upper()
+            if k:
+                proj.setdefault(k, (p.get("name") or k).strip() or k)
+    except Exception:
+        pass
+    mk = (_env_oku().get("JIRA_PROJECT_KEY", "") or "").strip().upper()
+    if mk:
+        proj.setdefault(mk, mk)
+    try:
+        from skills.jira_kopru import ayarlar as _kopru_ayarlar
+        for k in (_kopru_ayarlar().get("projeler") or []):
+            k = str(k).strip().upper()
+            if k:
+                proj.setdefault(k, k)
+    except Exception:
+        pass
+    return proj
+
+
 @app.route("/api/jira/projeler", methods=["GET"])
 def jira_projeler():
-    """Yeni Task Aç panelindeki board/proje dropdown'ı için görünür projeleri listeler.
-    Döner: {ok, projeler:[{key,name,id}], varsayilan}."""
+    """Yeni Task Aç panelindeki board/proje dropdown'ı — YALNIZ agent'a eklenmiş projeler
+    (sources.json + ana proje + Jira Köprüsü), tüm Jira instance'ı DEĞİL. İsteğe bağlı
+    gerçek proje adları hafifçe zenginleştirilir (yalnız eklenen key'ler; best-effort).
+    Döner: {ok, projeler:[{key,name}], varsayilan}."""
     env = _env_oku()
+    proj = _agent_jira_projeleri()
+    if not proj:
+        return jsonify({"ok": True, "projeler": [], "varsayilan": env.get("JIRA_PROJECT_KEY", ""),
+                        "uyari": "Agent'a eklenmiş Jira projesi yok — Ayarlar → Kaynaklar'dan proje ekleyin."})
     cloud_id = env.get("JIRA_CLOUD_ID", "")
-    if not cloud_id or not env.get("JIRA_ACCESS_TOKEN"):
-        return jsonify({"ok": False, "error": "Jira bağlantısı yok. Ayarlar → Jira ile bağlanın."}), 400
-    try:
-        from skills.atlassian import atlassian_get
-        projeler, start = [], 0
-        while True:
-            data = atlassian_get(
-                f"/rest/api/3/project/search?maxResults=50&startAt={start}&orderBy=name", cloud_id)
-            values = data.get("values", []) or []
-            for p in values:
-                projeler.append({"key": p.get("key", ""), "name": p.get("name", ""), "id": p.get("id", "")})
-            if data.get("isLast", True) or not values or start > 500:
-                break
-            start += len(values)
-        return jsonify({"ok": True, "projeler": projeler, "varsayilan": env.get("JIRA_PROJECT_KEY", "")})
-    except Exception as e:
-        logger.error(f"Jira proje listesi hatası: {e}")
-        return jsonify({"ok": False, "error": str(e)}), 500
+    # Gerçek adları YALNIZ eklenen key'ler için, hedefli tek-tek çek (tüm instance taranmaz).
+    if cloud_id and env.get("JIRA_ACCESS_TOKEN"):
+        try:
+            from skills.atlassian import atlassian_get
+            for k in list(proj):
+                if proj[k] != k:
+                    continue  # zaten gerçek ad var
+                try:
+                    d = atlassian_get(f"/rest/api/3/project/{k}?properties=none", cloud_id)
+                    ad = (d.get("name") or "").strip()
+                    if ad:
+                        proj[k] = ad
+                except Exception:
+                    pass  # erişilemeyen/olmayan key → key'in kendisi gösterilir
+        except Exception:
+            pass
+    projeler = [{"key": k, "name": proj[k]} for k in sorted(proj)]
+    return jsonify({"ok": True, "projeler": projeler, "varsayilan": env.get("JIRA_PROJECT_KEY", "")})
 
 
 @app.route("/api/jira/issue-ozet", methods=["GET"])

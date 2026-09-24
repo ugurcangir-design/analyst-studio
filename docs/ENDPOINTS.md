@@ -65,7 +65,9 @@ POST /api/jira/gorev/duzelt        İteratif düzelt (önizleme, YAZMAZ): {gorev
 POST /api/jira/gorev/guncelle      Onaydan sonra görev description'ını Jira'da güncelle (markdown→ADF)
 POST /api/jira/gorev/fe-be-olustur FE+BE ayrı analizi yazar (Option A): BE→ORİJİNAL task ('BE - '), FE→YENİ Task ('FE - '),
                                    BE→FE Blocks bağı. {key, be_markdown, fe_markdown, summary?}
-GET  /api/jira/projeler            Yeni Task Aç dropdown'ı için görünür projeler: {ok, projeler:[{key,name,id}], varsayilan}
+GET  /api/jira/projeler            Yeni Task Aç dropdown'ı — YALNIZ agent'a eklenmiş projeler (`_agent_jira_projeleri`:
+                                   sources.json jira_projects + JIRA_PROJECT_KEY + Jira Köprüsü projeleri; tüm instance DEĞİL).
+                                   Adlar eklenen key'ler için hedefli çekilir (best-effort). {ok, projeler:[{key,name}], varsayilan}
 GET  /api/jira/issue-ozet          ?key=… → üst öğe (Epic/Story/Task) doğrulama: {ok, key, summary, tip, proje} (yoksa 404)
 POST /api/jira/gorev/yeni-task     Analiz OK → YENİ Task açar (hep Task tipi; analist sonra değiştirir), verilen Epic/Story/Task'a
                                    İLİŞKİLİ (Relates). mode='tek' → tek task (markdown); mode='fe-be' → İKİ yeni task (be_markdown+
