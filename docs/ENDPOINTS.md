@@ -22,6 +22,19 @@ POST /api/heartbeat            UI canlı sinyali (every 20s)
 POST /api/shutdown             DESKTOP_MODE'da sunucuyu kapat
 ```
 
+## İnteraktif Analiz (Sohbetle Analiz — doküman YOK; skills/sohbet_analiz.py)
+```
+GET  /api/sohbet/oturum        Aktif sohbet oturumu {oturum_id, baslik, mesajlar[], surec_var, teknik_var}
+POST /api/sohbet/mesaj         {metin} → RAG'li agent yanıtı (canlı gözlem YOK — hızlı sohbet); {ok, oturum}
+POST /api/sohbet/sifirla       Yeni oturum (sohbet temizlenir; çıktı dosyalarına dokunmaz)
+POST /api/sohbet/uret          Kilometre taşı: {hedef:'surec'|'teknik'} → ARKA PLAN üretim (canlı gözlem DAHİL);
+                               surec_analizi_yap(icerik_override=sohbet, ozel_atla=True) / teknik_analiz_yap(ozel_atla=True)
+                               → output/surec-analizi.md · teknik-analiz.md (Çıktılar/Revizyon/Jira aynen akar). {ok, job}
+GET  /api/sohbet/uret/durum    ?job=<id> → {durum:calisiyor|bitti|hata, hedef, sonuc?, hata?}
+```
+Bağlam Filtresi + uygulama girişi Süreç'ten miras (paylaşılan context_filter.json). Özel prompt YOK (hep varsayılan).
+UI: `screens/sohbet.html` (nav "İnteraktif Analiz", Analiz grubu). Global süreç workflow'una DOKUNMAZ.
+
 ## Çıktı / Referans
 ```
 GET  /api/outputs              Mevcut çıktıları listele

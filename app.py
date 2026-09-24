@@ -263,6 +263,7 @@ _KIMLIK_GEREKLI_ONEKLER = (
     "/api/mockup/generate", "/api/jira/gorev", "/api/jira/fe-be",
     "/api/jira/hierarchy", "/api/approve-teknik", "/api/jira-kopru",
     "/api/sorular/uygula", "/api/adim/duzelt", "/api/geri-don",
+    "/api/sohbet",
 )
 
 
@@ -5190,6 +5191,125 @@ def jira_gorev_yeni_task():
     except Exception as e:
         logger.error(f"Yeni task oluşturma hatası: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─── İnteraktif Analiz (Sohbetle Analiz) ──────────────────────────────────────
+
+_sohbet_isler: dict = {}          # job_id → {durum, hedef, sonuc?, hata?}
+_sohbet_is_lock = threading.Lock()
+
+
+def _sohbet_ozet(oturum: dict) -> dict:
+    """UI'ya dönen oturum özeti (+ üretilmiş çıktı var mı)."""
+    from skills.sohbet_analiz import surec_var_mi
+    return {
+        "oturum_id": oturum.get("oturum_id", ""),
+        "baslik": oturum.get("baslik", ""),
+        "mesajlar": oturum.get("mesajlar", []),
+        "surec_var": surec_var_mi(),
+        "teknik_var": (OUTPUT_DIR / "teknik-analiz.md").exists(),
+    }
+
+
+@app.route("/api/sohbet/oturum", methods=["GET"])
+def sohbet_oturum():
+    """Aktif interaktif analiz oturumunu döndürür (mesajlar + üretim durumu)."""
+    from skills.sohbet_analiz import oturum_oku
+    return jsonify({"ok": True, "oturum": _sohbet_ozet(oturum_oku())})
+
+
+@app.route("/api/sohbet/mesaj", methods=["POST"])
+def sohbet_mesaj_gonder():
+    """Analistin mesajını işler, RAG'li yanıt üretir (canlı gözlem YOK — hızlı sohbet)."""
+    data = request.get_json(silent=True) or {}
+    metin = (data.get("metin") or "").strip()
+    if not metin:
+        return jsonify({"ok": False, "error": "Boş mesaj gönderilemez."}), 400
+    _bas = time.time()
+    _tbas = _token_bas()
+    try:
+        from skills.sohbet_analiz import sohbet_mesaj
+        oturum = sohbet_mesaj(metin)
+        _telemetri_olay("sohbet", "ok", int((time.time() - _bas) * 1000),
+                        baglam={"proje": "interaktif", "dokuman": oturum.get("baslik", "")[:60]},
+                        token_bas=_tbas)
+        return jsonify({"ok": True, "oturum": _sohbet_ozet(oturum)})
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"Sohbet mesajı hatası: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/sohbet/sifirla", methods=["POST"])
+def sohbet_sifirla():
+    """Yeni interaktif analiz oturumu (sohbet temizlenir; çıktı dosyalarına dokunmaz)."""
+    from skills.sohbet_analiz import oturum_sifirla
+    return jsonify({"ok": True, "oturum": _sohbet_ozet(oturum_sifirla())})
+
+
+def _sohbet_uret_calistir(job_id: str, hedef: str) -> None:
+    from skills.base import USE_CLAUDE_CLI, aktif_cli_model, MODEL_ANALIZ
+    _model = aktif_cli_model() if USE_CLAUDE_CLI else MODEL_ANALIZ
+    _ai_modu = "cli" if USE_CLAUDE_CLI else "api"
+    _bas = time.time()
+    _tbas = _token_bas()
+    try:
+        from skills.sohbet_analiz import surec_uret, teknik_uret
+        if hedef == "teknik":
+            teknik_uret()
+            sonuc = {"dosya": "teknik-analiz.md"}
+        else:
+            surec_uret()
+            sonuc = {"dosya": "surec-analizi.md"}
+        with _sohbet_is_lock:
+            _sohbet_isler[job_id].update({"durum": "bitti", "sonuc": sonuc})
+        _telemetri_olay("sohbet_uret", "ok", int((time.time() - _bas) * 1000),
+                        model=_model, ai_modu=_ai_modu,
+                        baglam={"proje": "interaktif", "dokuman": hedef}, token_bas=_tbas)
+    except Exception as e:
+        logger.error(f"İnteraktif analiz üretim hatası ({hedef}): {e}")
+        with _sohbet_is_lock:
+            _sohbet_isler[job_id].update({"durum": "hata", "hata": str(e)})
+
+
+@app.route("/api/sohbet/uret", methods=["POST"])
+def sohbet_uret():
+    """Kilometre taşı: sohbetten Süreç ya da Teknik analizi ARKA PLANDA üretir (canlı gözlem
+    dahil — uzun sürebilir). {hedef: 'surec'|'teknik'} → {ok, job}. Teknik için önce süreç şart."""
+    data = request.get_json(silent=True) or {}
+    hedef = (data.get("hedef") or "surec").strip()
+    if hedef not in ("surec", "teknik"):
+        return jsonify({"ok": False, "error": "hedef 'surec' veya 'teknik' olmalı"}), 400
+    from skills.sohbet_analiz import oturum_oku, surec_var_mi
+    if hedef == "teknik" and not surec_var_mi():
+        return jsonify({"ok": False, "error": "Önce Süreç Analizi üretin (teknik analiz ona dayanır)."}), 400
+    if hedef == "surec" and not (oturum_oku().get("mesajlar")):
+        return jsonify({"ok": False, "error": "Önce sohbette isterinizi yazın."}), 400
+    # Aynı anda tek üretim
+    with _sohbet_is_lock:
+        for j in _sohbet_isler.values():
+            if j.get("durum") == "calisiyor":
+                return jsonify({"ok": False, "error": "Bir üretim zaten sürüyor."}), 409
+        job_id = f"sohbet-uret-{int(time.time() * 1000)}"
+        _sohbet_isler[job_id] = {"durum": "calisiyor", "hedef": hedef}
+        # Bellek sınırı: son 20 iş
+        if len(_sohbet_isler) > 20:
+            for k in list(_sohbet_isler)[:-20]:
+                _sohbet_isler.pop(k, None)
+    threading.Thread(target=_sohbet_uret_calistir, args=(job_id, hedef), daemon=True).start()
+    return jsonify({"ok": True, "job": job_id})
+
+
+@app.route("/api/sohbet/uret/durum", methods=["GET"])
+def sohbet_uret_durum():
+    """Üretim işi durumu (polling): {durum:calisiyor|bitti|hata, hedef, sonuc?, hata?}."""
+    job_id = request.args.get("job", "")
+    with _sohbet_is_lock:
+        job = _sohbet_isler.get(job_id)
+        if not job:
+            return jsonify({"ok": False, "error": "İş bulunamadı"}), 404
+        return jsonify({"ok": True, **job})
 
 
 # ─── Confluence Yayımla ───────────────────────────────────────────────────────

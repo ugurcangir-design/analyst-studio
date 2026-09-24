@@ -217,6 +217,15 @@ kontrol("gorev/yeni-task fe-be eksik analiz → 400",
         istemci.post("/api/jira/gorev/yeni-task", json={"proje": "X", "mode": "fe-be", "be_markdown": "", "fe_markdown": ""}, headers=ORIGIN).status_code == 400)
 kontrol("jira/issue-ozet key yok → 400",
         istemci.get("/api/jira/issue-ozet").status_code == 400)
+# İnteraktif Analiz (Sohbetle Analiz) — girdi doğrulaması (AI'ya gitmeden)
+_so = json_al(istemci.get("/api/sohbet/oturum"))
+kontrol("sohbet/oturum ok", _so.get("ok") and isinstance(_so.get("oturum"), dict))
+kontrol("sohbet/mesaj boş metin → 400",
+        istemci.post("/api/sohbet/mesaj", json={"metin": ""}, headers=ORIGIN).status_code == 400)
+kontrol("sohbet/uret geçersiz hedef → 400",
+        istemci.post("/api/sohbet/uret", json={"hedef": "xyz"}, headers=ORIGIN).status_code == 400)
+kontrol("sohbet/uret/durum bilinmeyen iş → 404",
+        istemci.get("/api/sohbet/uret/durum?job=yok123").status_code == 404)
 
 g = json_al(istemci.get("/api/gorunurluk"))
 kontrol("gorunurluk katalog (owner konsol açık)", g.get("ok") and len(g.get("katalog", [])) >= 10)

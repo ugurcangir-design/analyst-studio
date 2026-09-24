@@ -2,7 +2,23 @@
 
 macOS masaüstü uygulaması. BRD/süreç dokümanı → RAG destekli analiz → Jira Epic/Story/Subtask.
 Flask + Python **3.10+** (`str|None`), tarayıcı SPA `http://localhost:5003` (v2; v1 = 5002, ayrı dizin/süreç).
-İki akış: **Süreç → Teknik → Jira** (ana, FE/BE ayrımı) · **BRD → Kapsam**.
+İki akış: **Süreç → Teknik → Jira** (ana, FE/BE ayrımı) · **BRD → Kapsam**. Ek: **İnteraktif Analiz** (doküman YOK, sohbetle).
+
+## İnteraktif Analiz (Sohbetle Analiz — doküman yüklemeden, metin/chat ile)
+Analist doküman yüklemeden bir isteri/fikir yazar → agent (RAG + domain kuralları + kaynak-öncelikle **topraklanmış**,
+Claude chat gibi) **soru sorar / yöntem önerir** → adım adım **birlikte** olgunlaştırılır → hazır olunca **kilometre taşı
+butonlarıyla** (`Süreç Analizi Üret` → `Teknik Analiz Üret`) formal analiz üretilir. **MEVCUT motorlar yeniden kullanılır**
+(`skills/sohbet_analiz.py` → `surec_analizi_yap(icerik_override=sohbet, ozel_atla=True)` / `teknik_analiz_yap(ozel_atla=True)`)
+→ çıktılar `output/surec-analizi.md` · `teknik-analiz.md` → **Çıktılar & Revizyon + Jira (FE/BE / Hiyerarşi / Yeni Task) aynen
+akar** (Jira aktarma Çıktı Dosyaları ekranındaki mevcut butonlarla — ekran duplike edilmez). **Miras (tekrar girilmez):**
+Bağlam Filtresi + uygulama giriş bilgileri (paylaşılan `context_filter.json`). **YOK:** doküman yükleme · Süreç/Teknik **özel
+promptu** (hep varsayılan — `ozel_atla=True` özel promptu yok sayar) · manuel gözlem kapsamı alanı. **VAR:** analiz üretiminde
+**canlı uygulama gözlemi** (miras `live_app` config; hedef sohbetten türetilir). Sohbet turu canlı gözlem YAPMAZ (hızlı Q&A);
+gözlem yalnız üretim adımlarında. **Global süreç workflow'una DOKUNMAZ** (kendi içinde inline — iki ekran tek state çakışmaz).
+Oturum `output/sohbet/oturum.json` (gitignore). Endpoint: `/api/sohbet/{oturum,mesaj,sifirla,uret,uret/durum}` (kimlik-gate,
+üretim arka plan iş). UI: `screens/sohbet.html` (nav "İnteraktif Analiz", Analiz grubu; chat thread + `sh-*`). Test: `smoke_test`
+(oturum + doğrulama uçları). **NOT — motor refactor'u:** `surec_analizi_yap(icerik_override, dosya_adi_override, ozel_atla)` +
+`teknik_analiz_yap(ozel_atla)` opsiyonel parametre aldı — override YOKKEN davranış AYNEN korunur (doküman akışı etkilenmez).
 
 ## Analyst Studio — TEK ve NİHAİ sürüm (repo `ugurcangir-design/analyst-studio` · dal `main` · port **5003**)
 Dizin: `brd-analyst-agent-v2`. **Repo: `ugurcangir-design/analyst-studio`, dal `main`.**
@@ -411,7 +427,7 @@ sıfırlanma saati `/api/cli/durum` header göstergesinde görünür (`cli_durum
 
 ## Klasör yapısı
 - `app.py` Flask sunucu (~86 endpoint) · `run.py` orchestrator (subprocess) · `workflow.py` durum makinesi · `jira_agent.py` Jira OAuth+ADF
-- `skills/` iş mantığı (`agent.py` = import bridge): `base.py` (sabitler/RAG/`_api_cagri`/promptlar), `atlassian.py` (**CANONICAL** OAuth helper), `surec_analizi` `teknik_analiz` `delta_analizi` `brd_analizi` `kapsam_analizi` `jira_tasks` `jira_gorevleri` `backlog_senkron` (**UAT Mutabakat** — 0-token deterministik) `jira_fe_be` (**FE/BE düz Task bölme** — teknik analiz → görev(Task) tipinde ayrı FE ve BE task'ları + ilişkili BE→FE **Blocks** bağı; aşağı bak) `confluence_yaz` `html_mockup` (canlı-app baz'lı prototip + sohbetle düzeltme) `sorular` `telemetri` (**Kullanım İzleme** + token/maliyet kaydı; owner-gate **`reference/owner_konsol.json`** işaret dosyası — `_owner_konsol_aktif`, env DEĞİL; `_sink_gonder` SENKRON; çift-sayım önleme `remote.jsonl`) `hatalar` `disk_temizlik` `bildirim` (**yerel masaüstü bildirimi** — osascript, 0 token; aşağı bak) `jira_kopru` (**Jira Köprüsü** — Jira'yı web-chat gibi kullan; aşağı bak) `kod_kaynagi` `etki_analizi` `retrieval` `analiz_mcp`. **Modül sorumlulukları + telemetri/backlog/mockup tam ayrıntı → `docs/MIMARI.md`.**
+- `skills/` iş mantığı (`agent.py` = import bridge): `base.py` (sabitler/RAG/`_api_cagri`/promptlar), `atlassian.py` (**CANONICAL** OAuth helper), `surec_analizi` `teknik_analiz` `sohbet_analiz` (**İnteraktif Analiz** — doküman yüklemeden SOHBETLE süreç/teknik; aşağı bak) `delta_analizi` `brd_analizi` `kapsam_analizi` `jira_tasks` `jira_gorevleri` `backlog_senkron` (**UAT Mutabakat** — 0-token deterministik) `jira_fe_be` (**FE/BE düz Task bölme** — teknik analiz → görev(Task) tipinde ayrı FE ve BE task'ları + ilişkili BE→FE **Blocks** bağı; aşağı bak) `confluence_yaz` `html_mockup` (canlı-app baz'lı prototip + sohbetle düzeltme) `sorular` `telemetri` (**Kullanım İzleme** + token/maliyet kaydı; owner-gate **`reference/owner_konsol.json`** işaret dosyası — `_owner_konsol_aktif`, env DEĞİL; `_sink_gonder` SENKRON; çift-sayım önleme `remote.jsonl`) `hatalar` `disk_temizlik` `bildirim` (**yerel masaüstü bildirimi** — osascript, 0 token; aşağı bak) `jira_kopru` (**Jira Köprüsü** — Jira'yı web-chat gibi kullan; aşağı bak) `kod_kaynagi` `etki_analizi` `retrieval` `analiz_mcp`. **Modül sorumlulukları + telemetri/backlog/mockup tam ayrıntı → `docs/MIMARI.md`.**
 - `templates/index.html` SPA · `reference/` RAG kaynakları (Atlassian sync) · `output/ input/ history/ logs/` runtime · `backlog/` UAT Mutabakat üretilen .xlsx raporları (gitignore) · `docs/` detaylı referans
 - **Bağımlılıklar** (`requirements.txt`): Flask, anthropic, requests, python-dotenv, PyMuPDF, Pillow, python-docx, ruff + **openpyxl** (UAT Mutabakat .xlsx rapor yazımı). `lxml` hâlâ kurulu (genel kullanım).
 - `reference/live-app` Claude MCP/Chrome ekran+network gözlem çıktıları içindir (gitignore); bağlam filtresinde ana URL + 5 alt URL ve "Örnek ekran olarak kullan" seçeneği süreç/teknik analize canlı uygulama görevi olarak eklenir.

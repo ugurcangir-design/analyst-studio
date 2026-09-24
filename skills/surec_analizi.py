@@ -13,12 +13,13 @@ from .base import (
 )
 
 
-def _surec_prompt_olustur() -> str:
+def _surec_prompt_olustur(ozel_atla: bool = False) -> str:
     # Analistin ekrandan girdiği özel prompt VARSA varsayılanın YERİNE geçer
     # (rol + bölümler tamamen atlanır). Boşsa mevcut davranış aynen korunur.
     # Doğruluk çekirdeği (kaynak kullanımı + uydurmama + [K:] etiketi) özel
     # prompta da EKLENİR — bunlar analistin vazgeçebileceği kurallar değil.
-    ozel = ozel_prompt_oku("surec")
+    # ozel_atla=True → İnteraktif Analiz ekranı: özel prompt YOK SAYILIR, hep varsayılan.
+    ozel = None if ozel_atla else ozel_prompt_oku("surec")
     if ozel:
         print("  ✏️ Özel süreç analizi promptu kullanılıyor (varsayılan atlandı).")
         return ozel + OZEL_PROMPT_DOGRULUK_EKI + _domain_kurallari_oku()
@@ -35,10 +36,20 @@ def _surec_prompt_olustur() -> str:
     return rol + "\n\n## ÇIKTI BÖLÜMLERİ\n\n" + bolumler + mermaid_talimati
 
 
-def surec_analizi_yap() -> Path:
+def surec_analizi_yap(icerik_override: list | None = None,
+                      dosya_adi_override: str = "", ozel_atla: bool = False) -> Path:
+    """Süreç analizi üretir. Normalde `input/` dokümanını okur; `icerik_override`
+    verilirse (İnteraktif Analiz ekranı — sohbet metni) onu girdi kabul eder ve
+    doküman yüklemesini atlar. `ozel_atla` özel promptu yok sayar (varsayılan prompt).
+    RAG (otomatik alaka), canlı gözlem, domain kuralları, post-işleme AYNEN korunur."""
     print("Süreç analizi başlatılıyor...")
-    icerik, dosya_adi = input_hazirla(is_brd=False)
-    print(f"  Dosya: {dosya_adi}")
+    if icerik_override is not None:
+        icerik = icerik_override
+        dosya_adi = dosya_adi_override or "interaktif-analiz"
+        print(f"  Girdi: interaktif sohbet ({dosya_adi})")
+    else:
+        icerik, dosya_adi = input_hazirla(is_brd=False)
+        print(f"  Dosya: {dosya_adi}")
 
     icerik_parcalari: list[dict] = []
     kullanilan_referanslar: list[str] = []
@@ -66,7 +77,7 @@ def surec_analizi_yap() -> Path:
         "text": "Yukarıdaki ana dokümanı (varsa referanslarla birlikte) analiz et ve süreç analizi raporunu üret.",
     })
 
-    sistem = _surec_prompt_olustur()
+    sistem = _surec_prompt_olustur(ozel_atla=ozel_atla)
     mesajlar = [{"role": "user", "content": icerik_parcalari}]
     yanit = _api_cagri(sistem, mesajlar, max_tokens=MAX_TOKENS_UZUN, thinking=extended_thinking_acik(),
                        # Canlı gözlem = mevcut durum → gözlem varken cache OKUMA (yeniden çalıştırmada taze gözle).

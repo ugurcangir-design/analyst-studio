@@ -26,14 +26,15 @@ from .base import (
 from .html_mockup import mockup_oku_kontekst
 
 
-def _teknik_prompt_olustur(mockup_var: bool = False) -> str:
+def _teknik_prompt_olustur(mockup_var: bool = False, ozel_atla: bool = False) -> str:
     """Aşama 1 sistem promptu — SADECE teknik analiz (açık sorular ayrı aşamada)."""
     # Analistin ekrandan girdiği özel prompt VARSA varsayılanın (rol + bölümler)
     # YERİNE geçer. Miras: teknik alan boşsa süreç özel promptu teknik analizde
     # de kullanılır (teknik_ozel_prompt_oku) — tek prompt tüm pipeline'ı yönetir.
     # Çıktının <teknik_analiz> XML bloğunda gelmesi zorunluluğu yine de eklenir —
     # pipeline (_xml_ayir, kesik-çıktı retry'ı) bu bloğa bağımlı.
-    ozel = teknik_ozel_prompt_oku()
+    # ozel_atla=True → İnteraktif Analiz ekranı: özel prompt YOK SAYILIR, hep varsayılan.
+    ozel = None if ozel_atla else teknik_ozel_prompt_oku()
     if ozel:
         print("  ✏️ Özel prompt teknik analizde kullanılıyor (varsayılan atlandı).")
         return (
@@ -173,7 +174,9 @@ def _denetim_bolumu_olustur(kapsam: dict, denetim_notlari: str) -> str:
     )
 
 
-def teknik_analiz_yap() -> tuple[Path, Path]:
+def teknik_analiz_yap(ozel_atla: bool = False) -> tuple[Path, Path]:
+    """surec-analizi.md → teknik-analiz.md + acik-sorular.md (+ RTM/test). `ozel_atla`
+    özel promptu yok sayar (İnteraktif Analiz ekranı — hep varsayılan prompt)."""
     print("Teknik analiz başlatılıyor...")
     surec_dosya = OUTPUT_DIR / "surec-analizi.md"
     if not surec_dosya.exists():
@@ -213,7 +216,7 @@ def teknik_analiz_yap() -> tuple[Path, Path]:
     # analist "sadece özel prompta göre" istedi; süreç analizi çıktısı da özel
     # promptla üretilmişse ID'ler zaten olmayabilir. Varsayılan promptta eski
     # davranış aynen korunur.
-    ozel_teknik = bool(teknik_ozel_prompt_oku())
+    ozel_teknik = bool(teknik_ozel_prompt_oku()) and not ozel_atla
     if ozel_teknik:
         surec_girdi_talimati = (
             "### Süreç Analizi\n"
@@ -232,7 +235,7 @@ def teknik_analiz_yap() -> tuple[Path, Path]:
     icerik_parcalari.append({"type": "text", "text": "Teknik analiz raporunu üret (açık sorular HARİÇ — onlar ayrı adımda)."})
 
     # ── AŞAMA 1: Sadece teknik analiz ──
-    sistem = _teknik_prompt_olustur(mockup_var=bool(mockup_icerik))
+    sistem = _teknik_prompt_olustur(mockup_var=bool(mockup_icerik), ozel_atla=ozel_atla)
     mesajlar = [{"role": "user", "content": icerik_parcalari}]
     yanit = _teknik_uret_tam(sistem, mesajlar,
                              canli_uygulama_kapsami=("surec" if canli_baglam else None))
