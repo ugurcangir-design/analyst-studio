@@ -3145,6 +3145,7 @@ function temaDegistir() {
           <div class="panel-title">Kullanım Raporu</div>
           <span class="panel-tag">yalnız owner</span>
           <div class="panel-spacer"></div>
+          <span id="ku-cek-durum" style="font-size:11px;margin-right:6px"></span>
           <span id="ku-son-guncelleme" style="font-size:11px;color:var(--text3);margin-right:6px"></span>
           <button class="btn btn-outline btn-sm" id="ku-cek-btn" onclick="kullanimUzaktanCek()" title="Ekip verisini Google Sheet'ten çeker (owner)">Uzaktan Çek</button>
           <button class="btn btn-outline btn-sm" onclick="kullanimExcel()">Excel Rapor</button>
@@ -4205,7 +4206,7 @@ async function kullanimUzaktanCek() {
   // E-posta kapısı: anahtar gerekmez; backend şirket e-postanı sink'e geçirir, owner listesindeyse veri döner.
   const btn = document.getElementById('ku-cek-btn');
   const eski = btn ? btn.innerHTML : '';
-  const durumEl = document.getElementById('ku-son-guncelleme');
+  const durumEl = document.getElementById('ku-cek-durum');   // AYRI alan (timestamp'le çakışmaz)
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin-sm"></span> Çekiliyor…'; }
   try {
     const r = await fetch('/api/usage/pull', { method: 'POST' });

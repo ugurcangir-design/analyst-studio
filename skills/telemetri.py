@@ -521,7 +521,14 @@ def uzaktan_cek() -> tuple[bool, str]:
         if key:
             params["read"] = key            # geri uyum: eski anahtar yolu
         r = requests.get(url, params=params, timeout=15)
-        veri = r.json()
+        try:
+            veri = r.json()
+        except Exception:
+            # JSON değil (boş/HTML) → e-posta kapısı bu param'ı tanımıyor demektir.
+            if params.get("email") and not params.get("read"):
+                return False, ("Sink e-posta kapısına yanıt vermedi — Apps Script'te owner "
+                               "e-posta kapısı (doGet) eklenmemiş/deploy edilmemiş olabilir.")
+            return False, "Sink beklenmeyen (JSON olmayan) yanıt döndü."
         if not isinstance(veri, list):
             # Apps Script yetkisizde liste yerine {error:...} döndürebilir
             mesaj = ""
