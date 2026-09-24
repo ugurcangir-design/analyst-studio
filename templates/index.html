@@ -4201,17 +4201,31 @@ function kullanimExcel() {
   window.location = '/api/usage/export?gun=' + gun;
 }
 async function kullanimUzaktanCek() {
+  // Anahtar yoksa çekme çalışmaz → sessizce başarısız olma; anahtar alanına yönlendir.
+  if (_kuKeyVar === null) await _kuKeyDurumYukle();
+  if (_kuKeyVar === false) {
+    const inp = document.getElementById('ku-key-input');
+    const km = document.getElementById('ku-key-msg');
+    if (km) { km.textContent = '⚠ Önce OKUMA ANAHTARINI girip Kaydet\'e basın (app-sahibinden alın) — ekip verisi ancak o zaman gelir.'; km.style.color = 'var(--yellow)'; }
+    if (inp) { try { inp.scrollIntoView({ block: 'center', behavior: 'smooth' }); inp.focus(); } catch (e) {} }
+    if (typeof toast === 'function') toast('warn', 'Okuma anahtarı gerekli', 'Ekip verisi için anahtar girin.');
+    return;
+  }
   const btn = document.getElementById('ku-cek-btn');
   const eski = btn ? btn.innerHTML : '';
+  const durumEl = document.getElementById('ku-son-guncelleme');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spin-sm"></span> Çekiliyor…'; }
   try {
     const r = await fetch('/api/usage/pull', { method: 'POST' });
     const d = await r.json();
     if (typeof toast === 'function') toast(d.ok ? 'ok' : 'warn', d.ok ? 'Ekip verisi çekildi' : 'Uyarı', d.mesaj || '');
     else alert(d.mesaj || '');
+    // Sonucu KALICI göster (toast kaçsa bile) → "neden gelmedi" belirsizliği kalmasın
+    if (durumEl) { durumEl.textContent = (d.ok ? '✓ ' : '⚠ ') + (d.mesaj || (d.ok ? 'çekildi' : 'başarısız')); durumEl.style.color = d.ok ? 'var(--green)' : 'var(--run)'; }
     await kullanimYukle();
   } catch (e) {
     if (typeof toast === 'function') toast('warn', 'Hata', 'Uzaktan çekme başarısız.'); else alert('Uzaktan çekme başarısız.');
+    if (durumEl) { durumEl.textContent = '⚠ Bağlantı hatası (sink\'e ulaşılamadı)'; durumEl.style.color = 'var(--run)'; }
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = eski || 'Uzaktan Çek'; }
   }
