@@ -86,6 +86,16 @@ telemetri.analist_yaz("Emin", "emin@example.com")
 app._roller_kaydet({app._eposta_hash("emin@example.com"): "analist"}, {"delta": "owner"})
 kontrol("analist e-postası → _etkin_rol analist", app._etkin_rol() == "analist")
 
+# ── Owner ROLÜ (owner-console bayrağı OLMADAN) Kullanım/Yetki ekranlarını AÇAR ──
+# (Yetki ekranından 'owner' rolü verilen kişi kendi localinde owner-only ekranları görür.)
+kontrol("analist rolü → Kullanım gizli", app._usage_yetkili_mi() is False)
+kontrol("analist rolü → Yetki paneli gizli", app._yetki_paneli_mi() is False)
+app._roller_kaydet({app._eposta_hash("emin@example.com"): "owner"}, {"delta": "owner"})
+kontrol("owner rolü (bayraksız) → _etkin_rol owner", app._etkin_rol() == "owner")
+kontrol("owner rolü → Kullanım Raporu görünür", app._usage_yetkili_mi() is True)
+kontrol("owner rolü → Yetki ekranı görünür", app._yetki_paneli_mi() is True)
+app._roller_kaydet({app._eposta_hash("emin@example.com"): "analist"}, {"delta": "owner"})   # geri
+
 # ── Telemetri isim çekme (benzersiz — remote + local birleşik) ────────────────
 import json as _json  # noqa: E402
 telemetri.UZAK_DOSYA = tmp / "remote.jsonl"

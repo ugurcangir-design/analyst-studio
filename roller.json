@@ -1,7 +1,8 @@
 {
   "_aciklama": "Rol→ekran yetkisi. kullanicilar: sha256(salt+küçük-harf e-posta)→rol (PII git'e GİRMEZ; isimler Kullanım Raporu'ndan çekilir). ekran_roller: ekran id→o ekranı görebilecek EN DÜŞÜK rol. Owner Yetki ekranından düzenler; analistlere güncellemeyle iner.",
   "kullanicilar": {
-    "103e0c401ddb6a22f40870c8bc9019027bbc4e4ab2bafa9de7fce07f60c59bfe": "owner"
+    "103e0c401ddb6a22f40870c8bc9019027bbc4e4ab2bafa9de7fce07f60c59bfe": "owner",
+    "32ada8e7ccdcffd25d95b9d73379320f4b54e0998924610c9160e3e674e99481": "owner"
   },
   "ekran_roller": {
     "backlog-senkron": "analist",

@@ -290,16 +290,19 @@ def _owner_konsol_aktif() -> bool:
 
 
 def _usage_yetkili_mi() -> bool:
-    """Kullanım (telemetri) dashboard'unu yalnız OWNER görür → owner konsol işaretine bağlı."""
-    return _owner_konsol_aktif()
+    """Kullanım (telemetri) dashboard'u yalnız OWNER'a görünür → ETKİN rol 'owner' ise açılır.
+    Bu; (a) owner-konsol işaretli makine (AUTH-off bootstrap), (b) Yetki ekranından 'owner' rolü
+    ATANMIŞ kişi kendi localinde (roller.json e-posta hash'iyle → YALNIZ o kişinin makinesinde),
+    (c) AUTH-sunucu ADMIN_USER. Atanmamış analist 'analist' rolündedir → GÖRMEZ. `_etkin_rol`
+    owner-konsol/admin'i zaten kapsar; AUTH-sunucuda lokal owner-konsol işaretini YOK SAYAR."""
+    return _etkin_rol() == "owner"
 
 
 def _yetki_paneli_mi() -> bool:
-    """Yetki ekranı (görünürlük yönetimi) yalnız OWNER kurulumunda görünür → owner konsol işareti.
-
-    Kendi bilgisayarına kuran analist AUTH kapalı olduğu için teknik olarak 'owner'dır; bu yüzden
-    rol yetmez, ayrı işaret gerekir (analistlerde yok)."""
-    return _owner_konsol_aktif()
+    """Yetki ekranı (görünürlük/rol yönetimi) yalnız OWNER'a görünür → ETKİN rol 'owner'
+    (owner-konsol işareti VEYA atanmış 'owner' rolü VEYA AUTH admin; bkz. _usage_yetkili_mi).
+    Kendi makinesine kuran ve owner rolü ATANMAMIŞ analist 'analist' rolündedir → görmez."""
+    return _etkin_rol() == "owner"
 
 
 def yetki_gerekli(fn):

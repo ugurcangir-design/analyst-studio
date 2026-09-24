@@ -202,9 +202,15 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   (gizli→'owner') > 'analist' (VARSAYILAN: hiçbir şey gizli değil — owner "Yalnız owner" atayana kadar). `_rol()` +
   `gorunurluk_kontrol` + `/api/auth/me.{rol,gizli,auth_aktif}` bunu kullanır → her istekte okunur, restart'sız.
   **UI `_rolUygula`:** `me.gizli` HER ZAMAN uygulanır; Yönetim grubunu wholesale gizleme YALNIZ AUTH-sunucu
-  analistinde (AUTH-off analist Ayarlar/Güncelleme/Jira Ayarları'na erişmeli — e-posta ZORUNLU). **Owner-console SINIRI korunur:**
-  e-posta ile "owner" rolü Yetki/Kullanım ekranlarını AÇMAZ (o hâlâ `owner_konsol.json` lokal işaretinde) —
-  yalnız normal ekran görünürlüğü. Uçlar (owner-gate `yetki_gerekli`): `GET /api/roller` (çekili kullanıcılar +
+  analistinde (AUTH-off analist Ayarlar/Güncelleme/Jira Ayarları'na erişmeli — e-posta ZORUNLU). **Owner-console = ETKİN
+  rol 'owner' (GÜNCELLENDİ):** Yetki ekranından **"owner" rolü ATANAN kişi kendi localinde** Kullanım Raporu + Yetki
+  ekranlarını GÖRÜR — `_usage_yetkili_mi()`/`_yetki_paneli_mi()` artık `_etkin_rol()=="owner"`'a bağlı (eskiden yalnız
+  `owner_konsol.json` bayrağıydı). `_etkin_rol` üç yolu kapsar: (a) owner-konsol işaretli makine (AUTH-off bootstrap —
+  ilk owner kendini açar), (b) roller.json'da e-posta hash'iyle 'owner' atanmış kişi (YALNIZ o makinede; roller.json
+  tracked ama hash per-user), (c) AUTH-sunucu ADMIN_USER. **Analist (atanmamış) 'analist' rolündedir → GÖRMEZ.** AUTH-sunucuda
+  lokal owner-konsol işareti YOK SAYILIR (`_etkin_rol` server dalı). Rol-YAZMA uçları (`/api/roller/*`) `yetki_gerekli`
+  (`_yetki_paneli_mi() and _owner_mi()`) — AUTH-off'ta owner rolü yeterli, AUTH-sunucuda admin şart. Test: `tests/test_roller.py`
+  (owner rolü bayraksız → Kullanım/Yetki açılır). Uçlar (owner-gate `yetki_gerekli`): `GET /api/roller` (çekili kullanıcılar +
   ekran-rolleri), `POST /api/roller/kullanici` (`{eposta, rol}` → hash→rol), `POST /api/roller/ekranlar`
   (`{ekran_roller}` topluca). UI: `screens/yetki.html` — "Kullanıcılar & Roller" (çekili isimler + rol dropdown,
   otomatik kayıt) + "Ekran Yetkileri" (her ekran → rol dropdown, Kaydet). `roller_yerel.json` KALDIRILDI
@@ -224,14 +230,16 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   Honor-system. Test: `tests/test_roller.py`.
   Yeni gizlenebilir ekran/aksiyon → `GIZLENEBILIR_KATALOG` (app.py). **Owner konsolu (Kullanım Raporu +
   Yetki ekranları) — kilit `.env`'de DEĞİL, gitignore'lu YEREL DOSYADA:** `_owner_konsol_aktif()` yalnız
-  `reference/owner_konsol.json` (`{"owner_konsol": true}`) okur; `_usage_yetkili_mi()` + `_yetki_paneli_mi()`
-  buna bağlı. Eski `OWNER_KONSOL`/`YETKI_PANELI`/`USAGE_DASHBOARD` env bayrakları **ARTIK OKUNMAZ** (analiste
+  `reference/owner_konsol.json` (`{"owner_konsol": true}`) okur — AUTH-off bootstrap işareti (ilk owner). `_usage_yetkili_mi()`
+  + `_yetki_paneli_mi()` artık `_etkin_rol()=="owner"`'a bağlı (owner-konsol işareti VEYA atanmış 'owner' rolü VEYA AUTH admin
+  → owner rolü verilen analist kendi localinde bu ekranları görür; bkz. yukarıdaki "Owner-console = ETKİN rol"). Eski `OWNER_KONSOL`/`YETKI_PANELI`/`USAGE_DASHBOARD` env bayrakları **ARTIK OKUNMAZ** (analiste
   kopyalanan owner `.env`'i bu ekranları açıyordu — kapatıldı). Dosya git'e gitmez, `.env` paylaşımıyla
   taşınmaz, `.example`'dan **false** seed edilir (`_runtime_config_seed`) → güncelleme sonrası owner
   HARİCİNDEKİ tüm agent'larda KAPALI. Owner kendi makinesinde dosyayı `true` yapar (tek seferlik; UI'da
   açığa çıkmaz). `auth/me.usage_admin`/`.yetki_admin` → `#nav-kullanim`/`#nav-yetki`; endpoint'ler
-  `usage_gerekli`/`yetki_gerekli` (403). Kendi makinesine kuran analist AUTH kapalıyken 'owner' rolündedir
-  ama işaret dosyası olmadığından bu ekranları GÖRMEZ.
+  `usage_gerekli`/`yetki_gerekli` (403). Kendi makinesine kuran analistin ETKİN rolü **atanmış rolüdür** (varsayılan
+  'analist' — `_etkin_rol` `_owner_mi`'ye DEĞİL roller.json'a bakar) → owner-konsol işareti YOKKEN + owner rolü ATANMAMIŞKEN
+  bu ekranları GÖRMEZ. Owner rolü atanınca (Yetki ekranı) GÖRÜR (yukarıdaki "Owner-console = ETKİN rol").
   **Otomatik güncelleme (2.5):** boot'ta `_oto_guncelleme_baslat()` — iş yokken `pull --ff-only` + restart;
   dirty tree / push edilmemiş commit varsa yalnız bildirir. `.env` `AUTO_UPDATE=false` kapatır,
   `AUTO_UPDATE_INTERVAL` (sn). Banner: `screens/_guncelleme.html`. `/api/update` elle akış aynen durur.
