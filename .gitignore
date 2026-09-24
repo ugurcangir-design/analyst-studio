@@ -82,6 +82,9 @@ reference/analiz_mcp.json
 reference/jira_kopru.json
 .mcp-analiz.json
 
+# Kullanım Raporu okuma anahtarı (SIR — ekip verisini çekme; app-sahibi paylaşır, kişi UI'dan girer)
+reference/usage_sink.json
+
 # Owner konsol kilidi (Kullanım Raporu + Yetki ekranları) — SADECE owner makinesinde true;
 # git'e gitmez, .env'e konmaz (kopyalanan .env sızmasın), .example'dan false seed edilir.
 reference/owner_konsol.json

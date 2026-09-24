@@ -126,8 +126,11 @@ GET  /api/usage/donem-detay?baslangic=YYYY-MM-DD&bitis=YYYY-MM-DD
                                      Owner-only drill-down: verilen tarih aralığı için analist×tür
                                      matrisi + günlük dağılım. Trend'de hafta/ay bloğuna tıklayınca
                                      günler, güne tıklayınca "o gün kim hangi işi yaptı" gösterir.
-POST /api/usage/pull               Owner-only. Uzak sink'ten (Apps Script GET, USAGE_SINK_KEY) ekip
+POST /api/usage/pull               Owner (ROL yeter). Uzak sink'ten (Apps Script GET, okuma anahtarı) ekip
                                      olaylarını çekip logs/usage/remote.jsonl'e yazar. Dönüş: {ok, mesaj}.
+GET  /api/usage/sink-key           Owner (rol). Okuma anahtarı ayarlı mı → {ok, has_key}. Ham anahtar DÖNMEZ.
+POST /api/usage/sink-key           Owner (rol). {key} → YEREL reference/usage_sink.json'a yazar (gitignore, 0600;
+                                     git'e girmez). app-sahibinden alınan anahtar → 'Uzaktan Çek' çalışır. Boş key siler.
 GET  /api/usage/export?gun=90      Owner-only. .xlsx: Analist Özeti + Tür Kırılımı + **Detay** sayfaları
                                      (Detay = her olay tek satır: tarih-saat, analist, işlem, doküman/proje,
                                      durum, süre, jira key, açıldı/güncellendi).

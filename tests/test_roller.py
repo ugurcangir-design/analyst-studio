@@ -86,14 +86,22 @@ telemetri.analist_yaz("Emin", "emin@example.com")
 app._roller_kaydet({app._eposta_hash("emin@example.com"): "analist"}, {"delta": "owner"})
 kontrol("analist e-postası → _etkin_rol analist", app._etkin_rol() == "analist")
 
-# ── Owner ROLÜ (owner-console bayrağı OLMADAN) Kullanım/Yetki ekranlarını AÇAR ──
-# (Yetki ekranından 'owner' rolü verilen kişi kendi localinde owner-only ekranları görür.)
+# ── Owner ROLÜ = OKUMA (Kullanım Raporu) · Yetki YÖNETİMİ yalnız app-sahibinde ──
+# Owner rolü verilen kişi raporları OKUR ama app-sahibinin rollerini/bilgisini DEĞİŞTİREMEZ.
 kontrol("analist rolü → Kullanım gizli", app._usage_yetkili_mi() is False)
-kontrol("analist rolü → Yetki paneli gizli", app._yetki_paneli_mi() is False)
+kontrol("analist rolü → Yetki yönetimi kapalı", app._yetki_paneli_mi() is False)
+kontrol("analist rolü → _super_owner_mi False", app._super_owner_mi() is False)
 app._roller_kaydet({app._eposta_hash("emin@example.com"): "owner"}, {"delta": "owner"})
 kontrol("owner rolü (bayraksız) → _etkin_rol owner", app._etkin_rol() == "owner")
-kontrol("owner rolü → Kullanım Raporu görünür", app._usage_yetkili_mi() is True)
-kontrol("owner rolü → Yetki ekranı görünür", app._yetki_paneli_mi() is True)
+kontrol("owner rolü → Kullanım Raporu OKUR (görünür)", app._usage_yetkili_mi() is True)
+kontrol("owner rolü → Yetki YÖNETİMİ app-sahibine özel (owner rolü yetmez)",
+        app._yetki_paneli_mi() is False)
+kontrol("owner rolü → _super_owner_mi False (yazamaz)", app._super_owner_mi() is False)
+# app-sahibi (owner_konsol işareti) → hem okur hem YÖNETİR
+app._owner_konsol_aktif = lambda: True
+kontrol("app-sahibi → _super_owner_mi True", app._super_owner_mi() is True)
+kontrol("app-sahibi → Yetki yönetimi açık", app._yetki_paneli_mi() is True)
+app._owner_konsol_aktif = lambda: False
 app._roller_kaydet({app._eposta_hash("emin@example.com"): "analist"}, {"delta": "owner"})   # geri
 
 # ── Telemetri isim çekme (benzersiz — remote + local birleşik) ────────────────

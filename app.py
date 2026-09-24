@@ -289,20 +289,30 @@ def _owner_konsol_aktif() -> bool:
     return False
 
 
+def _super_owner_mi() -> bool:
+    """UYGULAMA SAHİBİ (app-owner) — owner-YAZMA (rol atama, görünürlük yönetimi, owner config)
+    YALNIZ buna açıktır. 'Uygulama bana ait; benim yerime kimse değişiklik yapamaz' kuralı.
+    AUTH-off: `owner_konsol.json` yerel işareti (gerçek sahip KENDİ makinesinde tek seferlik açar).
+    AUTH-sunucu: ADMIN_USER. **Owner ROLÜ atanmış kişi (roller.json) bunu KARŞILAMAZ** → owner-only
+    ekranları görür / raporları OKUR ama app-sahibinin verisini/rollerini DEĞİŞTİREMEZ."""
+    if _auth_aktif_mi():
+        return _admin_mi()
+    return _owner_konsol_aktif()
+
+
 def _usage_yetkili_mi() -> bool:
-    """Kullanım (telemetri) dashboard'u yalnız OWNER'a görünür → ETKİN rol 'owner' ise açılır.
-    Bu; (a) owner-konsol işaretli makine (AUTH-off bootstrap), (b) Yetki ekranından 'owner' rolü
-    ATANMIŞ kişi kendi localinde (roller.json e-posta hash'iyle → YALNIZ o kişinin makinesinde),
-    (c) AUTH-sunucu ADMIN_USER. Atanmamış analist 'analist' rolündedir → GÖRMEZ. `_etkin_rol`
-    owner-konsol/admin'i zaten kapsar; AUTH-sunucuda lokal owner-konsol işaretini YOK SAYAR."""
+    """Kullanım (telemetri) dashboard'u — OKUMA yetkisi: ETKİN rol 'owner' ise açılır.
+    Bu; (a) owner-konsol işaretli makine (app-sahibi), (b) Yetki ekranından 'owner' rolü ATANMIŞ
+    kişi kendi localinde (roller.json e-posta hash'iyle → YALNIZ o kişinin makinesinde),
+    (c) AUTH-sunucu ADMIN_USER. Owner ROLÜ verilen analist raporu OKUR/ÇEKER (istenen davranış)."""
     return _etkin_rol() == "owner"
 
 
 def _yetki_paneli_mi() -> bool:
-    """Yetki ekranı (görünürlük/rol yönetimi) yalnız OWNER'a görünür → ETKİN rol 'owner'
-    (owner-konsol işareti VEYA atanmış 'owner' rolü VEYA AUTH admin; bkz. _usage_yetkili_mi).
-    Kendi makinesine kuran ve owner rolü ATANMAMIŞ analist 'analist' rolündedir → görmez."""
-    return _etkin_rol() == "owner"
+    """Yetki ekranı (rol/görünürlük YÖNETİMİ = YAZMA) — YALNIZ UYGULAMA SAHİBİ (app-owner).
+    Owner ROLÜ YETMEZ: owner rolü verilen kişi rolleri ya da app-sahibinin bilgisini DEĞİŞTİREMEZ;
+    yalnız app-sahibi (owner_konsol/AUTH admin) yazar. Kullanım OKUMASI için _usage_yetkili_mi ayrıdır."""
+    return _super_owner_mi()
 
 
 def yetki_gerekli(fn):
@@ -3118,8 +3128,9 @@ def auth_logout():
 @app.route("/api/auth/me", methods=["GET"])
 def auth_me():
     return jsonify({"username": session.get("username"), "is_admin": _admin_mi(),
-                    "usage_admin": _usage_yetkili_mi(),
-                    "yetki_admin": _yetki_paneli_mi() and _owner_mi(),
+                    "usage_admin": _usage_yetkili_mi(),          # Kullanım Raporu OKUMA (owner rolü yeter)
+                    "yetki_admin": _yetki_paneli_mi() and _owner_mi(),  # Yetki YÖNETİMİ (yalnız app-sahibi)
+                    "super_owner": _super_owner_mi(),            # uygulama sahibi mi (owner-yazma)
                     "rol": _rol(), "gizli": _etkin_gizli(), "auth_aktif": _auth_aktif_mi()})
 
 
@@ -3183,10 +3194,31 @@ def usage_donem_detay():
 @app.route("/api/usage/pull", methods=["POST"])
 @usage_gerekli
 def usage_pull():
-    """Owner-only: uzak sink'ten (Apps Script) ekip olaylarını çeker."""
+    """Owner (rol yeter): uzak sink'ten (Apps Script) ekip olaylarını çeker. Okuma anahtarı gerekir."""
     from skills import telemetri
     ok, mesaj = telemetri.uzaktan_cek()
     return jsonify({"ok": ok, "mesaj": mesaj})
+
+
+@app.route("/api/usage/sink-key", methods=["GET"])
+@usage_gerekli
+def usage_sink_key_durum():
+    """Okuma anahtarı ayarlı mı? Ham anahtar TARAYICIYA GÖNDERİLMEZ (yalnız has_key)."""
+    from skills import telemetri
+    return jsonify({"ok": True, "has_key": telemetri.okuma_anahtari_var_mi()})
+
+
+@app.route("/api/usage/sink-key", methods=["POST"])
+@usage_gerekli
+def usage_sink_key_kaydet():
+    """Ekip verisi çekme (okuma) anahtarını YEREL makineye kaydeder (gitignore'lu, 0600).
+    Owner rolü olan kişi app-sahibinden aldığı anahtarı kendi makinesine girer → 'Uzaktan Çek'
+    çalışır. Anahtar app-sahibinin verisini DEĞİŞTİRMEZ — yalnız bu makinede okuma sağlar."""
+    data = request.get_json(silent=True) or {}
+    key = (data.get("key") or "").strip()
+    from skills import telemetri
+    telemetri.okuma_anahtari_kaydet(key)
+    return jsonify({"ok": True, "has_key": telemetri.okuma_anahtari_var_mi()})
 
 
 @app.route("/api/usage/export", methods=["GET"])

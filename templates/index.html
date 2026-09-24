@@ -3151,6 +3151,15 @@ function temaDegistir() {
           <button class="btn btn-ghost btn-sm" onclick="kullanimYukle()">Yenile</button>
         </div>
         <div class="panel-body">
+          <!-- Ekip verisi okuma anahtarı — app-sahibinden alınır, YEREL kaydedilir (git'e girmez).
+               Ayarlı değilken "Uzaktan Çek" çalışmaz → yalnız bu makinenin kayıtları görünür. -->
+          <div id="ku-key-row" style="display:none;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:14px;padding:10px 13px;border:1px solid var(--border);background:var(--surface2);border-radius:9px;font-size:12.5px">
+            <svg class="ico" style="width:15px;height:15px;color:var(--accent);flex-shrink:0"><use href="#i-key"/></svg>
+            <span id="ku-key-durum" style="color:var(--text2)"></span>
+            <input type="password" id="ku-key-input" class="setting-input" placeholder="Okuma anahtarı (app-sahibinden alın)" autocomplete="off" style="flex:1;min-width:220px;max-width:420px">
+            <button class="btn btn-primary btn-sm" onclick="kullanimKeyKaydet()">Kaydet</button>
+            <span id="ku-key-msg" style="font-size:12px;width:100%"></span>
+          </div>
           <!-- Kontroller: dönem + analist + aralık -->
           <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px">
             <div>
@@ -4089,6 +4098,9 @@ function kuDonemSec(d) {
   kullanimYukle();
 }
 async function kullanimYukle() {
+  // Okuma anahtarı durumu + anahtar varsa ekip verisini BİR KEZ otomatik çek (rapor direkt dolsun).
+  await _kuKeyDurumYukle();
+  if (_kuKeyVar && !_kuAutoPullYapildi) { _kuAutoPullYapildi = true; await kullanimUzaktanCek(); return; }
   const gun = document.getElementById('ku-gun') ? document.getElementById('ku-gun').value : 90;
   const analist = document.getElementById('ku-analist-sec') ? document.getElementById('ku-analist-sec').value : '';
   const analistEl = document.getElementById('ku-analist');
@@ -4203,6 +4215,41 @@ async function kullanimUzaktanCek() {
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = eski || 'Uzaktan Çek'; }
   }
+}
+
+// Okuma anahtarı durumu + auto-pull: anahtar varsa ekip verisi otomatik çekilir (owner rolü → rapor DİREKT).
+let _kuKeyVar = null, _kuAutoPullYapildi = false;
+async function _kuKeyDurumYukle() {
+  const row = document.getElementById('ku-key-row'); if (!row) return;
+  try {
+    const d = await (await fetch('/api/usage/sink-key')).json();
+    if (!d.ok) { row.style.display = 'none'; return; }
+    _kuKeyVar = !!d.has_key;
+    row.style.display = 'flex';
+    const durum = document.getElementById('ku-key-durum');
+    durum.innerHTML = _kuKeyVar
+      ? '✓ Okuma anahtarı ayarlı — ekip verisi çekilebilir. <b>Değiştirmek</b> için yeni anahtar girin.'
+      : '⚠ Okuma anahtarı yok — yalnız <b>kendi kayıtlarınız</b> görünür. Ekip verisi için app-sahibinden aldığınız anahtarı girin.';
+    durum.style.color = _kuKeyVar ? 'var(--green)' : 'var(--yellow)';
+  } catch (e) { row.style.display = 'none'; }
+}
+async function kullanimKeyKaydet() {
+  const inp = document.getElementById('ku-key-input');
+  const msg = document.getElementById('ku-key-msg');
+  const key = (inp.value || '').trim();
+  if (!key) { msg.textContent = 'Anahtar boş.'; msg.style.color = 'var(--run)'; return; }
+  try {
+    const d = await (await fetch('/api/usage/sink-key', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key })
+    })).json();
+    if (d.ok && d.has_key) {
+      inp.value = ''; msg.textContent = '✓ Anahtar kaydedildi (yerel, git\'e girmez). Ekip verisi çekiliyor…';
+      msg.style.color = 'var(--green)';
+      _kuKeyVar = true; _kuAutoPullYapildi = true;
+      await kullanimUzaktanCek();   // hemen çek → rapor dolsun
+      await _kuKeyDurumYukle();
+    } else { msg.textContent = 'Kaydedilemedi.'; msg.style.color = 'var(--run)'; }
+  } catch (e) { msg.textContent = 'Bağlantı hatası.'; msg.style.color = 'var(--run)'; }
 }
 // ─── Rol uygulama (v2 Faz 2.4) ───────────────────────────────────────────────
 // Owner: her şey görünür (+ Kullanım sekmesi USAGE_DASHBOARD ile). Analist: Yönetim

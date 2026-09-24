@@ -202,15 +202,18 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   (gizli→'owner') > 'analist' (VARSAYILAN: hiçbir şey gizli değil — owner "Yalnız owner" atayana kadar). `_rol()` +
   `gorunurluk_kontrol` + `/api/auth/me.{rol,gizli,auth_aktif}` bunu kullanır → her istekte okunur, restart'sız.
   **UI `_rolUygula`:** `me.gizli` HER ZAMAN uygulanır; Yönetim grubunu wholesale gizleme YALNIZ AUTH-sunucu
-  analistinde (AUTH-off analist Ayarlar/Güncelleme/Jira Ayarları'na erişmeli — e-posta ZORUNLU). **Owner-console = ETKİN
-  rol 'owner' (GÜNCELLENDİ):** Yetki ekranından **"owner" rolü ATANAN kişi kendi localinde** Kullanım Raporu + Yetki
-  ekranlarını GÖRÜR — `_usage_yetkili_mi()`/`_yetki_paneli_mi()` artık `_etkin_rol()=="owner"`'a bağlı (eskiden yalnız
-  `owner_konsol.json` bayrağıydı). `_etkin_rol` üç yolu kapsar: (a) owner-konsol işaretli makine (AUTH-off bootstrap —
-  ilk owner kendini açar), (b) roller.json'da e-posta hash'iyle 'owner' atanmış kişi (YALNIZ o makinede; roller.json
-  tracked ama hash per-user), (c) AUTH-sunucu ADMIN_USER. **Analist (atanmamış) 'analist' rolündedir → GÖRMEZ.** AUTH-sunucuda
-  lokal owner-konsol işareti YOK SAYILIR (`_etkin_rol` server dalı). Rol-YAZMA uçları (`/api/roller/*`) `yetki_gerekli`
-  (`_yetki_paneli_mi() and _owner_mi()`) — AUTH-off'ta owner rolü yeterli, AUTH-sunucuda admin şart. Test: `tests/test_roller.py`
-  (owner rolü bayraksız → Kullanım/Yetki açılır). Uçlar (owner-gate `yetki_gerekli`): `GET /api/roller` (çekili kullanıcılar +
+  analistinde (AUTH-off analist Ayarlar/Güncelleme/Jira Ayarları'na erişmeli — e-posta ZORUNLU). **OKUMA vs YAZMA — app-sahibi
+  ile owner-ROLÜ ayrımı (KRİTİK, GÜNCELLENDİ):** 'Uygulama bana ait; benim yerime kimse değişiklik yapamaz' kuralı.
+  İki ayrı yetki: **(OKUMA)** `_usage_yetkili_mi() = _etkin_rol()=="owner"` → Yetki ekranından **owner rolü verilen kişi
+  kendi localinde Kullanım Raporu'nu GÖRÜR + ekip verisini ÇEKER** (rapor okuma). **(YAZMA/YÖNETİM)** `_yetki_paneli_mi()
+  = _super_owner_mi()` → rol atama / görünürlük / owner config YALNIZ **UYGULAMA SAHİBİNDE**. `_super_owner_mi()`:
+  AUTH-off → `owner_konsol.json` yerel işareti (gerçek sahip kendi makinesinde açar), AUTH-sunucu → ADMIN_USER.
+  **Owner ROLÜ atanmış kişi (Rozin) `_super_owner_mi`'yi KARŞILAMAZ** → Kullanım'ı okur ama app-sahibinin rollerini/
+  bilgisini DEĞİŞTİREMEZ; Yetki ekranı nav'ı ona görünmez (`me.yetki_admin=_super_owner_mi`). `_etkin_rol` (OKUMA için)
+  üç yol: (a) owner-konsol işaretli makine, (b) roller.json'da hash'le 'owner' atanan (per-user), (c) AUTH admin. Rol-YAZMA
+  uçları (`/api/roller/*`, `/api/gorunurluk` POST) `yetki_gerekli` (`_super_owner_mi`); GET okuma da app-sahibinde.
+  `/api/auth/me` alanları: `usage_admin` (OKUMA=owner rolü) · `yetki_admin`/`super_owner` (YAZMA=app-sahibi). Test:
+  `tests/test_roller.py` (owner rolü → Kullanım okur ama `_super_owner_mi` False; app-sahibi owner_konsol → yönetir). Uçlar (owner-gate `yetki_gerekli`): `GET /api/roller` (çekili kullanıcılar +
   ekran-rolleri), `POST /api/roller/kullanici` (`{eposta, rol}` → hash→rol), `POST /api/roller/ekranlar`
   (`{ekran_roller}` topluca). UI: `screens/yetki.html` — "Kullanıcılar & Roller" (çekili isimler + rol dropdown,
   otomatik kayıt) + "Ekran Yetkileri" (her ekran → rol dropdown, Kaydet). `roller_yerel.json` KALDIRILDI
@@ -230,9 +233,14 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   Honor-system. Test: `tests/test_roller.py`.
   Yeni gizlenebilir ekran/aksiyon → `GIZLENEBILIR_KATALOG` (app.py). **Owner konsolu (Kullanım Raporu +
   Yetki ekranları) — kilit `.env`'de DEĞİL, gitignore'lu YEREL DOSYADA:** `_owner_konsol_aktif()` yalnız
-  `reference/owner_konsol.json` (`{"owner_konsol": true}`) okur — AUTH-off bootstrap işareti (ilk owner). `_usage_yetkili_mi()`
-  + `_yetki_paneli_mi()` artık `_etkin_rol()=="owner"`'a bağlı (owner-konsol işareti VEYA atanmış 'owner' rolü VEYA AUTH admin
-  → owner rolü verilen analist kendi localinde bu ekranları görür; bkz. yukarıdaki "Owner-console = ETKİN rol"). Eski `OWNER_KONSOL`/`YETKI_PANELI`/`USAGE_DASHBOARD` env bayrakları **ARTIK OKUNMAZ** (analiste
+  `reference/owner_konsol.json` (`{"owner_konsol": true}`) okur — AUTH-off app-sahibi işareti (`_super_owner_mi`'nin
+  temeli). **OKUMA/YAZMA ayrımı:** `_usage_yetkili_mi()`=`_etkin_rol()=="owner"` (Kullanım OKUMA — owner rolü yeter) ·
+  `_yetki_paneli_mi()`=`_super_owner_mi()` (Yetki YÖNETİMİ — yalnız app-sahibi). **Ekip verisi ÇEKME anahtarı (SIR):**
+  `USAGE_SINK_KEY` env VEYA yerel `reference/usage_sink.json` (gitignore, 0600 — git'e GİRMEZ). `telemetri._sink_key()`
+  ikisini de okur; `okuma_anahtari_kaydet/var_mi` + `GET/POST /api/usage/sink-key` (owner rolü — kişi app-sahibinden
+  aldığı anahtarı KENDİ makinesine girer → 'Uzaktan Çek' çalışır; Google Drive erişimi GEREKMEZ, sink app-sahibi adına
+  okur). Ham anahtar tarayıcıya DÖNMEZ (yalnız `has_key`). UI: Kullanım Raporu'nda "Okuma anahtarı" alanı + anahtar
+  varsa ekranı açınca ekip verisi OTOMATİK çekilir (`_kuKeyDurumYukle`/`_kuAutoPullYapildi`). Eski `OWNER_KONSOL`/`YETKI_PANELI`/`USAGE_DASHBOARD` env bayrakları **ARTIK OKUNMAZ** (analiste
   kopyalanan owner `.env`'i bu ekranları açıyordu — kapatıldı). Dosya git'e gitmez, `.env` paylaşımıyla
   taşınmaz, `.example`'dan **false** seed edilir (`_runtime_config_seed`) → güncelleme sonrası owner
   HARİCİNDEKİ tüm agent'larda KAPALI. Owner kendi makinesinde dosyayı `true` yapar (tek seferlik; UI'da

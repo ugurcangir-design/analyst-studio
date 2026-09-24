@@ -236,6 +236,14 @@ kontrol("gorunurluk katalog: 'kopru' (Jira Köprüsü) analiste kapatılabilir",
 kontrol("gorunurluk katalog: tüm ekran id'leri gerçek ('endpoints' dolu)",
         all(k.get("endpoints") for k in g.get("katalog", [])))
 kontrol("owner konsol açık → auth/me yetki_admin=true", json_al(istemci.get("/api/auth/me")).get("yetki_admin") is True)
+# Owner rolü OKUMA / app-sahibi YAZMA ayrımı: super_owner (owner_konsol açık) → auth/me
+_me = json_al(istemci.get("/api/auth/me"))
+kontrol("auth/me super_owner alanı var", "super_owner" in _me)
+kontrol("owner konsol açık → super_owner=true + usage_admin=true",
+        _me.get("super_owner") is True and _me.get("usage_admin") is True)
+# Kullanım okuma anahtarı durumu (salt-okuma; dosyaya yazmaz) — has_key bool döner
+_sk = json_al(istemci.get("/api/usage/sink-key"))
+kontrol("usage/sink-key GET ok + has_key bool", _sk.get("ok") is True and isinstance(_sk.get("has_key"), bool))
 # GÜVENLİK: kopyalanan .env'deki eski OWNER_KONSOL/YETKI_PANELI env bayrakları ARTIK OKUNMAZ.
 # Gerçek _owner_konsol_aktif'i, işaret dosyası YOKKEN env set ederek dene → yine False olmalı.
 import pathlib  # noqa: E402

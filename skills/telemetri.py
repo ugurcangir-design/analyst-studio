@@ -36,6 +36,47 @@ def _sink_url() -> str:
     return os.getenv("USAGE_SINK_URL", "").strip() or VARSAYILAN_SINK_URL
 
 
+# Ekip verisini ÇEKME (okuma) anahtarı — SIR. app-sahibi bunu bir kez owner rolü verdiği kişilerle
+# paylaşır; kişi UI'dan KENDİ makinesine girer → 'Uzaktan Çek' çalışır. Google Drive erişimi GEREKMEZ
+# (sink app-sahibi adına okur). Yerel dosya gitignore'lu (git'e GİRMEZ) — sır asla repoya taşınmaz.
+OKUMA_ANAHTARI_DOSYA = BASE_DIR / "reference" / "usage_sink.json"
+
+
+def _sink_key() -> str:
+    """Okuma anahtarı — öncelik: env `USAGE_SINK_KEY` > yerel `reference/usage_sink.json` ({"key":…})."""
+    k = os.getenv("USAGE_SINK_KEY", "").strip()
+    if k:
+        return k
+    try:
+        if OKUMA_ANAHTARI_DOSYA.exists():
+            return str(json.loads(OKUMA_ANAHTARI_DOSYA.read_text(encoding="utf-8")).get("key", "")).strip()
+    except Exception:
+        pass
+    return ""
+
+
+def okuma_anahtari_var_mi() -> bool:
+    """Ekip verisi çekmek için okuma anahtarı ayarlı mı (env ya da yerel dosya)?"""
+    return bool(_sink_key())
+
+
+def okuma_anahtari_kaydet(key: str) -> None:
+    """Okuma anahtarını YEREL gitignore'lu dosyaya yazar (0600; git'e GİRMEZ). Boş → dosyayı siler."""
+    key = (key or "").strip()
+    OKUMA_ANAHTARI_DOSYA.parent.mkdir(parents=True, exist_ok=True)
+    if not key:
+        try:
+            OKUMA_ANAHTARI_DOSYA.unlink()
+        except FileNotFoundError:
+            pass
+        return
+    OKUMA_ANAHTARI_DOSYA.write_text(json.dumps({"key": key}, ensure_ascii=False), encoding="utf-8")
+    try:
+        os.chmod(OKUMA_ANAHTARI_DOSYA, 0o600)
+    except Exception:
+        pass
+
+
 def analist_kimlik_oku() -> dict:
     """UI'dan kaydedilen analist kimliği: {ad_soyad, eposta}. Yoksa boş dizeler.
     analist.json YEREL + gitignore → ham e-posta git'e ASLA girmez."""
@@ -458,9 +499,11 @@ def uzaktan_cek() -> tuple[bool, str]:
     USAGE_SINK_URL + USAGE_SINK_KEY gerektirir. Apps Script ?read=<key> ile JSON dizi döndürür.
     """
     url = _sink_url()
-    key = os.getenv("USAGE_SINK_KEY", "").strip()
+    key = _sink_key()
     if not url:
         return False, "USAGE_SINK_URL tanımlı değil."
+    if not key:
+        return False, "Okuma anahtarı yok. Kullanım Raporu'nda 'Okuma anahtarı' alanına girin (app-sahibinden alın)."
     try:
         import requests
         r = requests.get(url, params={"read": key}, timeout=15)
