@@ -235,12 +235,15 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   Yetki ekranları) — kilit `.env`'de DEĞİL, gitignore'lu YEREL DOSYADA:** `_owner_konsol_aktif()` yalnız
   `reference/owner_konsol.json` (`{"owner_konsol": true}`) okur — AUTH-off app-sahibi işareti (`_super_owner_mi`'nin
   temeli). **OKUMA/YAZMA ayrımı:** `_usage_yetkili_mi()`=`_etkin_rol()=="owner"` (Kullanım OKUMA — owner rolü yeter) ·
-  `_yetki_paneli_mi()`=`_super_owner_mi()` (Yetki YÖNETİMİ — yalnız app-sahibi). **Ekip verisi ÇEKME anahtarı (SIR):**
-  `USAGE_SINK_KEY` env VEYA yerel `reference/usage_sink.json` (gitignore, 0600 — git'e GİRMEZ). `telemetri._sink_key()`
-  ikisini de okur; `okuma_anahtari_kaydet/var_mi` + `GET/POST /api/usage/sink-key` (owner rolü — kişi app-sahibinden
-  aldığı anahtarı KENDİ makinesine girer → 'Uzaktan Çek' çalışır; Google Drive erişimi GEREKMEZ, sink app-sahibi adına
-  okur). Ham anahtar tarayıcıya DÖNMEZ (yalnız `has_key`). UI: Kullanım Raporu'nda "Okuma anahtarı" alanı + anahtar
-  varsa ekranı açınca ekip verisi OTOMATİK çekilir (`_kuKeyDurumYukle`/`_kuAutoPullYapildi`). Eski `OWNER_KONSOL`/`YETKI_PANELI`/`USAGE_DASHBOARD` env bayrakları **ARTIK OKUNMAZ** (analiste
+  `_yetki_paneli_mi()`=`_super_owner_mi()` (Yetki YÖNETİMİ — yalnız app-sahibi). **Ekip verisi ÇEKME — SUNUCU-TARAFI E-POSTA KAPISI (birincil):**
+  `uzaktan_cek` istemcide SIR TUTMAZ → kullanıcının şirket e-postasını (`analist_eposta_oku`) `?email=` ile sink'e
+  geçer; **Apps Script yalnız OWNER e-posta listesindekilere veri döndürür** → anahtar dağıtımı YOK (güncelleme ile
+  otomatik), yalnız owner okur (sunucu-taraf zorlama). Owner e-posta listesi Google Sheet'te bir tab'da tutulur
+  (app-sahibi ekler). **Geri uyum:** okuma anahtarı (env `USAGE_SINK_KEY` VEYA yerel `reference/usage_sink.json`,
+  gitignore/0600) varsa `?read=<key>` de gönderilir → eski Apps Script (e-posta kapısı eklenmemiş) owner'da çalışır.
+  `telemetri._sink_key()` env+dosyayı okur; `GET/POST /api/usage/sink-key` (owner rolü) opsiyonel/eski yöntem. UI:
+  Kullanım Raporu açılınca ekip verisi OTOMATİK çekilir (`_kuAutoPullYapildi`, anahtar GEREKMEZ); "Okuma anahtarı"
+  alanı opsiyonel (eski yöntem). Yetkisizde çekme `⚠ e-postanız owner listesinde değil` mesajı döner (başlıkta kalıcı). Eski `OWNER_KONSOL`/`YETKI_PANELI`/`USAGE_DASHBOARD` env bayrakları **ARTIK OKUNMAZ** (analiste
   kopyalanan owner `.env`'i bu ekranları açıyordu — kapatıldı). Dosya git'e gitmez, `.env` paylaşımıyla
   taşınmaz, `.example`'dan **false** seed edilir (`_runtime_config_seed`) → güncelleme sonrası owner
   HARİCİNDEKİ tüm agent'larda KAPALI. Owner kendi makinesinde dosyayı `true` yapar (tek seferlik; UI'da

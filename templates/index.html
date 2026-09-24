@@ -3156,7 +3156,7 @@ function temaDegistir() {
           <div id="ku-key-row" style="display:none;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:14px;padding:10px 13px;border:1px solid var(--border);background:var(--surface2);border-radius:9px;font-size:12.5px">
             <svg class="ico" style="width:15px;height:15px;color:var(--accent);flex-shrink:0"><use href="#i-key"/></svg>
             <span id="ku-key-durum" style="color:var(--text2)"></span>
-            <input type="password" id="ku-key-input" class="setting-input" placeholder="Okuma anahtarı (app-sahibinden alın)" autocomplete="off" style="flex:1;min-width:220px;max-width:420px">
+            <input type="password" id="ku-key-input" class="setting-input" placeholder="Okuma anahtarı (opsiyonel — eski yöntem)" autocomplete="off" style="flex:1;min-width:220px;max-width:420px">
             <button class="btn btn-primary btn-sm" onclick="kullanimKeyKaydet()">Kaydet</button>
             <span id="ku-key-msg" style="font-size:12px;width:100%"></span>
           </div>
@@ -4098,9 +4098,10 @@ function kuDonemSec(d) {
   kullanimYukle();
 }
 async function kullanimYukle() {
-  // Okuma anahtarı durumu + anahtar varsa ekip verisini BİR KEZ otomatik çek (rapor direkt dolsun).
+  // Ekip verisini ekran açılınca BİR KEZ otomatik çek (e-posta kapısı — anahtar gerekmez;
+  // owner-rolü zaten bu ekranı görüyor). Backend e-posta/anahtar ile yetkilendirir.
   await _kuKeyDurumYukle();
-  if (_kuKeyVar && !_kuAutoPullYapildi) { _kuAutoPullYapildi = true; await kullanimUzaktanCek(); return; }
+  if (!_kuAutoPullYapildi) { _kuAutoPullYapildi = true; await kullanimUzaktanCek(); return; }
   const gun = document.getElementById('ku-gun') ? document.getElementById('ku-gun').value : 90;
   const analist = document.getElementById('ku-analist-sec') ? document.getElementById('ku-analist-sec').value : '';
   const analistEl = document.getElementById('ku-analist');
@@ -4201,16 +4202,7 @@ function kullanimExcel() {
   window.location = '/api/usage/export?gun=' + gun;
 }
 async function kullanimUzaktanCek() {
-  // Anahtar yoksa çekme çalışmaz → sessizce başarısız olma; anahtar alanına yönlendir.
-  if (_kuKeyVar === null) await _kuKeyDurumYukle();
-  if (_kuKeyVar === false) {
-    const inp = document.getElementById('ku-key-input');
-    const km = document.getElementById('ku-key-msg');
-    if (km) { km.textContent = '⚠ Önce OKUMA ANAHTARINI girip Kaydet\'e basın (app-sahibinden alın) — ekip verisi ancak o zaman gelir.'; km.style.color = 'var(--yellow)'; }
-    if (inp) { try { inp.scrollIntoView({ block: 'center', behavior: 'smooth' }); inp.focus(); } catch (e) {} }
-    if (typeof toast === 'function') toast('warn', 'Okuma anahtarı gerekli', 'Ekip verisi için anahtar girin.');
-    return;
-  }
+  // E-posta kapısı: anahtar gerekmez; backend şirket e-postanı sink'e geçirir, owner listesindeyse veri döner.
   const btn = document.getElementById('ku-cek-btn');
   const eski = btn ? btn.innerHTML : '';
   const durumEl = document.getElementById('ku-son-guncelleme');
@@ -4242,9 +4234,9 @@ async function _kuKeyDurumYukle() {
     row.style.display = 'flex';
     const durum = document.getElementById('ku-key-durum');
     durum.innerHTML = _kuKeyVar
-      ? '✓ Okuma anahtarı ayarlı — ekip verisi çekilebilir. <b>Değiştirmek</b> için yeni anahtar girin.'
-      : '⚠ Okuma anahtarı yok — yalnız <b>kendi kayıtlarınız</b> görünür. Ekip verisi için app-sahibinden aldığınız anahtarı girin.';
-    durum.style.color = _kuKeyVar ? 'var(--green)' : 'var(--yellow)';
+      ? '✓ Okuma anahtarı ayarlı (opsiyonel/eski yöntem).'
+      : 'Ekip verisi <b>şirket e-postanızın yetkisiyle otomatik</b> gelir. Okuma anahtarı <b>opsiyoneldir</b> (yalnız e-posta kapısı yoksa gerekir).';
+    durum.style.color = 'var(--text2)';
   } catch (e) { row.style.display = 'none'; }
 }
 async function kullanimKeyKaydet() {

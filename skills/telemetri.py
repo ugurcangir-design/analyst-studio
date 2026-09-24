@@ -494,22 +494,40 @@ def donem_detay(baslangic: str, bitis: str) -> dict:
 
 
 def uzaktan_cek() -> tuple[bool, str]:
-    """Owner: uzak sink'ten (Apps Script GET) ekip olaylarını çekip remote.jsonl'e yazar.
+    """Owner (rol): uzak sink'ten (Apps Script GET) ekip olaylarını çekip remote.jsonl'e yazar.
 
-    USAGE_SINK_URL + USAGE_SINK_KEY gerektirir. Apps Script ?read=<key> ile JSON dizi döndürür.
+    **SUNUCU-TARAFI E-POSTA KAPISI (birincil):** istemcide SIR/anahtar TUTULMAZ — kullanıcının
+    şirket e-postası (`analist_eposta_oku`) `?email=` ile sink'e geçer; Apps Script yalnız
+    OWNER e-posta listesindekilere veri döndürür → güncelleme ile otomatik gelir, yalnız owner okur.
+    **Geri uyum:** okuma anahtarı (env/yerel) varsa `?read=<key>` de gönderilir → eski Apps Script
+    (e-posta kapısı henüz eklenmemiş) owner'da çalışmaya devam eder.
     """
     url = _sink_url()
     key = _sink_key()
+    eposta = ""
+    try:
+        eposta = (analist_eposta_oku() or "").strip()
+    except Exception:
+        pass
     if not url:
         return False, "USAGE_SINK_URL tanımlı değil."
-    if not key:
-        return False, "Okuma anahtarı yok. Kullanım Raporu'nda 'Okuma anahtarı' alanına girin (app-sahibinden alın)."
+    if not key and not eposta:
+        return False, "Kimlik yok — Ayarlar'dan şirket e-postanızı girin (owner listesinde olmalı)."
     try:
         import requests
-        r = requests.get(url, params={"read": key}, timeout=15)
+        params: dict = {}
+        if eposta:
+            params["email"] = eposta        # sunucu-tarafı e-posta kapısı (birincil)
+        if key:
+            params["read"] = key            # geri uyum: eski anahtar yolu
+        r = requests.get(url, params=params, timeout=15)
         veri = r.json()
         if not isinstance(veri, list):
-            return False, "Beklenmeyen yanıt (liste değil)."
+            # Apps Script yetkisizde liste yerine {error:...} döndürebilir
+            mesaj = ""
+            if isinstance(veri, dict):
+                mesaj = str(veri.get("error") or veri.get("message") or "")
+            return False, (mesaj or "Yetki yok: e-postanız owner listesinde değil (app-sahibinden ekletin).")
         USAGE_DIR.mkdir(parents=True, exist_ok=True)
         with open(UZAK_DOSYA, "w", encoding="utf-8") as f:
             for e in veri:
