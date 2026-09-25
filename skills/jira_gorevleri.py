@@ -147,6 +147,24 @@ def _katman_tahmin(metin: str) -> str:
     return "belirsiz"
 
 
+# Hata/bug + basit-iş sinyalleri → çıktı KISA-NET tutulur (gereksiz servis/DB/öneri dökümü YOK).
+_HATA_TIP_DESEN = re.compile(r"(bug|hata|sorun|defect|problem|ar[ıi]za)", re.IGNORECASE)
+_HATA_KELIME_DESEN = re.compile(
+    r"(hata|bug|fix|d[üu]zelt|\bçal[ıi]şm|calism|patl[ıi]yor|k[ıi]r[ıi]k|bozuk|yanl[ıi]ş|"
+    r"g[öo]r[üu]nm[üu]yor|a[çc][ıi]lm[ıi]yor|\beksik\b|takl[ıi]yor|donuyor|\bçöküyor|cokuyor)",
+    re.IGNORECASE)
+
+
+def _hata_gorev_mi(gorev: dict) -> bool:
+    """Görev bir HATA/BUG ya da küçük düzeltme mi? issuetype veya başlık sinyaliyle.
+    True → analiz çıktısı KISA-NET tutulur (bug modu). Yalnızca ipucu; içeriği AI değerlendirir."""
+    tip = (gorev.get("type") or "")
+    baslik = (gorev.get("summary") or "")
+    if _HATA_TIP_DESEN.search(tip):
+        return True
+    return bool(_HATA_KELIME_DESEN.search(baslik))
+
+
 def _issuelink_ayikla(issuelinks: list) -> list[dict]:
     """Jira `issuelinks` alanını sade bağlı-task listesine çevirir.
     Her link'in in/out tarafındaki issue'yu, ilişki metnini ve kaba katman
@@ -856,6 +874,23 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
                   "BE'nin FE'ye SUNACAĞI endpoint/alan/yanıt sözleşmesi (method/path, istek/yanıt alanları, "
                   "durum kodları) ve hangi FE task'ının tükettiği. FE'nin nasıl render edeceğini YAZMA.")
                if iliskili else "Karşı katman işini bu analize KATMA.")
+        )})
+    # HATA/BASİT İŞ MODU — çıktıyı işin boyutuna göre ÖLÇEKLE. Küçük iş, task'ta büyük iş gibi durmasın.
+    if _hata_gorev_mi(gorev):
+        print("  🐞 Hata/basit iş algılandı — analiz KISA-NET tutulacak (bug modu).")
+        icerik.append({"type": "text", "text": (
+            "### ÇIKTI MODU: HATA / BASİT İŞ — KISA ve NET (KRİTİK)\n"
+            "Bu bir HATA/bug ya da küçük düzeltme. Geliştiriciye SORUNU ve NE YAPILACAĞINI net-yalın ilet; "
+            "task'ı gereksiz büyük GÖSTERME. KURALLAR:\n"
+            "- **YALNIZCA şu kısa başlıklar** (dokunulmayanı hiç açma): `## Sorun` (net: ne yanlış, nerede/hangi "
+            "ekran-akış, gerekiyorsa 1 tekrar-adımı) · `## Çözüm` (somut ne yapılmalı — 2-6 madde) · "
+            "(gerçekten gerekiyorsa) `## Kabul Kriterleri` (1-3 madde).\n"
+            "- Şablonun 11 bölümünü AÇMA; İş Gereksinimleri/DB/API/Frontend/Rol/Teknik Borç başlıklarını "
+            "YALNIZ hatanın çözümü DOĞRUDAN oradaysa ve KISA yaz — yoksa hiç ekleme.\n"
+            "- Gereksiz servis/endpoint/network DÖKÜMÜ, arka plan anlatımı, 'şöyle de yapılabilir' ÖNERİLERİ, "
+            "alternatif akışlar YAZMA. Yalnız çözüm için ZORUNLU olan tek endpoint/alan varsa onu ver.\n"
+            "- Hedef: geliştirici 20 saniyede okuyup ne yapacağını anlasın. Doğruluk/kaynak-etiketi kuralları "
+            "yine geçerli ama KISA."
         )})
     icerik.append(
         {"type": "text", "text": "Bu görev için teknik analiz raporunu üret (açık sorular HARİÇ — onlar ayrı adımda üretilecek)."}
