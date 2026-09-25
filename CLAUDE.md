@@ -243,7 +243,20 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   gitignore/0600) varsa `?read=<key>` de gönderilir → eski Apps Script (e-posta kapısı eklenmemiş) owner'da çalışır.
   `telemetri._sink_key()` env+dosyayı okur; `GET/POST /api/usage/sink-key` (owner rolü) opsiyonel/eski yöntem. UI:
   Kullanım Raporu açılınca ekip verisi OTOMATİK çekilir (`_kuAutoPullYapildi`, anahtar GEREKMEZ); "Okuma anahtarı"
-  alanı opsiyonel (eski yöntem). Yetkisizde çekme `⚠ e-postanız owner listesinde değil` mesajı döner (başlıkta kalıcı). Eski `OWNER_KONSOL`/`YETKI_PANELI`/`USAGE_DASHBOARD` env bayrakları **ARTIK OKUNMAZ** (analiste
+  alanı opsiyonel (eski yöntem). Yetkisizde çekme `⚠ e-postanız owner listesinde değil` mesajı döner (başlıkta kalıcı).
+- **Onaylı Analiz Örnek Havuzu (few-shot eğitimi — `skills/ornek_havuzu.py`):** Analist bir analizi ONAYLAYINCA
+  (`/api/approve` süreç · `/api/approve-teknik(-no-jira)` teknik → `app._ornek_yakala` arka planda, best-effort)
+  onaylı çıktı bir "örnek" olur: (1) YEREL `reference/ornekler/<tip>_<id>.json`'a (gitignore) yazılır, (2) merkezi
+  sink'e `olay='ornek'` + İÇERİK olarak push edilir (kullanım raporundaki telemetri sink'i; **bu, analiz içeriğini
+  merkeze taşır — app-sahibi bilinçli kararı**). `ornekleri_cek()` ('Uzaktan Çek' benzeri; günlük referans oto-sync'e
+  + `POST /api/ornekler/cek`'e bağlı) sink'ten `?ornekler=1&email=` ile (owner e-posta kapısı) tüm ekip örneklerini
+  yerel havuza indirir. **Few-shot:** `ornek_bloklari(sorgu, tip, n=2)` mevcut girdiye EN ALAKALI örnekleri BM25
+  (`retrieval.BM25`) ile seçip süreç/teknik prompt'una "ONAYLI ÖRNEK ANALİZ — stil/derinlik referansı" bloğu olarak
+  enjekte eder (`surec_analizi_yap`/`teknik_analiz_yap`). `[K:]` etiketleri temizlenir; örnek başına ≤45k (Sheet
+  hücre limiti). Kürasyon: `GET /api/ornekler` (owner liste) + `POST /api/ornekler/sil` (owner). Havuz ≤80 (en yeni).
+  **NOT:** merkezi paylaşım için Apps Script'e `olay=='ornek'` → 'Ornekler' tab + `?ornekler=1` okuma eklenmeli
+  (owner e-posta kapısıyla aynı); eklenmeden YEREL few-shot yine çalışır (herkes kendi onaylı analizinden öğrenir).
+  Test: `smoke_test` (liste/sil deterministik uçlar). Eski `OWNER_KONSOL`/`YETKI_PANELI`/`USAGE_DASHBOARD` env bayrakları **ARTIK OKUNMAZ** (analiste
   kopyalanan owner `.env`'i bu ekranları açıyordu — kapatıldı). Dosya git'e gitmez, `.env` paylaşımıyla
   taşınmaz, `.example`'dan **false** seed edilir (`_runtime_config_seed`) → güncelleme sonrası owner
   HARİCİNDEKİ tüm agent'larda KAPALI. Owner kendi makinesinde dosyayı `true` yapar (tek seferlik; UI'da
@@ -446,7 +459,7 @@ sıfırlanma saati `/api/cli/durum` header göstergesinde görünür (`cli_durum
 
 ## Klasör yapısı
 - `app.py` Flask sunucu (~86 endpoint) · `run.py` orchestrator (subprocess) · `workflow.py` durum makinesi · `jira_agent.py` Jira OAuth+ADF
-- `skills/` iş mantığı (`agent.py` = import bridge): `base.py` (sabitler/RAG/`_api_cagri`/promptlar), `atlassian.py` (**CANONICAL** OAuth helper), `surec_analizi` `teknik_analiz` `sohbet_analiz` (**İnteraktif Analiz** — doküman yüklemeden SOHBETLE süreç/teknik; aşağı bak) `delta_analizi` `brd_analizi` `kapsam_analizi` `jira_tasks` `jira_gorevleri` `backlog_senkron` (**UAT Mutabakat** — 0-token deterministik) `jira_fe_be` (**FE/BE düz Task bölme** — teknik analiz → görev(Task) tipinde ayrı FE ve BE task'ları + ilişkili BE→FE **Blocks** bağı; aşağı bak) `confluence_yaz` `html_mockup` (canlı-app baz'lı prototip + sohbetle düzeltme) `sorular` `telemetri` (**Kullanım İzleme** + token/maliyet kaydı; owner-gate **`reference/owner_konsol.json`** işaret dosyası — `_owner_konsol_aktif`, env DEĞİL; `_sink_gonder` SENKRON; çift-sayım önleme `remote.jsonl`) `hatalar` `disk_temizlik` `bildirim` (**yerel masaüstü bildirimi** — osascript, 0 token; aşağı bak) `jira_kopru` (**Jira Köprüsü** — Jira'yı web-chat gibi kullan; aşağı bak) `kod_kaynagi` `etki_analizi` `retrieval` `analiz_mcp`. **Modül sorumlulukları + telemetri/backlog/mockup tam ayrıntı → `docs/MIMARI.md`.**
+- `skills/` iş mantığı (`agent.py` = import bridge): `base.py` (sabitler/RAG/`_api_cagri`/promptlar), `atlassian.py` (**CANONICAL** OAuth helper), `surec_analizi` `teknik_analiz` `sohbet_analiz` (**İnteraktif Analiz** — doküman yüklemeden SOHBETLE süreç/teknik; aşağı bak) `delta_analizi` `brd_analizi` `kapsam_analizi` `jira_tasks` `jira_gorevleri` `backlog_senkron` (**UAT Mutabakat** — 0-token deterministik) `jira_fe_be` (**FE/BE düz Task bölme** — teknik analiz → görev(Task) tipinde ayrı FE ve BE task'ları + ilişkili BE→FE **Blocks** bağı; aşağı bak) `confluence_yaz` `html_mockup` (canlı-app baz'lı prototip + sohbetle düzeltme) `sorular` `telemetri` (**Kullanım İzleme** + token/maliyet kaydı; owner-gate **`reference/owner_konsol.json`** işaret dosyası — `_owner_konsol_aktif`, env DEĞİL; `_sink_gonder` SENKRON; çift-sayım önleme `remote.jsonl`) `ornek_havuzu` (**Onaylı Analiz Örnek Havuzu** — few-shot eğitimi: onaylı analizler → yerel+sink → en alakalı örnek prompt'a; aşağı bak) `hatalar` `disk_temizlik` `bildirim` (**yerel masaüstü bildirimi** — osascript, 0 token; aşağı bak) `jira_kopru` (**Jira Köprüsü** — Jira'yı web-chat gibi kullan; aşağı bak) `kod_kaynagi` `etki_analizi` `retrieval` `analiz_mcp`. **Modül sorumlulukları + telemetri/backlog/mockup tam ayrıntı → `docs/MIMARI.md`.**
 - `templates/index.html` SPA · `reference/` RAG kaynakları (Atlassian sync) · `output/ input/ history/ logs/` runtime · `backlog/` UAT Mutabakat üretilen .xlsx raporları (gitignore) · `docs/` detaylı referans
 - **Bağımlılıklar** (`requirements.txt`): Flask, anthropic, requests, python-dotenv, PyMuPDF, Pillow, python-docx, ruff + **openpyxl** (UAT Mutabakat .xlsx rapor yazımı). `lxml` hâlâ kurulu (genel kullanım).
 - `reference/live-app` Claude MCP/Chrome ekran+network gözlem çıktıları içindir (gitignore); bağlam filtresinde ana URL + 5 alt URL ve "Örnek ekran olarak kullan" seçeneği süreç/teknik analize canlı uygulama görevi olarak eklenir.

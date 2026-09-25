@@ -244,6 +244,11 @@ kontrol("owner konsol açık → super_owner=true + usage_admin=true",
 # Kullanım okuma anahtarı durumu (salt-okuma; dosyaya yazmaz) — has_key bool döner
 _sk = json_al(istemci.get("/api/usage/sink-key"))
 kontrol("usage/sink-key GET ok + has_key bool", _sk.get("ok") is True and isinstance(_sk.get("has_key"), bool))
+# Örnek havuzu (few-shot) — deterministik uçlar (ağa gitmez)
+_ol = json_al(istemci.get("/api/ornekler"))
+kontrol("ornekler GET ok + liste", _ol.get("ok") is True and isinstance(_ol.get("ornekler"), list))
+kontrol("ornekler/sil id yok → 400",
+        istemci.post("/api/ornekler/sil", json={}, headers=ORIGIN).status_code == 400)
 # GÜVENLİK: kopyalanan .env'deki eski OWNER_KONSOL/YETKI_PANELI env bayrakları ARTIK OKUNMAZ.
 # Gerçek _owner_konsol_aktif'i, işaret dosyası YOKKEN env set ederek dene → yine False olmalı.
 import pathlib  # noqa: E402

@@ -263,7 +263,7 @@ _KIMLIK_GEREKLI_ONEKLER = (
     "/api/mockup/generate", "/api/jira/gorev", "/api/jira/fe-be",
     "/api/jira/hierarchy", "/api/approve-teknik", "/api/jira-kopru",
     "/api/sorular/uygula", "/api/adim/duzelt", "/api/geri-don",
-    "/api/sohbet",
+    "/api/sohbet", "/api/ornekler",
 )
 
 
@@ -1484,6 +1484,29 @@ def delta_analiz():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+def _ornek_yakala(tip: str, dosya: str) -> None:
+    """Onaylı analizi few-shot örnek havuzuna ekle (yerel + merkezi sink). Arka planda,
+    BEST-EFFORT — onay akışını ASLA bloklamaz/bozmaz."""
+    def _worker():
+        try:
+            yol = OUTPUT_DIR / dosya
+            if not yol.exists():
+                return
+            md = yol.read_text(encoding="utf-8", errors="ignore")
+            ozet = ""
+            try:
+                gs = [f.name for f in INPUT_DIR.iterdir() if f.is_file() and not f.name.startswith(".")]
+                ozet = gs[0] if gs else ""
+            except Exception:
+                pass
+            from skills.ornek_havuzu import ornek_kaydet
+            if ornek_kaydet(tip, md, girdi_ozeti=ozet):
+                logger.info("Örnek havuzuna eklendi (%s).", tip)
+        except Exception as e:
+            logger.warning("Örnek yakalama atlandı (%s): %s", tip, e)
+    threading.Thread(target=_worker, daemon=True).start()
+
+
 @app.route("/api/approve", methods=["POST"])
 def approve():
     import workflow as wf
@@ -1492,6 +1515,7 @@ def approve():
     except ValueError as e:
         return jsonify({"error": str(e)}), 409
 
+    _ornek_yakala("surec", "surec-analizi.md")   # onaylı süreç analizi → few-shot örnek
     _surec_calistir("teknik_analiz")
     logger.info("Analist onayı verildi.")
     return jsonify({"ok": True, "durum": state["durum"]})
@@ -3221,6 +3245,37 @@ def usage_sink_key_kaydet():
     return jsonify({"ok": True, "has_key": telemetri.okuma_anahtari_var_mi()})
 
 
+# ─── Onaylı Analiz Örnek Havuzu (few-shot eğitimi) ─────────────────────────────
+
+@app.route("/api/ornekler/cek", methods=["POST"])
+def ornekler_cek():
+    """Merkezi sink'ten ekip onaylı-analiz örneklerini yerel havuza çeker (few-shot için).
+    Kimlik-gate (e-posta owner listesiyle yetkilendirilir). Boot'ta + günlük oto-sync ile de çalışır."""
+    from skills.ornek_havuzu import ornekleri_cek
+    ok, mesaj = ornekleri_cek()
+    return jsonify({"ok": ok, "mesaj": mesaj})
+
+
+@app.route("/api/ornekler", methods=["GET"])
+@usage_gerekli
+def ornekler_liste():
+    """Örnek havuzu özeti (owner — kürasyon). İçerik dönmez, yalnız meta."""
+    from skills.ornek_havuzu import ornek_listesi
+    return jsonify({"ok": True, "ornekler": ornek_listesi()})
+
+
+@app.route("/api/ornekler/sil", methods=["POST"])
+@usage_gerekli
+def ornekler_sil():
+    """Owner: kötü/eski bir örneği yerel havuzdan siler (kürasyon). {id}."""
+    data = request.get_json(silent=True) or {}
+    oid = (data.get("id") or "").strip()
+    if not oid:
+        return jsonify({"ok": False, "error": "id gerekli"}), 400
+    from skills.ornek_havuzu import ornek_sil
+    return jsonify({"ok": ornek_sil(oid)})
+
+
 @app.route("/api/usage/export", methods=["GET"])
 @usage_gerekli
 def usage_export():
@@ -3738,6 +3793,7 @@ def approve_teknik():
         state = wf.teknik_onayla()
     except ValueError as e:
         return jsonify({"error": str(e)}), 409
+    _ornek_yakala("teknik", "teknik-analiz.md")   # onaylı teknik analiz → few-shot örnek
     _surec_calistir("jira_gonder")
     logger.info("Teknik analiz onaylandı — Jira task oluşturuluyor.")
     return jsonify({"ok": True, "durum": state["durum"]})
@@ -3750,6 +3806,7 @@ def approve_teknik_no_jira():
         state = wf.teknik_bitir()
     except ValueError as e:
         return jsonify({"error": str(e)}), 409
+    _ornek_yakala("teknik", "teknik-analiz.md")   # onaylı teknik analiz → few-shot örnek
     logger.info("Teknik analiz onaylandı — Jira atlandı.")
     return jsonify({"ok": True, "durum": state["durum"]})
 
@@ -4006,6 +4063,16 @@ def _referans_sync_calistir(kaynak: str = "elle") -> bool:
 
         # Servis Swagger'ları (BFF/OpenAPI) → Cloud ID GEREKTİRMEZ; kayıtlı her servisi tazeler.
         _servisleri_sync_et(sources.get("services", []))
+
+        # Onaylı analiz örnek havuzu (few-shot) — merkezi sink'ten ekip örneklerini çek (best-effort).
+        try:
+            from skills.ornek_havuzu import ornekleri_cek
+            ok_o, mesaj_o = ornekleri_cek()
+            with _sync_lock:
+                _sync_state["log"].append((("✓ Örnek havuzu: " if ok_o else "⚠ Örnek havuzu: ") + mesaj_o))
+        except Exception as _oe:
+            with _sync_lock:
+                _sync_state["log"].append(f"⚠ Örnek havuzu atlandı: {_oe}")
 
         last_sync = time.strftime("%d/%m/%Y %H:%M")
         sources["last_sync"] = last_sync

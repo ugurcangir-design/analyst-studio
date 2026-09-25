@@ -67,6 +67,18 @@ def surec_analizi_yap(icerik_override: list | None = None,
         print("  Canlı uygulama MCP/Chrome hedefleri dahil ediliyor...")
         icerik_parcalari.append({"type": "text", "text": canli_baglam})
 
+    # Few-shot: ekibin onayladığı süreç analizlerinden EN ALAKALI örnek(ler) — stil/derinlik referansı.
+    try:
+        from .ornek_havuzu import ornek_bloklari
+        _sorgu = (" ".join(p.get("text", "") for p in icerik if isinstance(p, dict) and p.get("type") == "text")
+                  if isinstance(icerik, list) else str(icerik))
+        _ornekler = ornek_bloklari(_sorgu, tip="surec", n=2)
+        if _ornekler:
+            print(f"  {len(_ornekler)} onaylı örnek (few-shot) dahil ediliyor...")
+            icerik_parcalari.extend(_ornekler)
+    except Exception as _e:
+        print(f"  ⚠ Few-shot örnek atlandı: {_e}")
+
     if icerik_parcalari:
         # Son stabil bloğa cache breakpoint — rerun ve takip eden analizlerde cache hit
         icerik_parcalari[-1]["cache_control"] = {"type": "ephemeral"}

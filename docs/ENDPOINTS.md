@@ -133,6 +133,14 @@ POST /api/usage/pull               Owner (ROL yeter). Uzak sink'ten (Apps Script
 GET  /api/usage/sink-key           Owner (rol). Okuma anahtarı ayarlı mı → {ok, has_key}. Ham anahtar DÖNMEZ. (opsiyonel/eski)
 POST /api/usage/sink-key           Owner (rol). {key} → YEREL reference/usage_sink.json (gitignore, 0600). Opsiyonel/eski
                                      yöntem; e-posta kapısı varken gerekmez. Boş key siler.
+POST /api/ornekler/cek             Onaylı-analiz örnek havuzunu (few-shot) merkezi sink'ten çeker (?ornekler=1&email=;
+                                     owner e-posta kapısı). Boot + günlük oto-sync de çağırır. {ok, mesaj}
+GET  /api/ornekler                 Owner. Örnek havuzu özeti (kürasyon; içerik dönmez): [{id,tip,proje,jira_key,analist,ts,ozet}]
+POST /api/ornekler/sil             Owner. {id} → yerel havuzdan bir örneği siler (kürasyon).
+```
+Örnek yakalama: `/api/approve` (süreç) · `/api/approve-teknik(-no-jira)` (teknik) onayında `_ornek_yakala` → yerel
+`reference/ornekler/` (gitignore) + sink push. Few-shot: `ornek_bloklari` süreç/teknik prompt'una en alakalı örneği enjekte eder.
+```
 GET  /api/usage/export?gun=90      Owner-only. .xlsx: Analist Özeti + Tür Kırılımı + **Detay** sayfaları
                                      (Detay = her olay tek satır: tarih-saat, analist, işlem, doküman/proje,
                                      durum, süre, jira key, açıldı/güncellendi).

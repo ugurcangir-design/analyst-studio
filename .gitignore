@@ -85,6 +85,9 @@ reference/jira_kopru.json
 # Kullanım Raporu okuma anahtarı (SIR — ekip verisini çekme; app-sahibi paylaşır, kişi UI'dan girer)
 reference/usage_sink.json
 
+# Onaylı analiz örnek havuzu (few-shot) — analiz İÇERİĞİ; git'e girmez (merkezi sink + yerel çekme)
+reference/ornekler/
+
 # Owner konsol kilidi (Kullanım Raporu + Yetki ekranları) — SADECE owner makinesinde true;
 # git'e gitmez, .env'e konmaz (kopyalanan .env sızmasın), .example'dan false seed edilir.
 reference/owner_konsol.json

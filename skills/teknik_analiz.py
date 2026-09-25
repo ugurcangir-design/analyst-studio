@@ -207,6 +207,16 @@ def teknik_analiz_yap(ozel_atla: bool = False) -> tuple[Path, Path]:
         print(f"  HTML prototip dahil ediliyor ({len(mockup_icerik):,} karakter)...")
         stable_bloklar.append({"type": "text", "text": f"### HTML Prototip\n\n{mockup_icerik}"})
 
+    # Few-shot: ekibin onayladığı teknik analizlerden EN ALAKALI örnek(ler) — stil/derinlik referansı.
+    try:
+        from .ornek_havuzu import ornek_bloklari
+        _ornekler = ornek_bloklari(surec_metni, tip="teknik", n=2)
+        if _ornekler:
+            print(f"  {len(_ornekler)} onaylı örnek (few-shot) dahil ediliyor...")
+            stable_bloklar.extend(_ornekler)
+    except Exception as _e:
+        print(f"  ⚠ Few-shot örnek atlandı: {_e}")
+
     # Stable blokların sonuna cache breakpoint koy — sonraki run'larda cache hit
     if stable_bloklar:
         stable_bloklar[-1]["cache_control"] = {"type": "ephemeral"}
