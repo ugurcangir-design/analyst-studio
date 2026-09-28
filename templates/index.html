@@ -1743,6 +1743,7 @@ html[data-theme="light"] .suspend-overlay { background: rgba(245,247,250,.92); }
 .bs-grup { margin-top: 16px; }
 .bs-grup-bas { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
 .bs-grup-bas .bs-say { font-size: 11px; color: var(--text3); font-weight: 500; }
+.bs-grup-bas .bs-say.bs-say-filtre { color: var(--accent); font-weight: 700; background: var(--accent-weak, rgba(99,102,241,.12)); padding: 1px 8px; border-radius: 999px; }
 .bs-tbl-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
 .bs-tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
 .bs-tbl th, .bs-tbl td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
@@ -5717,15 +5718,17 @@ const _BS_FUNNEL = '<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="cur
 // Bir tablodaki bir alanın benzersiz değerleri (görünen hâliyle, sıralı) + boş kayıt var mı?
 function _bsBenzersiz(satirlar, alan, haricEt) {
   const harita = new Map();  // normalize → görünen
-  let bosVar = false;
+  const sayim = new Map();   // normalize → adet (o değere sahip satır sayısı)
+  let bosVar = false, bosSay = 0;
   satirlar.forEach(r => {
     const v = String(r[alan] == null ? '' : r[alan]).trim();
-    if (!v) { bosVar = true; return; }
+    if (!v) { bosVar = true; bosSay++; return; }
     const k = _bsDurumNorm(v);
     if (haricEt && _BS_FILTRE_HARIC.has(k)) return;   // kapsam dışı durumu seçeneğe koyma
     if (!harita.has(k)) harita.set(k, v);
+    sayim.set(k, (sayim.get(k) || 0) + 1);
   });
-  return { degerler: [...harita.values()].sort((a, b) => a.localeCompare(b, 'tr')), bosVar };
+  return { degerler: [...harita.values()].sort((a, b) => a.localeCompare(b, 'tr')), bosVar, sayim, bosSay };
 }
 
 // Başlıkta hızlı filtre <select>'i olan <th>.
@@ -5734,10 +5737,12 @@ function _bsBenzersiz(satirlar, alan, haricEt) {
 // opt: {haric, tumEtiket, bosEtiket}
 function _bsFiltreTh(tid, alan, kaynak, etiket, satirlar, opt) {
   opt = opt || {};
-  const { degerler, bosVar } = _bsBenzersiz(satirlar, kaynak, opt.haric);
-  let opts = `<option value="">${_bsEsc(opt.tumEtiket || ('Tüm ' + etiket))}</option>`;
-  if (bosVar && opt.bosEtiket) opts += `<option value="${_BS_BOS}">${_bsEsc(opt.bosEtiket)}</option>`;
-  opts += degerler.map(o => `<option value="${_bsEsc(o)}">${_bsEsc(o)}</option>`).join('');
+  const { degerler, bosVar, sayim, bosSay } = _bsBenzersiz(satirlar, kaynak, opt.haric);
+  const sy = opt.sayac;   // true → her seçeneğin yanında o değerdeki task sayısı
+  const toplam = satirlar.length;
+  let opts = `<option value="">${_bsEsc(opt.tumEtiket || ('Tüm ' + etiket))}${sy ? ` (${toplam})` : ''}</option>`;
+  if (bosVar && opt.bosEtiket) opts += `<option value="${_BS_BOS}">${_bsEsc(opt.bosEtiket)}${sy ? ` (${bosSay})` : ''}</option>`;
+  opts += degerler.map(o => `<option value="${_bsEsc(o)}">${_bsEsc(o)}${sy ? ` (${sayim.get(_bsDurumNorm(o)) || 0})` : ''}</option>`).join('');
   return `<th class="bs-th-filtre"><span class="bs-th-lbl">${_BS_FUNNEL}${_bsEsc(etiket)}</span>
     <select class="bs-filtre-sel" data-alan="${alan}" onchange="_bsFiltrele('${tid}')"
       title="${_bsEsc(etiket)}'e göre filtrele">${opts}</select></th>`;
@@ -5886,6 +5891,15 @@ function _bsFiltrele(tid) {
   }
   const bos = document.getElementById(tid + '-bos');
   if (bos) bos.style.display = gorunen ? 'none' : '';
+  // Grup başlığı sayacı: filtre aktifse "(görünen / toplam)", değilse "(toplam)".
+  const grup = tbl.closest('.bs-grup');
+  const say = grup && grup.querySelector('.bs-say');
+  if (say) {
+    const toplam = say.dataset.toplam;
+    const aktif = Object.keys(secili).length > 0;
+    say.textContent = aktif ? `(${gorunen} / ${toplam})` : `(${toplam})`;
+    say.classList.toggle('bs-say-filtre', !!aktif);
+  }
 }
 
 // opt: { rozet:true|false (son "Eşleşme" kolonu), bosMesaj:'...', durumHaric:true|false }
@@ -5903,9 +5917,9 @@ function _bsTabloTek(satirlar, projeKolon, tid, opt) {
     ${_bsStoryHucre(r.story)}
     <td>${_bsEsc(r.tur)}</td>
     ${rozet ? '<td><span class="bs-guven hayir">✕ Eşleşmedi</span></td>' : ''}</tr>`).join('');
-  const thProje  = projeKolon ? _bsFiltreTh(tid, 'fproje', 'proje', 'Proje', satirlar, { tumEtiket: 'Tüm boardlar' }) : '';
-  const thDurum  = _bsFiltreTh(tid, 'fdurum',  'durum',  'Durum',  satirlar, { haric: opt.durumHaric !== false, tumEtiket: 'Tüm durumlar' });
-  const thAtanan = _bsFiltreTh(tid, 'fatanan', 'atanan', 'Atanan', satirlar, { tumEtiket: 'Herkes', bosEtiket: '(Atanmamış)' });
+  const thProje  = projeKolon ? _bsFiltreTh(tid, 'fproje', 'proje', 'Proje', satirlar, { tumEtiket: 'Tüm boardlar', sayac: true }) : '';
+  const thDurum  = _bsFiltreTh(tid, 'fdurum',  'durum',  'Durum',  satirlar, { haric: opt.durumHaric !== false, tumEtiket: 'Tüm durumlar', sayac: true });
+  const thAtanan = _bsFiltreTh(tid, 'fatanan', 'atanan', 'Atanan', satirlar, { tumEtiket: 'Herkes', bosEtiket: '(Atanmamış)', sayac: true });
   return `<div class="bs-tbl-wrap"><table class="bs-tbl" id="${tid}"><thead><tr>
     <th>Sıra</th><th>Key</th>${thProje}<th>Özet</th>${thDurum}${thAtanan}<th>Story</th><th>Tür</th>${rozet ? '<th>Eşleşme</th>' : ''}</tr></thead>
     <tbody>${govde}</tbody></table>
@@ -5914,7 +5928,7 @@ function _bsTabloTek(satirlar, projeKolon, tid, opt) {
 
 function _bsGrup(id, baslik, sayi, ikon, ic) {
   return `<div class="bs-grup" id="${id}"><div class="bs-grup-bas">${ikon} ${_bsEsc(baslik)}
-    <span class="bs-say">(${sayi})</span></div>${ic}</div>`;
+    <span class="bs-say" data-toplam="${sayi}">(${sayi})</span></div>${ic}</div>`;
 }
 
 // Stat kartı FİLTRE gibi çalışır: tıklanınca yalnızca ilgili grup görünür, diğerleri gizlenir.
