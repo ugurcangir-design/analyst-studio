@@ -920,6 +920,7 @@ _suspended = False          # True → tarayıcı 2+ dakikadır bağlı değil
 _process: subprocess.Popen | None = None
 _process_lock = threading.Lock()
 _durduruldu = False          # analist "Durdur" dedi → _bekle bunu hata sanmasın, run.py state'i geri yazamasın
+_login_penceresi_at = 0.0    # son "Tarayıcıda Giriş Yap" zamanı → giriş sürerken watchdog kapatmasın
 
 SUSPEND_SURE = 30           # saniye — bu kadar heartbeat gelmezse uyku (overlay)
 # KAPAT_SURE: Chrome, 5+ dk arka planda kalan sekmelerde timer'ları 1/dakikaya
@@ -928,6 +929,11 @@ SUSPEND_SURE = 30           # saniye — bu kadar heartbeat gelmezse uyku (overl
 # plana almışken uygulama kendini kapatmaya çalışıyordu. 180s = 2 kaçmış
 # throttled heartbeat + pay.
 KAPAT_SURE   = 180          # saniye — heartbeat kesilirse desktop modunda kapat
+# Tarayıcıda Giriş Yap: kullanıcı ayrı bir Chrome penceresinde giriş yaparken app
+# sekmesi arka planda kalır → heartbeat kesilebilir. Bu süre boyunca watchdog
+# kapatmaz; yoksa kullanıcı girişi bitirip dönünce uygulama kapanmış oluyordu
+# ("Failed to fetch"). Girişin makul sürede tamamlanması için 15 dk pay.
+LOGIN_GRACE  = 900          # saniye
 DESKTOP_MODE = os.getenv("DESKTOP_MODE", "false").lower() in ("1", "true", "yes")
 
 
@@ -951,6 +957,11 @@ def _heartbeat_izle():
             # almış olabilir; 90s'lik analizin ortasında intihar etme.
             if _analiz_calisiyor_mu():
                 logger.info("Desktop modu: heartbeat yok (%.0fs) ama analiz sürüyor — kapanma ertelendi.", gecen)
+                continue
+            # Tarayıcı giriş penceresi açıkken (kullanıcı başka Chrome'da giriş yapıyor,
+            # app sekmesi arka planda) kapatma — yoksa dönünce "Failed to fetch".
+            if time.time() - _login_penceresi_at < LOGIN_GRACE:
+                logger.info("Desktop modu: heartbeat yok (%.0fs) ama tarayıcı giriş penceresi açık — kapanma ertelendi.", gecen)
                 continue
             logger.info("Desktop modu: tarayıcı bağlantısı kesildi (%.0fs), uygulama kapatılıyor.", gecen)
             os.kill(os.getpid(), signal.SIGINT)
@@ -4296,6 +4307,7 @@ def live_app_durum():
 def live_app_giris():
     """Kalıcı tarayıcı profiliyle HEADED Chrome açar; analist bir kez giriş yapar.
     Sonraki headless analiz çağrıları aynı oturumu (çerezleri) kullanır."""
+    global _login_penceresi_at
     from skills.base import LIVE_APP_PROFILE_DIR, live_app_kilidi_temizle, live_app_urls
     data = request.get_json(silent=True) or {}
     hedef = (data.get("url") or "").strip()
@@ -4315,6 +4327,8 @@ def live_app_giris():
             f"--user-data-dir={LIVE_APP_PROFILE_DIR}",
             "--no-first-run", "--no-default-browser-check", hedef,
         ], start_new_session=True)
+        # Giriş sürerken (app sekmesi arka planda) watchdog uygulamayı kapatmasın.
+        _login_penceresi_at = time.time()
     except Exception as e:
         logger.error(f"Canlı uygulama giriş penceresi açılamadı: {e}")
         return jsonify({"ok": False, "error": f"Chrome açılamadı: {e}"}), 500
@@ -4443,7 +4457,12 @@ def context_filter_kaydet():
     except Exception:
         pass
     logger.info("Bağlam filtresi güncellendi.")
-    return jsonify({"ok": True, "filtre": filtre})
+    # GÜVENLİK: yanıtta canlı-uygulama parolasını TARAYICIYA GÖNDERME — maskele
+    # (GET ile hizalı; hard kural #7). Diske gerçek parola yazıldı; yalnız yanıt maskeli.
+    yanit = dict(filtre)
+    yanit["live_app_auth"] = {"username": filtre["live_app_auth"]["username"],
+                              "has_password": bool(filtre["live_app_auth"]["password"])}
+    return jsonify({"ok": True, "filtre": yanit})
 
 
 # ─── Jira Ayarları & OAuth ────────────────────────────────────────────────────

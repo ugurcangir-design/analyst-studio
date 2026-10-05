@@ -4910,6 +4910,10 @@ function jgAnalistNotuTemizle() {
 // TAMAMEN bağımsızdır, iki akış birbirinin URL'ini ezmez. keywords/jira_keys/
 // confluence_pages VE live_app'i KAYBETMEMEK için önce mevcut filtreyi okuyup
 // sadece live_app_gorev.target_url'i güncelleyerek geri yazar.
+// "TypeError: Failed to fetch" = sunucuya hiç ulaşılamadı (ağ/kapanma), 500/403 değil.
+function _jgAgHatasi(e) { return e instanceof TypeError; }
+const _JG_SUNUCU_KAPALI = 'Sunucuya ulaşılamadı — Analyst Studio arka planda kapanmış olabilir. Uygulamayı kapatıp yeniden açın.';
+
 async function jgLiveAppKaydet(showToastMsg) {
   const url = document.getElementById('jg-live-target').value.trim();
   const kapsam = document.getElementById('jg-live-scope').value.trim();
@@ -4926,7 +4930,8 @@ async function jgLiveAppKaydet(showToastMsg) {
     if (showToastMsg) toast('Canlı uygulama URL kaydedildi', 'info');
     jgLiveAppDurumYenile();
   } catch (e) {
-    toast('Kaydedilemedi: ' + e, 'error');
+    toast(_jgAgHatasi(e) ? _JG_SUNUCU_KAPALI : ('Kaydedilemedi: ' + e), 'error');
+    throw e;   // çağıran (jgLiveAppGiris) devam etmesin
   }
 }
 
@@ -4974,16 +4979,18 @@ async function jgLiveAppGiris() {
   const btn = document.getElementById('jg-la-login-btn');
   btn.disabled = true;
   try {
-    await jgLiveAppKaydet(false);  // URL'i önce kaydet ki backend hedefi bilsin
+    try {
+      await jgLiveAppKaydet(false);  // URL'i önce kaydet ki backend hedefi bilsin
+    } catch { return; }              // kaydet başarısızsa (mesajı verildi) login'i deneme
     const d = await (await fetch('/api/live-app/login', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({url})
     })).json();
     if (!d.ok) { toast(d.error || 'Giriş penceresi açılamadı', 'error'); return; }
-    toast('Chrome açıldı — giriş yapıp pencereyi kapatın', 'info');
+    toast('Chrome açıldı — giriş yapıp o pencereyi kapatın. Analyst Studio penceresini KAPATMAYIN.', 'info');
     document.getElementById('jg-la-ipucu').textContent = d.mesaj || '';
   } catch (e) {
-    toast('Bağlantı hatası: ' + e, 'error');
+    toast(_jgAgHatasi(e) ? _JG_SUNUCU_KAPALI : ('Bağlantı hatası: ' + e), 'error');
   } finally {
     btn.disabled = false;
     setTimeout(jgLiveAppDurumYenile, 1500);
