@@ -2760,7 +2760,7 @@ function temaDegistir() {
       <div class="jg-suren-chip" id="jg-suren-chip">
         <span class="dot"></span>
         <span class="grow" id="jg-suren-metin">Analiz sürüyor…</span>
-        <button class="btn btn-outline btn-xs" onclick="_jgPanelAc()">Göster</button>
+        <button class="btn btn-outline btn-xs" onclick="_jgChipGoster()">Göster</button>
       </div>
       <!-- Görev analiz paneli (GÖMÜLÜ) — JS ile buraya taşınır (#jg-preview-card) -->
 
@@ -5133,6 +5133,47 @@ function _jgGorevCoz(key) {
   return _jgGorevler[rk] || _jgGorevler[key] || { key: rk, summary: s.summary || '' };
 }
 
+// ── Analiz setini SAYFA YENİLEMESİNE DAYANIKLI yap (localStorage) ───────────────
+// Üretilen analizler yalnız bellekteydi → yenileyince gidiyordu. Artık set + aktif
+// key localStorage'a yazılır; boot'ta geri yüklenir, "Göster" chip'iyle sunulur.
+const _JG_SET_KEY = 'jg-analiz-seti';
+let _jgSetYuklendi = false;
+function _jgSetKaydet() {
+  try {
+    if (!Object.keys(_jgAnalizSeti).length) { localStorage.removeItem(_JG_SET_KEY); return; }
+    localStorage.setItem(_JG_SET_KEY, JSON.stringify({ set: _jgAnalizSeti, aktif: _jgAktifAnalizKey, ts: Date.now() }));
+  } catch (e) {}   // kota/erişim hatası — sessiz
+}
+function _jgSetYukle() {
+  if (_jgSetYuklendi) return; _jgSetYuklendi = true;
+  try {
+    const raw = localStorage.getItem(_JG_SET_KEY);
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (!d || !d.set || typeof d.set !== 'object' || !Object.keys(d.set).length) return;
+    if (d.ts && (Date.now() - d.ts) > 24 * 3600 * 1000) { localStorage.removeItem(_JG_SET_KEY); return; }  // 24s'ten eski → atla
+    _jgAnalizSeti = d.set;
+    _jgAktifAnalizKey = (d.aktif && _jgAnalizSeti[d.aktif]) ? d.aktif : Object.keys(_jgAnalizSeti)[0];
+  } catch (e) {}
+}
+// Aktif entry'nin ekrandaki (DOM) editör + cevaplarını sete yaz (yenileme/kapanış öncesi).
+function _jgAktifDomKaydet() {
+  const k = _jgAktifAnalizKey;
+  if (!k || !_jgAnalizSeti[k] || _jgAnalizSeti[k].hata) return;
+  const ed = document.getElementById('jg-preview-editor');
+  if (ed && ed.style.display !== 'none') _jgAnalizSeti[k].markdown = ed.value;
+  _jgAnalizSeti[k].cevaplar = _jgCevaplariTopla();
+}
+// Chip "Göster": paneli aç + kayıtlı aktif analizi doldur (yenileme sonrası).
+function _jgChipGoster() {
+  _jgPanelAc();
+  if (!_jgMesgul() && Object.keys(_jgAnalizSeti).length) {
+    const k = (_jgAktifAnalizKey && _jgAnalizSeti[_jgAktifAnalizKey]) ? _jgAktifAnalizKey : Object.keys(_jgAnalizSeti)[0];
+    _jgAktifAnalizKey = null;   // boş editörün restore'u ezmesini önle (save-on-switch atlanır)
+    _jgSonucGoster(k);
+  }
+}
+
 // Kaba katman tahmini (UI) — analist dropdown ile düzeltebilir.
 function _jgKatmanTahmin(metin) {
   const s = (metin || '').toLowerCase();
@@ -5226,6 +5267,7 @@ function _jgSonucGoster(key) {
   } else { _jgSorulariRender('', s.cevaplar); tab.style.display = 'none'; }
   jgModalTab('ana');
   _jgSwitcherRender();
+  _jgSetKaydet();   // yenilemeye dayanıklı: güncel set + aktif key'i sakla
 }
 function _jgSwitcherRender() {
   const keys = Object.keys(_jgAnalizSeti);
@@ -5244,7 +5286,7 @@ function _jgSwitcherRender() {
 // İş başlat (adimlar) → arka planda çalışır; polling ile izlenir. temizle=true ise seti sıfırlanır.
 async function _jgIsBaslat(adimlar, procBaslik, gosterKey, temizle) {
   await _jgFiltreKaydet();
-  if (temizle) { _jgAnalizSeti = {}; _jgAktifAnalizKey = null; }
+  if (temizle) { _jgAnalizSeti = {}; _jgAktifAnalizKey = null; _jgSetKaydet(); }
   _jgIsGosterKey = gosterKey || (adimlar[0] && adimlar[0].key) || null;
   _jgPanelAc();
   document.getElementById('jg-secim').style.display = 'none';
@@ -5294,7 +5336,8 @@ async function _jgPollDurum() {
     _jgProcBitir();
     const goster = (_jgIsGosterKey && _jgAnalizSeti[_jgIsGosterKey]) ? _jgIsGosterKey
       : (d.keyler || []).find(k => _jgAnalizSeti[k]);
-    if (goster) _jgSonucGoster(goster);
+    if (goster) _jgSonucGoster(goster);   // _jgSonucGoster içinde _jgSetKaydet çağrılır
+    else _jgSetKaydet();                   // gösterilecek yoksa da seti sakla
     const panelAcik = document.getElementById('jg-preview-card').style.display !== 'none';
     const chip = document.getElementById('jg-suren-chip');
     if (!panelAcik && chip) {
@@ -5317,8 +5360,23 @@ async function _jgDurdur() {
 function _jgReattach() {
   if (_jgAktifJob) { _jgPollBaslat(); return; }
   let saved = null; try { saved = localStorage.getItem('jg-aktif-job'); } catch (e) {}
-  if (saved) { _jgAktifJob = saved; _jgPollBaslat(); }
+  if (saved) { _jgAktifJob = saved; _jgPollBaslat(); return; }
+  _jgSetYukle();   // çalışan iş yok → kayıtlı analiz setini belleğe al (yenileme sonrası)
+  if (Object.keys(_jgAnalizSeti).length) {
+    const card = document.getElementById('jg-preview-card');
+    if (!card || card.style.display === 'none') {
+      const chip = document.getElementById('jg-suren-chip');
+      if (chip) {
+        chip.classList.add('bitti');
+        document.getElementById('jg-suren-metin').textContent = '✓ Önceki analiz hazır — Göster';
+        chip.classList.add('acik');
+      }
+    }
+  }
 }
+// Yenileme/kapanış öncesi aktif DOM'u sete yaz + kalıcılaştır; boot'ta seti geri yükle.
+window.addEventListener('beforeunload', () => { try { _jgAktifDomKaydet(); _jgSetKaydet(); } catch (e) {} });
+document.addEventListener('DOMContentLoaded', () => { try { _jgSetYukle(); } catch (e) {} });
 
 // Seçilen task'ları AYRI AYRI (arka planda) analiz et — her biri kendi katmanı + diğerleri bağlam.
 async function jgIliskiliAnalizBaslat() {
@@ -5485,6 +5543,7 @@ function jgPreviewKapat() {
   document.querySelector('.jg-modal-aksiyon').style.display = '';
   _jgCurrent = null;
   _jgAnalizSeti = {}; _jgAktifAnalizKey = null; _jgSecimBirincil = null;
+  _jgSetKaydet();   // panel kapandı (iş yok) → kalıcı seti de temizle
 }
 
 // Esc tuşuyla modal kapansın (UX standardı)
