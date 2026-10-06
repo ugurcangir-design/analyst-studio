@@ -5120,6 +5120,19 @@ let _jgAnalizSeti = {};        // key → {markdown, acik_sorular, summary, katm
 let _jgAktifAnalizKey = null;  // switcher'da gösterilen aktif analiz
 let _jgSecimBirincil = null;   // seçim panelinde analiz edilen birincil task
 
+// FE+BE ayrımında FE entry anahtarı SENTETİKTİR (ör. "ABC-1::FE") — Jira'da yoktur.
+// Backend'e görev geçilmezse gorev_getir("...::FE") "Görev okunamadı" verir. Bu yüzden
+// gerçek Jira key'ine (feBeKaynak) ve gerçek görev nesnesine çözeriz; routing için
+// SENTETİK anahtar korunur (sonuç FE entry'sine döner), backend'e GERÇEK görev gider.
+function _jgGercekKey(key) {
+  const s = _jgAnalizSeti[key] || {};
+  return s.feBeKaynak || String(key || '').replace(/::FE$/, '');
+}
+function _jgGorevCoz(key) {
+  const rk = _jgGercekKey(key), s = _jgAnalizSeti[key] || {};
+  return _jgGorevler[rk] || _jgGorevler[key] || { key: rk, summary: s.summary || '' };
+}
+
 // Kaba katman tahmini (UI) — analist dropdown ile düzeltebilir.
 function _jgKatmanTahmin(metin) {
   const s = (metin || '').toLowerCase();
@@ -5432,10 +5445,11 @@ async function jgCevaplariIsle() {
   }
   if (!cev) { toast('Önce en az bir soruyu cevaplayın', 'info'); return; }
   const key = _jgAktifAnalizKey, s = _jgAnalizSeti[key] || {};
-  const digerleri = Object.keys(_jgAnalizSeti).filter(k => k !== key);
+  // iliskili_keys GERÇEK Jira key'lerine çözülür (::FE sentetik → backend okuyamaz)
+  const digerleri = Object.keys(_jgAnalizSeti).filter(k => k !== key).map(_jgGercekKey);
   _jgIsBaslat([{ key: key, mode: 'analiz', katman: s.katman || '', iliskili_keys: digerleri,
                  cevaplar: cev, onceki_sorular: s.acik_sorular || '',   // YAKINSAMA: önceki soruları geç
-                 gorev: _jgGorevler[key] || null }],
+                 gorev: _jgGorevCoz(key) }],   // GERÇEK görev (routing sentetik key'de kalır)
              'Cevaplara göre yeniden yazılıyor', key, false);   // seti korunur (merge)
 }
 
@@ -5452,7 +5466,7 @@ async function jgAnalizDuzelt() {
   inp.value = '';
   _jgIsBaslat([{ key: key, mode: 'duzelt', markdown: markdown, talimat: talimat,
                  acik_sorular: s.acik_sorular || '', katman: s.katman || '',
-                 gorev: _jgGorevler[key] || { key: key, summary: s.summary || '' } }],
+                 gorev: _jgGorevCoz(key) }],   // ::FE sentetik key → GERÇEK görev çözülür
              'Analiz düzeltiliyor', key, false);
 }
 
