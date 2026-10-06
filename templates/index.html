@@ -5187,6 +5187,8 @@ function _jgSonucGoster(key) {
   if (_jgAktifAnalizKey && _jgAnalizSeti[_jgAktifAnalizKey] && !_jgAnalizSeti[_jgAktifAnalizKey].hata) {
     const _ed = document.getElementById('jg-preview-editor');
     if (_ed && _ed.style.display !== 'none') _jgAnalizSeti[_jgAktifAnalizKey].markdown = _ed.value;
+    // Açık soru cevaplarını da KAYDET → FE/BE arası geçişte girilen cevaplar kaybolmaz
+    _jgAnalizSeti[_jgAktifAnalizKey].cevaplar = _jgCevaplariTopla();
   }
   const s = _jgAnalizSeti[key] || {};
   _jgAktifAnalizKey = key;
@@ -5207,8 +5209,8 @@ function _jgSonucGoster(key) {
   const tab = document.getElementById('jg-modal-tab-sorular');
   const a = (s.acik_sorular || '').trim();
   if (a && !/Açık soru tespit edilmedi/i.test(a)) {
-    const n = _jgSorulariRender(a); tab.style.display = ''; document.getElementById('jg-sorular-rozet').textContent = n || '!';
-  } else { _jgSorulariRender(''); tab.style.display = 'none'; }
+    const n = _jgSorulariRender(a, s.cevaplar); tab.style.display = ''; document.getElementById('jg-sorular-rozet').textContent = n || '!';
+  } else { _jgSorulariRender('', s.cevaplar); tab.style.display = 'none'; }
   jgModalTab('ana');
   _jgSwitcherRender();
 }
@@ -5372,7 +5374,20 @@ function _jgSorulariAyristir(md) {
   }
   return sorular;
 }
-function _jgSorulariRender(md) {
+// DOM'daki açık soru cevaplarını {qid: cevap} haritasına topla (geçişte korumak için).
+// Tek-kutu yedek varsa __tek__ anahtarıyla saklanır.
+function _jgCevaplariTopla() {
+  const m = {};
+  document.querySelectorAll('#jg-sorular-liste .jg-sk-cevap[data-qid]').forEach(t => {
+    if (t.value.trim()) m[t.dataset.qid] = t.value;
+  });
+  const tek = document.getElementById('jg-cevaplar');
+  if (tek && tek.value.trim()) m.__tek__ = tek.value;
+  return m;
+}
+
+function _jgSorulariRender(md, cevaplar) {
+  cevaplar = cevaplar || {};
   const kap = document.getElementById('jg-sorular-liste');
   const sorular = _jgSorulariAyristir(md);
   if (!sorular.length) {
@@ -5382,20 +5397,23 @@ function _jgSorulariRender(md) {
     if (md && md.trim()) {
       yedek.value = md; yedek.style.display = '';
       kap.innerHTML = '<label class="jg-soru-lbl">Cevaplarınız (soru no ile yazın)</label>'
-        + '<textarea id="jg-cevaplar" class="jg-editor jg-sk-cevap" placeholder="Örn: Q-T-001: ..."></textarea>';
+        + `<textarea id="jg-cevaplar" class="jg-editor jg-sk-cevap" placeholder="Örn: Q-T-001: ...">${escHtml(cevaplar.__tek__ || '')}</textarea>`;
     } else { yedek.value = ''; yedek.style.display = 'none'; }
     return sorular.length;
   }
   document.getElementById('jg-preview-sorular').style.display = 'none';
   const onemSinif = o => /kritik/i.test(o) ? 'kritik' : /yüksek|yuksek/i.test(o) ? 'yuksek' : '';
-  kap.innerHTML = sorular.map(s => `
-    <div class="jg-soru-kart" data-qid="${escHtml(s.id)}">
+  kap.innerHTML = sorular.map(s => {
+    const cv = cevaplar[s.id] || '';   // önceden girilmiş cevabı geri yükle (FE/BE geçişi)
+    return `
+    <div class="jg-soru-kart ${cv.trim() ? 'cevapli' : ''}" data-qid="${escHtml(s.id)}">
       <div><span class="jg-sk-id">${escHtml(s.id)}</span>${s.onem ? `<span class="jg-sk-onem ${onemSinif(s.onem)}">${escHtml(s.onem)}</span>` : ''}</div>
       <div class="jg-sk-soru">${escHtml(s.soru || s.baslik)}</div>
       ${(s.bagli || s.beklenen) ? `<div class="jg-sk-detay">${s.bagli ? 'Bağlı: ' + escHtml(s.bagli) : ''}${s.bagli && s.beklenen ? ' · ' : ''}${s.beklenen ? 'Beklenen: ' + escHtml(s.beklenen) : ''}</div>` : ''}
       <textarea class="jg-editor jg-sk-cevap" data-qid="${escHtml(s.id)}" placeholder="Bu soruya cevabınız (boş = atla)"
-        oninput="this.closest('.jg-soru-kart').classList.toggle('cevapli', !!this.value.trim())"></textarea>
-    </div>`).join('');
+        oninput="this.closest('.jg-soru-kart').classList.toggle('cevapli', !!this.value.trim())">${escHtml(cv)}</textarea>
+    </div>`;
+  }).join('');
   return sorular.length;
 }
 
