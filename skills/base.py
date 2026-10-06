@@ -3558,8 +3558,15 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
     # bir browsing talimatı eklediyse (canli_uygulama_kapsami verildiyse) MCP sunucusu
     # + araç izinleri eklenir. Aksi halde hiçbir ek argüman gitmez.
     _live_args = _live_app_cli_argumanlari(kapsam=canli_uygulama_kapsami)
+    # Canlı uygulama (Chrome MCP) çağrısı AYRI timeout kullanır: ulaşılamayan ekran/servis
+    # (VPN kopuk, MCP asılı) 20 dk sessizce beklenmesin → daha kısa süre, hızlı + net hata.
+    _cli_timeout = 1200
     if _live_args:
-        print(f"  🌐 Canlı uygulama modu: Chrome MCP + {len(LIVE_APP_ALLOWED_TOOLS)} araç izni")
+        try:
+            _cli_timeout = int(os.getenv("LIVE_APP_CLI_TIMEOUT", "720"))
+        except (TypeError, ValueError):
+            _cli_timeout = 720
+        print(f"  🌐 Canlı uygulama modu: Chrome MCP + {len(LIVE_APP_ALLOWED_TOOLS)} araç izni (timeout {_cli_timeout}s)")
     # v2 Faz 3.c — Analiz veri kaynakları (Postgres/Jira MCP). Opt-in; varsayılan KAPALI.
     # Canlı uygulama (Chrome MCP) ile AYNI çağrıda birleştirilmez (--strict-mcp-config
     # tekildir): canlı uygulama aktifse bu çağrıda veri-MCP atlanır.
@@ -3577,7 +3584,7 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
     _model_args = ["--model", _aktif_model] if _aktif_model else []
     proc = _cli_calistir(
         [claude_yolu, "-p", "--output-format", "json", *_model_args, *_live_args, *_analiz_mcp_args],
-        tam_prompt, cli_env, timeout=1200,
+        tam_prompt, cli_env, timeout=_cli_timeout,
     )
     if proc.returncode != 0:
         # stdout JSON ise içinden okunabilir mesaj çıkar (429 limit, billing vb.)

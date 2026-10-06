@@ -4678,7 +4678,12 @@ def _febe_preview_calistir(job_id: str) -> None:
     except Exception as e:
         logger.error(f"Jira FE/BE önizleme hatası: {e}")
         job["durum"] = "hata"
-        job["hata"] = str(e)
+        try:
+            from skills.hatalar import insanlastir as _insanlastir
+            _hz = _insanlastir(str(e)) or {}
+            job["hata"] = (_hz.get("baslik") or str(e)) + (f" — {_hz['oneri']}" if _hz.get("oneri") else "")
+        except Exception:
+            job["hata"] = str(e)
 
 
 @app.route("/api/jira/fe-be/preview", methods=["POST"])
@@ -4880,6 +4885,7 @@ def _gorev_is_calistir(job_id: str) -> None:
             job["worker_tids"].add(threading.get_ident())
             job["aktif_index"] = i
             job["aktif_key"] = adim["key"]
+            job["aktif_bas"] = time.time()   # aktif adım başlangıcı → /durum geçen süre + stall uyarısı
         key = adim["key"]
         _bas = time.time()
         _tbas = _token_bas()   # bu thread için token capture (paralel-doğru)
@@ -4924,8 +4930,16 @@ def _gorev_is_calistir(job_id: str) -> None:
                 job["durum"] = "durduruldu"
         except Exception as e:
             logger.error("Görev iş adımı hatası (%s): %s", key, e)
+            # Ham str(e) ("timed out after 1200 seconds") yerine analist-dostu mesaj + öneri
+            try:
+                from skills.hatalar import insanlastir as _insanlastir
+                _hz = _insanlastir(str(e)) or {}
+            except Exception:
+                _hz = {}
+            _msg = (_hz.get("baslik") or str(e)) + (f" — {_hz['oneri']}" if _hz.get("oneri") else "")
             with _gorev_is_lock:
-                job["sonuclar"][key] = {"hata": str(e), "summary": adim.get("summary", ""),
+                job["sonuclar"][key] = {"hata": _msg, "hata_ozet": (_hz or None),
+                                        "summary": adim.get("summary", ""),
                                         "katman": adim.get("katman", "")}
             _telemetri_olay("gorev_analiz", "error", int((time.time() - _bas) * 1000),
                             model=_model, ai_modu=_ai_modu, baglam={"gorev": key}, token_bas=_tbas)
@@ -4994,10 +5008,14 @@ def jira_gorev_is_durum():
     job = _gorev_isler.get((request.args.get("job") or "").strip())
     if not job:
         return jsonify({"ok": False, "error": "İş bulunamadı (yeniden başlatılmış olabilir)"}), 404
+    _simdi = time.time()
     return jsonify({"ok": True, "durum": job["durum"], "aktif_key": job["aktif_key"],
                     "aktif_index": job["aktif_index"], "toplam": job["toplam"],
                     "keyler": [a["key"] for a in job["adimlar"]],
                     "katmanlar": {a["key"]: a["katman"] for a in job["adimlar"]},
+                    # SERVER-side geçen süre → UI yenilemeye dayanıklı "X dk sürüyor" + stall uyarısı
+                    "gecen_sn": int(_simdi - job.get("olusturuldu", _simdi)),
+                    "adim_gecen_sn": int(_simdi - job["aktif_bas"]) if job.get("aktif_bas") else 0,
                     "sonuclar": job["sonuclar"]})
 
 

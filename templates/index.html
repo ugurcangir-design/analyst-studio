@@ -1918,6 +1918,8 @@ html[data-theme="light"] .suspend-overlay { background: rgba(245,247,250,.92); }
 .jg-proc { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; min-height: 360px; }
 .jg-proc-kicker { font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: .16em; color: var(--run); opacity: .85; }
 .jg-proc-title { font-family: var(--font-display); font-size: 17px; font-weight: 600; color: var(--text); margin-top: 6px; }
+.jg-proc-uyari { margin: 10px auto 0; max-width: 520px; padding: 9px 12px; border: 1px solid var(--yellow); background: rgba(245,158,11,.1); border-radius: 8px; font-size: 12.5px; color: var(--text); line-height: 1.5; }
+.surec-stall-uyari { margin-top: 10px; padding: 9px 12px; border: 1px solid var(--yellow); background: rgba(245,158,11,.1); border-radius: 8px; font-size: 12.5px; color: var(--text); line-height: 1.5; }
 .jg-proc .im-reactor { margin: 12px auto; }
 .jg-proc-readouts { font-family: 'Geist Mono', monospace; font-size: 11px; color: var(--text3); margin-top: 6px; }
 .jg-proc-note { font-size: 12px; color: var(--text3); margin-top: 8px; max-width: 420px; }
@@ -2354,6 +2356,7 @@ function temaDegistir() {
                 <div class="hazirlaniyor-baslik" id="surec-running-desc">Analiz hazırlanıyor</div>
                 <div class="hazirlaniyor-alt">AI dokümanı ve referansları okuyup yapılandırılmış analizi üretiyor. Lütfen bekleyin — sekmeyi kapatmayın.</div>
                 <div class="hazirlaniyor-sure" id="surec-running-sure"></div>
+                <div class="surec-stall-uyari" id="surec-stall-uyari" style="display:none"></div>
               </div>
             </div>
             <div class="btn-group">
@@ -2691,6 +2694,7 @@ function temaDegistir() {
                 <div class="hazirlaniyor-baslik" id="brd-running-desc">Analiz hazırlanıyor</div>
                 <div class="hazirlaniyor-alt">AI dokümanı ve referansları okuyup yapılandırılmış analizi üretiyor. Lütfen bekleyin — sekmeyi kapatmayın.</div>
                 <div class="hazirlaniyor-sure" id="brd-running-sure"></div>
+                <div class="surec-stall-uyari" id="brd-stall-uyari" style="display:none"></div>
               </div>
             </div>
             <div class="btn-group">
@@ -2971,6 +2975,7 @@ function temaDegistir() {
             <div class="im-bar"><span></span></div>
             <div class="jg-proc-readouts">MODEL · <b id="jg-proc-model">claude · CLI</b> &nbsp;·&nbsp; GEÇEN SÜRE · <b id="jg-proc-sure">00:00</b></div>
             <div class="jg-proc-note">Analiz <b>arka planda</b> sürüyor — bu paneli kapatıp başka işe geçebilirsiniz, iş kesilmez. Bitince burada görünür.</div>
+            <div class="jg-proc-uyari" id="jg-proc-uyari" style="display:none"></div>
             <div class="jg-proc-akt">
               <button class="btn btn-outline btn-sm" onclick="jgPreviewKapat()">Kapat — arka planda sürsün</button>
               <button class="btn btn-danger btn-sm" onclick="_jgDurdur()">Durdur</button>
@@ -5066,6 +5071,7 @@ function jgListeCiz(containerId, liste, hazirMi) {
 
 let _jgProcTimer = null;  // JARVIS geçen-süre sayacı
 let _jgProcModel = '';    // model etiketi (bir kez /api/settings'ten çekilir)
+const _JG_STALL_SN = 180; // bu kadar sn'dir aktif adım sürüyorsa → "uzun sürüyor / VPN?" uyarısı
 
 async function _jgProcModelYukle() {
   if (_jgProcModel) return _jgProcModel;
@@ -5077,6 +5083,7 @@ async function _jgProcModelYukle() {
 }
 // JARVIS işlem panelini aç: reaktör + geçen-süre; editör/sorular/düzelt/sekmeler gizlenir.
 function _jgProcBaslat(baslik) {
+  const _uy = document.getElementById('jg-proc-uyari'); if (_uy) _uy.style.display = 'none';
   document.getElementById('jg-proc-title').textContent = baslik;
   document.getElementById('jg-proc-sure').textContent = '00:00';
   _jgProcModelYukle().then(m => { const el = document.getElementById('jg-proc-model'); if (el) el.textContent = m; });
@@ -5101,6 +5108,7 @@ function _jgProcBaslat(baslik) {
 }
 function _jgProcBitir() {
   clearInterval(_jgProcTimer); _jgProcTimer = null;
+  const _uy = document.getElementById('jg-proc-uyari'); if (_uy) _uy.style.display = 'none';
   document.getElementById('jg-proc').style.display = 'none';
   document.getElementById('jg-modal-tabs').style.display = '';
   const dbtn = document.getElementById('jg-duzelt-btn'); if (dbtn) dbtn.disabled = false;
@@ -5330,6 +5338,17 @@ async function _jgPollDurum() {
     document.getElementById('jg-proc-title').textContent =
       (cok ? `Analiz ${(d.aktif_index || 0) + 1}/${d.toplam}: ` : '') + (d.aktif_key || '') + ' üretiliyor';
     _jgSurenChipGuncelle(true, `Analiz sürüyor · ${d.aktif_key || ''}${cok ? ` (${(d.aktif_index || 0) + 1}/${d.toplam})` : ''}`);
+    // SERVER-side geçen süre → yenilemeye dayanıklı; eşik aşılınca takılma/erişim uyarısı
+    const sn = d.adim_gecen_sn || d.gecen_sn || 0;
+    const sel = document.getElementById('jg-proc-sure');
+    if (sel && sn) sel.textContent = String(Math.floor(sn / 60)).padStart(2, '0') + ':' + String(sn % 60).padStart(2, '0');
+    const uy = document.getElementById('jg-proc-uyari');
+    if (uy) {
+      if (sn >= _JG_STALL_SN) {
+        uy.innerHTML = `⚠ Bu analiz beklenenden uzun sürüyor (${Math.floor(sn / 60)} dk). Agent canlı uygulamaya/servise erişemiyor olabilir — <b>VPN / ağ bağlantısını</b> kontrol edin. İş arka planda sürüyor; <b>Durdur</b>'a basıp tekrar deneyebilir ya da bekleyebilirsiniz.`;
+        uy.style.display = '';
+      } else { uy.style.display = 'none'; }
+    }
   } else {
     clearInterval(_jgPollTimer); _jgPollTimer = null;
     _jgAktifJob = null; try { localStorage.removeItem('jg-aktif-job'); } catch (e) {}
@@ -6262,6 +6281,10 @@ async function pollState() {
     const r = await fetch('/api/workflow-state');
     const s = await r.json();
     _lastState = s;
+    if (_pollHataSayaci >= 3) {   // bağlantı kopmuştu, geri geldi → banner temizle + normal aralığa dön
+      const td = document.getElementById('topbar-status'); if (td) td.textContent = '';
+      _pollHataSayaci = 0; startPoll();
+    }
     _pollHataSayaci = 0;
     _suspendKontrol(s);
     updateUI(s);
@@ -6271,8 +6294,10 @@ async function pollState() {
     _pollHataSayaci++;
     if (_pollHataSayaci >= 3) {
       const td = document.getElementById('topbar-status');
-      if (td) td.textContent = 'Bağlantı yok';
-      stopPoll();
+      // Ağ/VPN koptuğunda polling'i DURDURMA — yavaş aralıkta denemeye devam et ki
+      // bağlantı geri gelince ekran kendiliğinden toparlasın (iş arka planda sürüyor).
+      if (td) td.textContent = 'Bağlantı yok — yeniden deneniyor…';
+      clearInterval(pollTimer); pollTimer = setInterval(pollState, 5000);
     }
   }
 }
@@ -6410,10 +6435,21 @@ function updateUI(s) {
 
   const descEl = document.getElementById(isBrd ? 'brd-running-desc' : 'surec-running-desc');
   if (descEl && s.calisiyor) descEl.textContent = s.etiket || 'Analiz hazırlanıyor';
+  // Geçen süre: sunucudan gelen gecen_sn (sayfa yenilense de doğru) > yerel _stepStart
+  const bas = _stepStart[s.durum];
+  const _yerelSn = bas ? Math.floor((Date.now() - bas) / 1000) : 0;
+  const _gecenSn = s.calisiyor ? Math.max(s.gecen_sn || 0, _yerelSn) : 0;
   const sureEl = document.getElementById(isBrd ? 'brd-running-sure' : 'surec-running-sure');
-  if (sureEl) {
-    const bas = _stepStart[s.durum];
-    sureEl.textContent = (s.calisiyor && bas) ? `⏱ ${Math.floor((Date.now() - bas) / 1000)} saniye geçti` : '';
+  if (sureEl) sureEl.textContent = _gecenSn ? `⏱ ${_gecenSn} saniye geçti` : '';
+  // Takılma uyarısı: eşiği aşınca ağ/VPN/erişim ipucu göster (iş arka planda sürüyor)
+  const stallEl = document.getElementById(isBrd ? 'brd-stall-uyari' : 'surec-stall-uyari');
+  if (stallEl) {
+    if (s.calisiyor && _gecenSn >= _JG_STALL_SN) {
+      stallEl.innerHTML = `⚠ Bu analiz beklenenden uzun sürüyor (${Math.floor(_gecenSn/60)} dk). Agent canlı uygulamaya ya da bir servise erişemiyor olabilir — <b>VPN / ağ bağlantınızı</b> kontrol edin. İş arka planda sürüyor; bekleyebilir ya da <b>Durdur</b>'a basıp tekrar deneyebilirsiniz.`;
+      stallEl.style.display = '';
+    } else {
+      stallEl.style.display = 'none';
+    }
   }
 
   if (s.tamamlandi) {

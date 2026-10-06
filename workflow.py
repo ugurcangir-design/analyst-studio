@@ -294,12 +294,19 @@ def _hata_ozet(hata: str | None) -> dict | None:
 def ozet() -> dict:
     state = oku()
     durum = state["durum"]
+    # Aktif adımın SERVER-side başlangıcı → UI geçen süreyi yenilemeye dayanıklı gösterir
+    # (eskiden süre yalnız client-side ölçülüyordu, sayfa yenileyince sıfırlanıyordu).
+    _adimlar = state.get("adimlar") or []
+    _aktif_zaman = _adimlar[-1].get("zaman") if _adimlar else None
+    _calisiyor = durum in CALISMA_DURUMLARI
     return {
         "durum": durum,
         "etiket": DURUM_ETIKET.get(durum, durum),
         "pipeline": state["pipeline"],
         "mesaj": state["mesaj"],
         "hata": state["hata"],
+        "aktif_adim_zaman": _aktif_zaman,
+        "gecen_sn": int(time.time() - _aktif_zaman) if (_calisiyor and _aktif_zaman) else 0,
         "hata_ozet": _hata_ozet(state["hata"]),   # {kategori,baslik,aciklama,oneri,ozet,ham} | None
         "onaylandi": state["onaylandi"],
         "calisiyor": durum in CALISMA_DURUMLARI,
