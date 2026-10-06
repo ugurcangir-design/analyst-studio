@@ -4467,7 +4467,7 @@ async function jgGorevleriCek() {
     _jgMsg('jg-fetch-msg', `${d.parent_key}: ${d.toplam} görev çekildi. Triyaj (yalnızca Backlog + atanmamış): ${d.hazir.length} hızlı, ${d.detay.length} analiz — bu ayrım FORMAT ön-taraması (içerik incelenmedi), "AI ile Sınıflandır" ile içerikten karar verilir. İlerlemiş görevler yalnızca "Tüm Görevler"de.`, 'ok');
     _jgTopbar(`${d.toplam} görev çekildi`, false);
   } catch (e) {
-    _jgMsg('jg-fetch-msg', 'Bağlantı hatası: ' + e, 'err'); _jgTopbar('Hazır', false);
+    _jgMsg('jg-fetch-msg', _jgHataMetni(e), 'err'); _jgTopbar('Hazır', false);
   } finally { btn.disabled = false; }
 }
 
@@ -4489,7 +4489,7 @@ async function jgSiniflandir() {
     _jgMsg('jg-fetch-msg', `${d.parent_key}: ${d.toplam} görev. Triyaj (Backlog + atanmamış): ${d.hazir.length} hızlı, ${d.detay.length} analiz (AI ile sınıflandırıldı). İlerlemiş görevler yalnızca "Tüm Görevler"de.`, 'ok');
     _jgTopbar('Sınıflandırma tamam', false);
   } catch (e) {
-    _jgMsg('jg-fetch-msg', 'Bağlantı hatası: ' + e, 'err'); _jgTopbar('Hazır', false);
+    _jgMsg('jg-fetch-msg', _jgHataMetni(e), 'err'); _jgTopbar('Hazır', false);
   } finally { btn.disabled = false; }
 }
 
@@ -4917,7 +4917,9 @@ function jgAnalistNotuTemizle() {
 // sadece live_app_gorev.target_url'i güncelleyerek geri yazar.
 // "TypeError: Failed to fetch" = sunucuya hiç ulaşılamadı (ağ/kapanma), 500/403 değil.
 function _jgAgHatasi(e) { return e instanceof TypeError; }
-const _JG_SUNUCU_KAPALI = 'Sunucuya ulaşılamadı — Analyst Studio arka planda kapanmış olabilir. Uygulamayı kapatıp yeniden açın.';
+const _JG_SUNUCU_KAPALI = 'Sunucuya ulaşılamadı — Analyst Studio arka planda kapanmış ya da ağ/VPN bağlantısı kopmuş olabilir. Bağlantıyı kontrol edip tekrar deneyin; iş varsa arka planda sürüyor.';
+// Ağ hatasını analiste anlaşılır göster (ham "TypeError: Failed to fetch" yerine).
+function _jgHataMetni(e) { return _jgAgHatasi(e) ? _JG_SUNUCU_KAPALI : ('Bağlantı hatası: ' + e); }
 
 async function jgLiveAppKaydet(showToastMsg) {
   const url = document.getElementById('jg-live-target').value.trim();
@@ -5311,7 +5313,7 @@ async function _jgIsBaslat(adimlar, procBaslik, gosterKey, temizle) {
     _jgAktifJob = d.job;
     try { localStorage.setItem('jg-aktif-job', d.job); } catch (e) {}
     _jgPollBaslat();
-  } catch (e) { _jgProcBitir(); _jgMsg('jg-preview-msg', 'Bağlantı hatası: ' + e, 'err'); }
+  } catch (e) { _jgProcBitir(); _jgMsg('jg-preview-msg', _jgHataMetni(e), 'err'); }
 }
 function _jgPollBaslat() { clearInterval(_jgPollTimer); _jgPollDurum(); _jgPollTimer = setInterval(_jgPollDurum, 2500); }
 async function _jgPollDurum() {
@@ -5593,7 +5595,7 @@ async function jgJiraGuncelle() {
     _jgMsg('jg-preview-msg', `✓ ${d.key} Jira'da güncellendi.`, 'ok');
     toast(`${d.key} güncellendi`, 'success');
   } catch (e) {
-    _jgMsg('jg-preview-msg', 'Bağlantı hatası: ' + e, 'err');
+    _jgMsg('jg-preview-msg', _jgHataMetni(e), 'err');
     btn.disabled = false;
   }
 }
@@ -5622,7 +5624,7 @@ async function jgFeBeOnayla() {
     const linkTxt = d.link ? ' · BE→FE Blocks ✓' : (d.link_uyari ? ' · ⚠ ' + d.link_uyari : '');
     _jgMsg('jg-preview-msg', `✓ BE: ${d.be_key} güncellendi · FE: ${d.fe_key} açıldı${linkTxt}`, 'ok');
     toast(`FE/BE ayrıldı: ${d.be_key} (BE) + ${d.fe_key} (FE)`, 'success');
-  } catch (e) { _jgMsg('jg-preview-msg', 'Bağlantı hatası: ' + e, 'err'); btn.disabled = false; }
+  } catch (e) { _jgMsg('jg-preview-msg', _jgHataMetni(e), 'err'); btn.disabled = false; }
 }
 
 // ── Yeni Task Aç — analiz OK sonrası seçilen board/proje'ye, girilen Epic/Story/Task'a
@@ -5751,7 +5753,7 @@ async function jgYeniTaskAc() {
     if ((d.uyarilar || []).length) ekstra += ' · ⚠ ' + d.uyarilar.join('; ');
     _jgMsg('jg-yt-msg', `✓ Açıldı: ${keyler}${ekstra}`, 'ok');
     toast(`Yeni task açıldı: ${keyler}`, 'success');
-  } catch (e) { _jgMsg('jg-yt-msg', 'Bağlantı hatası: ' + e, 'err'); btn.disabled = false; }
+  } catch (e) { _jgMsg('jg-yt-msg', _jgHataMetni(e), 'err'); btn.disabled = false; }
 }
 
 // Tek görevi FE+BE olarak İKİ AYRI katman-özel analize böl (arka plan iş).
