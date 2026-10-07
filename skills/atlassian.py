@@ -140,6 +140,31 @@ def atlassian_put(path: str, body: dict, cloud_id: str, service: str = "jira") -
         return {}
 
 
+def atlassian_attach(issue_key: str, dosya_adi: str, icerik: bytes,
+                     content_type: str = "text/html", cloud_id: str = "") -> list:
+    """Bir Jira issue'ya dosya ekler (attachment). JSON helper'ları attachment yapamaz
+    → multipart/form-data + zorunlu `X-Atlassian-Token: no-check` başlığı. Content-Type
+    ELLE set EDİLMEZ (requests multipart boundary'yi kendi yazar). Dönen: attachment listesi."""
+    env = env_oku()
+    cloud_id = cloud_id or env.get("JIRA_CLOUD_ID", "")
+    token = env.get("JIRA_ACCESS_TOKEN", "")
+    base = f"https://api.atlassian.com/ex/jira/{cloud_id}"
+    url = f"{base}/rest/api/3/issue/{issue_key}/attachments"
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json",
+               "X-Atlassian-Token": "no-check"}
+    dosyalar = {"file": (dosya_adi, icerik, content_type)}
+    r = _req.post(url, headers=headers, files=dosyalar, timeout=60)
+    if r.status_code == 401:
+        token = atlassian_refresh(env)
+        headers["Authorization"] = f"Bearer {token}"
+        r = _req.post(url, headers={**headers}, files={"file": (dosya_adi, icerik, content_type)}, timeout=60)
+    r.raise_for_status()
+    try:
+        return r.json()
+    except ValueError:
+        return []
+
+
 # ─── Jira Site Adresi (browse link'leri) ──────────────────────────────────────
 
 _site_url_cache: dict[str, str] = {}

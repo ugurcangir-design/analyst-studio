@@ -5856,6 +5856,58 @@ def gorev_mockup_geri_al():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@app.route("/api/jira/gorev/mockup/jira", methods=["POST"])
+def gorev_mockup_jiraya():
+    """Mockup'ı Jira'ya EK olarak açar. mode='ek' (varsayılan): gorev-mockup.html'i
+    verilen task'a attachment olarak ekler. mode='yeni-task': ilişkili yeni 'Tasarım - …'
+    Task açıp mockup'ı ona ekler (kaynak task'a dokunmaz). Dönen: {ok, key, link, attachment}."""
+    data = request.get_json(silent=True) or {}
+    key = (data.get("key") or "").strip().upper()
+    mode = (data.get("mode") or "ek").strip()
+    baslik = (data.get("baslik") or "").strip()[:200]
+    ust = (data.get("ust") or "").strip().upper()
+    if not key:
+        return jsonify({"ok": False, "error": "Kaynak task anahtarı gerekli."}), 400
+    mockup = OUTPUT_DIR / "gorev-mockup.html"
+    if not mockup.exists():
+        return jsonify({"ok": False, "error": "Önce 'Ekran Mockup'ı' ile üretin."}), 400
+    hata = _jira_baglanti_eksik()
+    if hata:
+        return jsonify({"ok": False, "error": hata}), 400
+    try:
+        from skills.atlassian import atlassian_attach, jira_site_url
+        env = _env_oku()
+        cloud_id = env.get("JIRA_CLOUD_ID", "")
+        icerik = mockup.read_bytes()
+        dosya_adi = "ekran-mockup.html"
+        hedef_key = key
+        yeni_task = None
+        uyarilar = []
+        if mode == "yeni-task":
+            from skills.jira_gorevleri import gorev_yeni_task_olustur
+            proje = key.split("-")[0]
+            govde = ("### Ekran Tasarımı (Mockup)\n\nBu task, ilgili görevin yeni istesine göre "
+                     "hazırlanan **ekran mockup'ını** (ekli HTML) içerir. Kaynak görev: " + key + ".")
+            sonuc = gorev_yeni_task_olustur(proje, mode="tek", markdown=govde,
+                                            baslik=("Tasarım - " + (baslik or key)),
+                                            ust_key=ust, kaynak_key=key)
+            tasklar = sonuc.get("tasklar") or []
+            if not tasklar:
+                return jsonify({"ok": False, "error": "Yeni tasarım task'ı açılamadı."}), 500
+            hedef_key = tasklar[0]["key"]
+            yeni_task = hedef_key
+            uyarilar = sonuc.get("uyarilar") or []
+        atlassian_attach(hedef_key, dosya_adi, icerik, "text/html", cloud_id)
+        site = jira_site_url(cloud_id)
+        link = f"{site}/browse/{hedef_key}" if site else ""
+        _telemetri_olay("jira_gonder", "ok", 0)
+        return jsonify({"ok": True, "key": hedef_key, "yeni_task": yeni_task,
+                        "link": link, "attachment": dosya_adi, "uyarilar": uyarilar})
+    except Exception as e:
+        logger.error(f"Mockup Jira'ya ekleme hatası: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 # ─── Git Güncellemeleri ──────────────────────────────────────────────────────
 
 _git_lock = threading.Lock()

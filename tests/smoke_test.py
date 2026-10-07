@@ -87,6 +87,8 @@ if not (BASE / "output" / "gorev-mockup.html").exists():
     kontrol("gorev/mockup düzelt dosyasız → 400", mkdz.status_code == 400)
 mkdur = istemci.get("/api/jira/gorev/mockup/durum/yokbuis")
 kontrol("gorev/mockup durum bilinmeyen job → 404", mkdur.status_code == 404)
+mkjira = istemci.post("/api/jira/gorev/mockup/jira", json={"key": ""}, headers=ORIGIN)
+kontrol("gorev/mockup jira boş key → 400", mkjira.status_code == 400)
 
 o = json_al(istemci.get("/api/oturum"))
 kontrol("oturum ok + katalog", o.get("ok") and len(o.get("ciktilar", [])) >= 9)

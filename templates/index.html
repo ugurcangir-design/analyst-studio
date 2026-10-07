@@ -3059,6 +3059,8 @@ function temaDegistir() {
             <div class="jg-yt-akt" style="margin-top:8px">
               <button class="btn btn-outline btn-sm" id="jg-mockup-geri-btn" onclick="jgMockupGeriAl()" style="display:none">↶ Geri Al</button>
               <button class="btn btn-outline btn-sm" onclick="jgMockupIndir()"><svg class="ico"><use href="#i-download"/></svg> İndir</button>
+              <button class="btn btn-outline btn-sm" id="jg-mockup-jira-btn" onclick="jgMockupJira('ek')" title="Mockup'ı bu task'a ek dosya (attachment) olarak ekler"><svg class="ico"><use href="#i-upload"/></svg> Jira'ya Ekle</button>
+              <button class="btn btn-outline btn-sm" id="jg-mockup-jira-yeni-btn" onclick="jgMockupJira('yeni-task')" title="Mockup için ilişkili yeni 'Tasarım' task'ı açar ve dosyayı ona ekler"><svg class="ico"><use href="#i-plus"/></svg> Tasarım Task'ı</button>
               <button class="btn btn-primary btn-sm" onclick="jgMockupAc()"><svg class="ico"><use href="#i-eye"/></svg> Önizle</button>
             </div>
           </div>
@@ -5924,6 +5926,38 @@ function jgMockupIndir() {
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch (e) { toast('İndirme hatası', 'error'); }
+}
+
+// Mockup'ı Jira'ya EK olarak aç: mode='ek' → kaynak task'a attachment; 'yeni-task' →
+// ilişkili yeni 'Tasarım' task'ı açıp ona ekler. HTML inline render edilmez; indirilebilir ek.
+async function jgMockupJira(mode) {
+  if (!_jgMockupHtml) { toast('Önce mockup üretin', 'info'); return; }
+  const g = _jgGorevCoz(_jgAktifAnalizKey);
+  const key = (g && g.key) || (_jgCurrent && _jgCurrent.key) || '';
+  if (!key) { toast('Kaynak task bulunamadı', 'error'); return; }
+  if (_jgMockupStale && !confirm('Analiz değişti, mockup eski olabilir. Yine de Jira\'ya eklensin mi? (Önce "Mockup\'ı güncelle" önerilir)')) return;
+  const yeni = mode === 'yeni-task';
+  if (!confirm(yeni
+      ? `${key} ile İLİŞKİLİ yeni bir "Tasarım" task'ı açılacak ve mockup ona ek dosya olarak eklenecek. Devam?`
+      : `Mockup, ${key} task'ına ek dosya (attachment) olarak eklenecek. Devam?`)) return;
+  const btnId = yeni ? 'jg-mockup-jira-yeni-btn' : 'jg-mockup-jira-btn';
+  const btn = document.getElementById(btnId); if (btn) btn.disabled = true;
+  _jgMsg('jg-mockup-msg', yeni ? 'Tasarım task\'ı açılıp mockup ekleniyor…' : 'Mockup Jira\'ya ekleniyor…');
+  try {
+    const r = await fetch('/api/jira/gorev/mockup/jira', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, mode, baslik: (g && g.summary) || (_jgCurrent && _jgCurrent.summary) || '' })
+    });
+    const d = await r.json();
+    if (!d.ok) { _jgMsg('jg-mockup-msg', d.error || 'Eklenemedi', 'err'); if (btn) btn.disabled = false; return; }
+    const linkHtml = d.link ? ` · <a href="${escHtml(d.link)}" target="_blank" rel="noopener">${escHtml(d.key)}</a>` : (' · ' + escHtml(d.key));
+    const uyari = (d.uyarilar && d.uyarilar.length) ? ' · ⚠ ' + escHtml(d.uyarilar.join('; ')) : '';
+    const msgEl = document.getElementById('jg-mockup-msg');
+    msgEl.className = 'jg-msg ok';
+    msgEl.innerHTML = `✓ Mockup ${d.yeni_task ? 'yeni task\'a' : 'task\'a'} eklendi${linkHtml}${uyari}`;
+    toast(`Mockup Jira'ya eklendi: ${d.key}`, 'success');
+  } catch (e) { _jgMsg('jg-mockup-msg', _jgHataMetni(e), 'err'); }
+  finally { if (btn) btn.disabled = false; }
 }
 
 // Analist analiz editörünü ELLE düzenlerse (job değil) ve mockup o entry'den üretildiyse → stale.
