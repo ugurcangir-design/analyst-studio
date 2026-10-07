@@ -3049,6 +3049,9 @@ function temaDegistir() {
             <button class="btn btn-primary btn-sm" id="jg-mockup-btn" onclick="jgMockupUret()"><svg class="ico"><use href="#i-zap"/></svg> Oluştur</button>
           </div>
           <div id="jg-mockup-sonuc" style="display:none;margin-top:10px">
+            <div class="surec-stall-uyari" id="jg-mockup-stale" style="display:none;margin-bottom:8px">
+              ⚠ Analiz değişti — mockup eski analize göre. <button class="btn btn-primary btn-xs" type="button" onclick="jgMockupTazele()" style="margin-left:6px">Mockup'ı güncelle</button>
+            </div>
             <div class="jg-duzelt-row" style="display:flex">
               <input type="text" id="jg-mockup-duzelt" autocomplete="off" placeholder="Mockup'ı düzelt (analizden ayrı) — örn: 'Kaydet butonunu sağ üste al, tabloya durum sütunu ekle'" onkeydown="if(event.key==='Enter')jgMockupDuzelt()">
               <button class="btn btn-outline btn-sm" id="jg-mockup-duzelt-btn" onclick="jgMockupDuzelt()">Düzelt</button>
@@ -5323,6 +5326,7 @@ function _jgSonucGoster(key) {
   if (ytBtn) ytBtn.disabled = !!s.hata || !s.markdown;
   jgYeniTaskKapat();   // analiz değişince yeni-task paneli kapansın (içerik yeni analizle yeniden açılır)
   jgMockupKapat();     // analiz değişince mockup paneli de kapansın (farklı görev/analiz)
+  if (!s.hata) _jgMockupStaleKontrol(key, s.markdown || '');   // bu entry'nin analizi değiştiyse mockup'ı "eski" işaretle
   document.getElementById('jg-duzelt-row').style.display = s.hata ? 'none' : '';
   _jgMsg('jg-preview-msg', s.hata ? ('Hata: ' + s.hata) : '', s.hata ? 'err' : '');
   const tab = document.getElementById('jg-modal-tab-sorular');
@@ -5621,6 +5625,7 @@ function jgPreviewKapat() {
   _jgCurrent = null;
   _jgAnalizSeti = {}; _jgAktifAnalizKey = null; _jgSecimBirincil = null;
   _jgMockupHtml = '';   // yeni görev farklı mockup — bayat sonuç bloğu gösterme
+  _jgMockupEntryKey = null; _jgMockupIste = ''; _jgMockupBaseAnaliz = ''; _jgMockupStale = false; _jgMockupPending = null;
   _jgSetKaydet();   // panel kapandı (iş yok) → kalıcı seti de temizle
 }
 
@@ -5733,6 +5738,23 @@ let _jgMockupHtml = '';          // en güncel mockup HTML (önizleme/indir içi
 let _jgMockupJob = null;         // aktif iş id'i
 let _jgMockupTimer = null;       // polling timer
 let _jgMockupCalisiyor = false;
+// Adım 2 — analiz↔mockup bağı: mockup hangi entry/analiz/isteye göre üretildi?
+let _jgMockupEntryKey = null;    // mockup'ın üretildiği analiz entry key'i (BE / ::FE)
+let _jgMockupIste = '';          // son kullanılan yeni-iste (tazelemede korunur)
+let _jgMockupBaseAnaliz = '';    // mockup'ın baz aldığı analiz markdown'ı (değişim tespiti)
+let _jgMockupStale = false;      // analiz değişti → mockup eski
+
+// Analiz entry'sinin markdown'ı değişti mi? Mockup varsa ve o entry'den üretildiyse
+// stale işaretle (job-güdümlü düzelt/cevap → _jgSonucGoster; manuel düzenleme → input).
+function _jgMockupStaleKontrol(key, md) {
+  if (!_jgMockupHtml || !_jgMockupEntryKey || key !== _jgMockupEntryKey) return;
+  if ((md || '') !== _jgMockupBaseAnaliz) {
+    _jgMockupStale = true;
+    const b = document.getElementById('jg-mockup-stale');
+    const panelAcik = document.getElementById('jg-mockup-panel').style.display !== 'none';
+    if (b && panelAcik) b.style.display = '';
+  }
+}
 
 function jgMockupPanelAc() {
   if (!_jgCurrent) return;
@@ -5745,8 +5767,13 @@ function jgMockupPanelAc() {
   panel.style.display = '';
   _jgMsg('jg-mockup-msg', '');
   document.getElementById('jg-mockup-uyari').style.display = 'none';
-  // Bu task için üretilmiş mockup varsa sonuç bloğunu göster (tek güncel dosya modeli)
-  document.getElementById('jg-mockup-sonuc').style.display = _jgMockupHtml ? '' : 'none';
+  // Sonuç bloğu: mockup bu task'a (aynı gerçek görev; BE/FE paylaşır) aitse göster
+  const ayniGorev = _jgMockupEntryKey && _jgGercekKey(_jgMockupEntryKey) === _jgGercekKey(_jgAktifAnalizKey);
+  document.getElementById('jg-mockup-sonuc').style.display = (_jgMockupHtml && ayniGorev) ? '' : 'none';
+  // Önceki iste'yi geri getir (tazeleme/karşılaştırma kolaylığı)
+  if (ayniGorev && _jgMockupIste) document.getElementById('jg-mockup-iste').value = _jgMockupIste;
+  const staleEl = document.getElementById('jg-mockup-stale');
+  if (staleEl) staleEl.style.display = (_jgMockupHtml && ayniGorev && _jgMockupStale) ? '' : 'none';
   document.getElementById('jg-mockup-btn').disabled = false;
   panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
@@ -5762,12 +5789,27 @@ function _jgMockupKilit(kilitli) {
   });
 }
 
+let _jgMockupPending = null;   // üretim başlatılırken bağlam (başarıda tracking'e geçer)
+
 function jgMockupUret() {
   if (_jgMockupCalisiyor) return;
   const iste = (document.getElementById('jg-mockup-iste').value || '').trim();
   if (!iste) { toast('Önce yeni iste / ekran açıklamasını yazın', 'info'); return; }
+  _jgMockupBaslat(iste);
+}
+
+// Analiz değişince: AYNI isteyle, GÜNCEL analize göre mockup'ı yeniden üret.
+function jgMockupTazele() {
+  if (_jgMockupCalisiyor) return;
+  const iste = _jgMockupIste || (document.getElementById('jg-mockup-iste').value || '').trim();
+  if (!iste) { toast('Önce yeni iste / ekran açıklamasını yazın', 'info'); return; }
+  _jgMockupBaslat(iste);
+}
+
+function _jgMockupBaslat(iste) {
   const key = _jgAktifAnalizKey, s = _jgAnalizSeti[key] || {};
   const g = _jgGorevCoz(key);
+  _jgMockupPending = { entryKey: key, iste, analiz: s.markdown || '' };
   _jgIsBaslatMockup('/api/jira/gorev/mockup', {
     iste, analiz: s.markdown || '', baslik: (g.summary || _jgCurrent.summary || ''), hedef_tarif: iste
   }, false);
@@ -5826,6 +5868,16 @@ async function _jgMockupPoll(isDuzelt) {
   if (d.durum === 'hata') { _jgMsg('jg-mockup-msg', d.error || 'Üretim hatası', 'err'); return; }
   // bitti
   _jgMockupHtml = d.html || '';
+  // Üretim (düzelt değil) → mockup'ın bağlı olduğu entry/analiz/iste'yi güncelle + stale temizle
+  if (!isDuzelt && _jgMockupPending) {
+    _jgMockupEntryKey = _jgMockupPending.entryKey;
+    _jgMockupIste = _jgMockupPending.iste;
+    _jgMockupBaseAnaliz = _jgMockupPending.analiz;
+    _jgMockupStale = false;
+    _jgMockupPending = null;
+  }
+  const staleEl = document.getElementById('jg-mockup-stale');
+  if (staleEl) staleEl.style.display = _jgMockupStale ? '' : 'none';
   document.getElementById('jg-mockup-sonuc').style.display = '';
   document.getElementById('jg-mockup-geri-btn').style.display = d.geri_al ? '' : 'none';
   const kaynak = d.tasarim_kaynagi === 'canli' ? '🌐 canlı tasarım baz alındı' : '⚠ jenerik tasarım (canlı hedef yok)';
@@ -5873,6 +5925,14 @@ function jgMockupIndir() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch (e) { toast('İndirme hatası', 'error'); }
 }
+
+// Analist analiz editörünü ELLE düzenlerse (job değil) ve mockup o entry'den üretildiyse → stale.
+(function () {
+  const ed = document.getElementById('jg-preview-editor');
+  if (ed) ed.addEventListener('input', () => {
+    if (_jgAktifAnalizKey && _jgAktifAnalizKey === _jgMockupEntryKey) _jgMockupStaleKontrol(_jgAktifAnalizKey, ed.value);
+  });
+})();
 
 async function _jgYtProjelerYukle() {
   const sel = document.getElementById('jg-yt-proje');

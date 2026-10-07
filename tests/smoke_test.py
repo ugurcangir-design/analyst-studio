@@ -82,9 +82,7 @@ kontrol("heartbeat + bye ok", hb.get("ok") is True and by.get("ok") is True)
 # Task Analizi → Ekran Mockup'ı: boş iste 400; mockup yokken düzelt 400 (AI'sız doğrulama).
 mkbos = istemci.post("/api/jira/gorev/mockup", json={"iste": ""}, headers=ORIGIN)
 kontrol("gorev/mockup boş iste → 400", mkbos.status_code == 400)
-import os as _os
-_mk = _os.path.join(_os.path.dirname(__file__), "..", "output", "gorev-mockup.html")
-if not _os.path.exists(_mk):
+if not (BASE / "output" / "gorev-mockup.html").exists():
     mkdz = istemci.post("/api/jira/gorev/mockup/duzelt", json={"talimat": "x"}, headers=ORIGIN)
     kontrol("gorev/mockup düzelt dosyasız → 400", mkdz.status_code == 400)
 mkdur = istemci.get("/api/jira/gorev/mockup/durum/yokbuis")
