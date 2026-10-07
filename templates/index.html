@@ -6226,19 +6226,32 @@ function sendHeartbeat() {
 }
 
 // Periyodik heartbeat — sekme AÇIK olduğu sürece gönderilir (arka planda da).
-// Eski kodda 'hidden' iken gönderilmiyordu → kullanıcı başka sekmeye geçince
-// sunucu "bağlantı kesildi" sanıp kendini kapatmaya çalışıyordu. Sekme
-// gerçekten KAPANINCA timer ölür → heartbeat kesilir → sunucu kapanır.
-// (Chrome arka planda interval'i 60s'e seyreltebilir; KAPAT_SURE=180s buna dayanıklı.)
+// NOT (kapanma modeli): sunucu ömrü ARTIK bu timer'a bağlı DEĞİL. Chrome arka
+// plandaki idle sekmeyi dondurur/atar → bu interval durabilir; eskiden sunucu
+// bunu "kapandı" sanıp kendini kapatıyordu ("Failed to fetch"). Artık sunucu
+// yalnız aşağıdaki `pagehide` beacon'ı ile (gerçek kapanış) kapanır; idle sekme
+// açık kalır. Heartbeat yine de uyku-overlay'i ve "kapanıyorum"u iptal için atılır.
 setInterval(sendHeartbeat, 20000);
-// Sekme öne gelir gelmez anında heartbeat — sayaç gecikmesiz sıfırlanır
+// Sekme öne gelir / bfcache'ten geri yüklenir → anında heartbeat (bekleyen
+// "kapanıyorum" sinyalini iptal eder, sayaç gecikmesiz sıfırlanır).
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') sendHeartbeat();
 });
+window.addEventListener('pageshow', sendHeartbeat);
+// Sayfa GERÇEKTEN kapanıyor/gidiyor → sunucuya "kapanıyorum" de (sendBeacon,
+// unload sırasında güvenilir). Yenilemede de atılır ama reload sonrası heartbeat
+// hemen döndüğü için sunucu kapanmaz (BYE_GRACE içinde iptal). Idle/arka-plan
+// sekme bu olayı TETİKLEMEZ → sunucu gün boyu açık kalır.
+window.addEventListener('pagehide', () => {
+  try {
+    if (navigator.sendBeacon) navigator.sendBeacon('/api/bye');
+    else fetch('/api/bye', {method: 'POST', keepalive: true}).catch(() => {});
+  } catch (e) { /* kapanış sırasında hata yut */ }
+});
 
-// Desktop modu: ilk heartbeat'te tespit et (beforeunload kullanılmıyor —
-// refresh ve sekme kapatmayı ayırt etmek mümkün değil; kapatma heartbeat
-// timeout ile algılanır)
+// Desktop modu: ilk heartbeat'te tespit et. (Kapanış artık yukarıdaki `pagehide`
+// beacon'ı ile bildirilir; refresh vs kapatma, sunucudaki BYE_GRACE reconnect
+// payıyla ayrılır — yenileme heartbeat'i hemen döndürür, gerçek kapanış döndürmez.)
 async function _desktopModKontrol() {
   try {
     await fetch('/api/heartbeat', {method:'POST'});
@@ -8971,13 +8984,26 @@ async function guncellemeYap() {
 async function yenidenBaslat() {
   const btn = document.getElementById('restart-btn');
   const log = document.getElementById('update-log');
-  if (!confirm('Uygulama sunucusu yeniden başlatılsın mı? Sürmekte olan bir işlem varsa kesilir.')) return;
+  if (!confirm('Uygulama sunucusu yeniden başlatılsın mı?')) return;
+  // İş sürerken sunucu 409 + onay_gerekli döner → analiste neyin kesileceğini söyle.
+  let force = false;
+  try {
+    const r0 = await fetch('/api/restart', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'});
+    if (r0.status === 409) {
+      const d0 = await r0.json();
+      if (!confirm(`⚠ Şu an ${d0.mesgul || 'bir işlem sürüyor'}. Yeniden başlatırsan bu iş KESİLİR (yarıda kalan iş kurtarılmaya çalışılır ama tamamlanmaz).\n\nYine de yeniden başlatılsın mı?`)) return;
+      force = true;
+    } else {
+      // 200: restart zaten tetiklendi (ya da yanıt kesildi) → aşağıdaki UI akışına düş.
+      force = null;
+    }
+  } catch (e) { /* yanıt kesildi — restart tetiklenmiş olabilir */ force = null; }
   btn.disabled = true;
   document.getElementById('update-btn').disabled = true;
   btn.innerHTML = 'Yeniden başlatılıyor...';
   try {
-    await fetch('/api/restart', {method: 'POST'});
-  } catch (e) { /* execv sürede yanıt kesilebilir — normal */ }
+    if (force === true) await fetch('/api/restart', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({force: true})});
+  } catch (e) { /* restart sürede yanıt kesilebilir — normal */ }
   log.textContent = 'Sunucu yeniden başlatılıyor... Sayfa birkaç saniye içinde yenilenecek.';
   log.style.display = 'block';
   log.style.borderColor = 'var(--border)';

@@ -74,6 +74,11 @@ kontrol("GET /static/ds.css 200", istemci.get("/static/ds.css").status_code == 2
 me = json_al(istemci.get("/api/auth/me"))
 kontrol("auth/me rol=owner (AUTH kapalı)", me.get("rol") == "owner" and me.get("gizli") == [])
 
+# Kapanma modeli: /api/bye (pagehide beacon) + /api/heartbeat deterministik dönmeli.
+hb = json_al(istemci.post("/api/heartbeat"))
+by = json_al(istemci.post("/api/bye"))
+kontrol("heartbeat + bye ok", hb.get("ok") is True and by.get("ok") is True)
+
 o = json_al(istemci.get("/api/oturum"))
 kontrol("oturum ok + katalog", o.get("ok") and len(o.get("ciktilar", [])) >= 9)
 

@@ -604,6 +604,7 @@ def auth_kontrol():
 CSRF_MUAF = {
     "/api/auth/login",   # login sırasında henüz session yok, Origin doğru zaten
     "/api/heartbeat",    # navigator.sendBeacon kullanılmıyor ama hızlı çağrı, gereksiz yere zorlama
+    "/api/bye",          # pagehide beacon — sendBeacon başlık ekleyemez; zararsız kapanış sinyali
 }
 
 
@@ -917,18 +918,35 @@ _rerun_lock = threading.Lock()
 _son_heartbeat = time.time()
 _heartbeat_lock = threading.Lock()
 _suspended = False          # True → tarayıcı 2+ dakikadır bağlı değil
+_client_bye_at = 0.0         # son "sekme kapanıyor" (pagehide beacon) zamanı → aşağıda açıkla
 _process: subprocess.Popen | None = None
 _process_lock = threading.Lock()
 _durduruldu = False          # analist "Durdur" dedi → _bekle bunu hata sanmasın, run.py state'i geri yazamasın
 _login_penceresi_at = 0.0    # son "Tarayıcıda Giriş Yap" zamanı → giriş sürerken watchdog kapatmasın
 
 SUSPEND_SURE = 30           # saniye — bu kadar heartbeat gelmezse uyku (overlay)
-# KAPAT_SURE: Chrome, 5+ dk arka planda kalan sekmelerde timer'ları 1/dakikaya
-# düşürür (intensive throttling) → heartbeat 20s'den 60s'e seyrelir. Eski 45s
-# eşiği bu durumda YANLIŞ POZİTİF veriyordu: kullanıcı sekmeyi sadece arka
-# plana almışken uygulama kendini kapatmaya çalışıyordu. 180s = 2 kaçmış
-# throttled heartbeat + pay.
-KAPAT_SURE   = 180          # saniye — heartbeat kesilirse desktop modunda kapat
+# ─── KAPANMA MODELİ (AÇIK-KAPANIŞ, heartbeat-sessizliği DEĞİL) ───────────────
+# ESKİ MODEL (sorunluydu): "KAPAT_SURE sn heartbeat gelmezse kapat". Chrome,
+# arka plandaki (kullanılmayan) sekmeleri 5+ dk sonra DONDURUR/atar → timer'lar
+# tamamen durur → heartbeat kesilir → sunucu 180s sonra kendini kapatırdı. Analist
+# sekmeyi gün boyu AÇIK ama idle tutunca "Failed to fetch" bununla oluşuyordu.
+# YENİ MODEL: sunucu ömrü idle sekmenin kısıtlanmış timer'ına BAĞLI DEĞİL. Sayfa
+# GERÇEKTEN kapanınca `pagehide` beacon'ı `/api/bye` gönderir → kısa bir pay
+# (BYE_GRACE) içinde heartbeat geri gelmezse (= yenileme değil, gerçek kapanış)
+# sunucu kapanır (portu bırakır; başlatıcı `_start.sh` zaten curl ile canlı sunucuyu
+# yeniden kullandığından port sorunu olmaz). Idle/donmuş/arka-plan sekme beacon
+# GÖNDERMEZ → sunucu açık kalır. Yenileme: pagehide → bye, ama ~2-5s içinde
+# heartbeat döner → bye iptal. Birden çok sekme: herhangi biri heartbeat atınca
+# bye iptal (çok-sekme güvenli).
+BYE_GRACE = 15              # saniye — "kapanıyorum" sinyalinden sonra reconnect payı
+# Idle "heartbeat yok" ile kapatma VARSAYILAN OLARAK KAPALI (0 = asla). Yalnız
+# donmuş sekmeleri değil, uzun süreli idle'ı da kesmemek için. Kaynak sızıntısına
+# karşı güvenlik ağı isteyen DESKTOP_IDLE_KAPAT_SAAT=<saat> ile açar (iş yokken).
+try:
+    _IDLE_KAPAT_SAAT = float(os.getenv("DESKTOP_IDLE_KAPAT_SAAT", "0") or 0)
+except (TypeError, ValueError):
+    _IDLE_KAPAT_SAAT = 0.0
+KAPAT_SURE = int(_IDLE_KAPAT_SAAT * 3600) if _IDLE_KAPAT_SAAT > 0 else 0  # 0 = idle-kill yok
 # Tarayıcıda Giriş Yap: kullanıcı ayrı bir Chrome penceresinde giriş yaparken app
 # sekmesi arka planda kalır → heartbeat kesilebilir. Bu süre boyunca watchdog
 # kapatmaz; yoksa kullanıcı girişi bitirip dönünce uygulama kapanmış oluyordu
@@ -943,36 +961,81 @@ def _analiz_calisiyor_mu() -> bool:
         return _process is not None and _process.poll() is None
 
 
+def _arka_plan_isleri_calisiyor() -> str | None:
+    """Bellek-içi arka plan işlerinden (Task Analizi / FE-BE böl / Jira köprüsü UI /
+    sohbet üretimi) herhangi biri 'calisiyor' mu? Dönen metin = bekleme nedeni; None = boş.
+    Restart/otomatik-kapanma bu daemon thread'leri ANINDA öldürür → iş kaybı. Bu kontrol
+    hem watchdog'un hem _mesgul_mu'nun bu işleri görmesini sağlar. Store'lar bu fonksiyondan
+    SONRA tanımlandığı için globals() ile güvenli erişilir (tanımlanmadıysa yok sayılır)."""
+    for ad, etiket in (("_gorev_isler", "görev analizi"),
+                       ("_febe_preview_isler", "FE/BE bölme"),
+                       ("_kopru_isler", "Jira köprüsü işlemi"),
+                       ("_sohbet_isler", "sohbet analizi üretimi")):
+        store = globals().get(ad)
+        if isinstance(store, dict):
+            try:
+                if any((j or {}).get("durum") == "calisiyor" for j in list(store.values())):
+                    return etiket + " sürüyor"
+            except Exception:
+                pass
+    return None
+
+
+def _kapanmayi_ertele(gecen: float, sebep_onek: str) -> str | None:
+    """İş sürerken/giriş açıkken kapanmayı engelle. Dönen metin = log nedeni (ertele);
+    None = ertelenecek bir şey yok (kapanabilir)."""
+    if _analiz_calisiyor_mu():
+        return f"{sebep_onek} ama analiz sürüyor"
+    _bg = _arka_plan_isleri_calisiyor()
+    if _bg:
+        return f"{sebep_onek} ama {_bg}"
+    if time.time() - _login_penceresi_at < LOGIN_GRACE:
+        return f"{sebep_onek} ama tarayıcı giriş penceresi açık"
+    return None
+
+
+def _desktop_kapat(neden: str) -> None:
+    logger.info("Desktop modu: %s — uygulama kapatılıyor.", neden)
+    os.kill(os.getpid(), signal.SIGINT)
+    # SIGINT bazen werkzeug tarafından işlenmiyor (kanıt: desktop log'da 3000+ kez
+    # 'kapatılıyor' satırı — process zombi kalıyordu, port işgal ediliyordu). 10 sn
+    # zarif kapanma şansı ver; hâlâ buradaysak kesin çık.
+    time.sleep(10)
+    logger.warning("SIGINT işe yaramadı — os._exit ile zorla kapatılıyor.")
+    logging.shutdown()
+    os._exit(0)
+
+
 def _heartbeat_izle():
     global _suspended
     while True:
         time.sleep(10)
+        simdi = time.time()
         with _heartbeat_lock:
-            gecen = time.time() - _son_heartbeat
+            gecen = simdi - _son_heartbeat
+            bye = _client_bye_at
         _suspended = gecen > SUSPEND_SURE
-        # Desktop modunda: KAPAT_SURE saniye heartbeat gelmezse kapat.
-        # Sayfa yenilemede heartbeat ~2-5s içinde geri döner, eşiğe ulaşmaz.
-        if DESKTOP_MODE and gecen > KAPAT_SURE:
-            # Analiz sürüyorsa ASLA kapanma — kullanıcı sekmeyi arka plana
-            # almış olabilir; 90s'lik analizin ortasında intihar etme.
-            if _analiz_calisiyor_mu():
-                logger.info("Desktop modu: heartbeat yok (%.0fs) ama analiz sürüyor — kapanma ertelendi.", gecen)
+        if not DESKTOP_MODE:
+            continue
+        # 1) AÇIK KAPANIŞ: sayfa `pagehide` beacon'ı gönderdi (sekme/pencere kapandı
+        #    ya da başka yere gidildi) VE BYE_GRACE içinde heartbeat geri dönmedi
+        #    (= yenileme değil, gerçek kapanış). Reconnect olduysa /api/heartbeat
+        #    _client_bye_at'ı sıfırlar → bye=0 → bu dal çalışmaz.
+        if bye and (simdi - bye) > BYE_GRACE and gecen > BYE_GRACE:
+            ertele = _kapanmayi_ertele(gecen, "sekme kapandı")
+            if ertele:
+                logger.info("Desktop modu: %s — kapanma ertelendi.", ertele)
                 continue
-            # Tarayıcı giriş penceresi açıkken (kullanıcı başka Chrome'da giriş yapıyor,
-            # app sekmesi arka planda) kapatma — yoksa dönünce "Failed to fetch".
-            if time.time() - _login_penceresi_at < LOGIN_GRACE:
-                logger.info("Desktop modu: heartbeat yok (%.0fs) ama tarayıcı giriş penceresi açık — kapanma ertelendi.", gecen)
+            _desktop_kapat("sekme kapandı (beacon), reconnect yok")
+        # 2) GÜVENLİK AĞI (varsayılan KAPALI): çok uzun süredir heartbeat yok.
+        #    Idle sekme BURADA kapatılMAZ (KAPAT_SURE=0 → atla); yalnız
+        #    DESKTOP_IDLE_KAPAT_SAAT set edilmişse ve iş yoksa devreye girer.
+        elif KAPAT_SURE and gecen > KAPAT_SURE:
+            ertele = _kapanmayi_ertele(gecen, f"heartbeat yok ({gecen:.0f}s)")
+            if ertele:
+                logger.info("Desktop modu: %s — kapanma ertelendi.", ertele)
                 continue
-            logger.info("Desktop modu: tarayıcı bağlantısı kesildi (%.0fs), uygulama kapatılıyor.", gecen)
-            os.kill(os.getpid(), signal.SIGINT)
-            # SIGINT bazen werkzeug tarafından işlenmiyor (kanıt: desktop
-            # log'da 3000+ kez 'kapatılıyor' satırı — process zombi kalıyordu,
-            # port 5002 işgal ediliyordu, kullanıcı eski kodla çalışıyordu).
-            # 10 sn zarif kapanma şansı ver; hâlâ buradaysak kesin çık.
-            time.sleep(10)
-            logger.warning("SIGINT işe yaramadı — os._exit ile zorla kapatılıyor.")
-            logging.shutdown()
-            os._exit(0)
+            _desktop_kapat(f"uzun süredir heartbeat yok ({gecen:.0f}s, idle-kapat eşiği)")
 
 
 threading.Thread(target=_heartbeat_izle, daemon=True).start()
@@ -1136,11 +1199,24 @@ def kilavuz():
 
 @app.route("/api/heartbeat", methods=["POST"])
 def heartbeat():
-    global _son_heartbeat, _suspended
+    global _son_heartbeat, _suspended, _client_bye_at
     with _heartbeat_lock:
         _son_heartbeat = time.time()
+        _client_bye_at = 0.0   # canlı heartbeat → bekleyen "kapanıyorum" sinyalini iptal et
+                               # (yenileme sonrası reconnect ya da başka açık sekme)
     _suspended = False
     return jsonify({"ok": True, "desktop_mode": DESKTOP_MODE})
+
+
+@app.route("/api/bye", methods=["POST"])
+def bye():
+    """Sayfa `pagehide` beacon'ı: sekme/pencere kapanıyor olabilir. Watchdog bunu
+    görür ve BYE_GRACE içinde heartbeat geri DÖNMEZSE (gerçek kapanış, yenileme değil)
+    desktop modunda sunucuyu kapatır. Yenilemede heartbeat hemen döner → iptal."""
+    global _client_bye_at
+    with _heartbeat_lock:
+        _client_bye_at = time.time()
+    return jsonify({"ok": True})
 
 
 @app.route("/api/version", methods=["GET"])
@@ -1187,7 +1263,12 @@ def yeniden_baslat():
     restart tetiklenmediği için gerekli — bu düğme her zaman yeniden başlatır."""
     if _auth_aktif_mi() and not _giris_yapildi_mi():
         return jsonify({"error": "Yetkisiz"}), 403
-    logger.info("Manuel yeniden başlatma istendi.")
+    # İş sürerken restart analisti kesmesin: force değilse onay iste (UI uyarı gösterir).
+    veri = request.get_json(silent=True) or {}
+    neden = _mesgul_mu()
+    if neden and not veri.get("force"):
+        return jsonify({"ok": False, "mesgul": neden, "onay_gerekli": True}), 409
+    logger.info("Manuel yeniden başlatma istendi%s.", f" (force; {neden})" if neden else "")
     _denetim("yeniden_baslat", "uygulama")
     _yeniden_baslat_zamanla()
     return jsonify({"ok": True, "yeniden_basliyor": True})
@@ -2340,6 +2421,11 @@ def _mesgul_mu() -> str | None:
     # Soru cevaplarını analize işleme (arka plan) sürüyor mu?
     if _sorular_uygula_durum.get("calisiyor"):
         return "soru cevapları uygulanıyor"
+    # Bellek-içi arka plan işleri (Task Analizi / FE-BE böl / Jira köprüsü UI / sohbet üretimi)
+    # — otomatik güncelleme / disk temizliği bunları kesmesin.
+    _bg = _arka_plan_isleri_calisiyor()
+    if _bg:
+        return _bg
     return None
 
 
