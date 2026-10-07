@@ -653,6 +653,7 @@ IZIN_VERILEN_CIKTILAR = {
     "alternatif-surecler.md",
     "jira-sonuc.txt",
     "mockup.html",
+    "gorev-mockup.html",          # Task Analizi → yeni isteye göre ekran mockup'ı (ayrı dosya)
     "sorular.json",
     "test-senaryolari.md",        # Gherkin (Given/When/Then) — teknik analiz sonrası Haiku pass'i
     "izlenebilirlik-matrisi.md",  # RTM — deterministik (0 token), süreç ID ↔ teknik bölüm eşlemesi
@@ -969,6 +970,7 @@ def _arka_plan_isleri_calisiyor() -> str | None:
     SONRA tanımlandığı için globals() ile güvenli erişilir (tanımlanmadıysa yok sayılır)."""
     for ad, etiket in (("_gorev_isler", "görev analizi"),
                        ("_febe_preview_isler", "FE/BE bölme"),
+                       ("_gorev_mockup_isler", "ekran mockup'ı üretimi"),
                        ("_kopru_isler", "Jira köprüsü işlemi"),
                        ("_sohbet_isler", "sohbet analizi üretimi")):
         store = globals().get(ad)
@@ -5721,6 +5723,135 @@ def mockup_geri_al():
                                                 encoding="utf-8")
         bak.unlink(missing_ok=True)   # tek adım geri-al (zincir değil)
         return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─── Task Analizi → Ekran Mockup'ı ───────────────────────────────────────────
+# Analiz edilen bir göreve EK yeni bir isteye göre, mevcut uygulama tasarımını (canlı
+# gözlem) baz alan HTML ekran mockup'ı. Üretim UZUN (AI + Chrome MCP) → arka plan iş +
+# polling (geçen-süre/takılma uyarısıyla tutarlı). Çıktı: output/gorev-mockup.html.
+_gorev_mockup_isler: dict = {}
+_gorev_mockup_lock = threading.Lock()
+_GOREV_MOCKUP_BAK = "_gorev-mockup.bak.html"   # düzelt öncesi yedek (geri-al); serve edilmez
+
+
+def _gorev_mockup_calistir(job_id: str) -> None:
+    job = _gorev_mockup_isler.get(job_id)
+    if not job:
+        return
+    job["aktif_bas"] = time.time()
+    _bas = time.time()
+    _tbas = _token_bas()
+    from skills.base import USE_CLAUDE_CLI, aktif_cli_model, MODEL_ANALIZ
+    _ai = "cli" if USE_CLAUDE_CLI else "api"
+    _model = aktif_cli_model() if USE_CLAUDE_CLI else MODEL_ANALIZ
+    try:
+        from skills.html_mockup import gorev_mockup_uret, gorev_mockup_duzelt, GOREV_MOCKUP_DOSYA
+        if job["mode"] == "duzelt":
+            # Geri-al için yedek (her düzeltmeden önce güncel hâli sakla)
+            try:
+                _m = OUTPUT_DIR / GOREV_MOCKUP_DOSYA
+                if _m.exists():
+                    (OUTPUT_DIR / _GOREV_MOCKUP_BAK).write_text(
+                        _m.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+            except Exception:
+                pass
+            sonuc = gorev_mockup_duzelt(job["talimat"])
+            sonuc["geri_al"] = True
+        else:
+            sonuc = gorev_mockup_uret(job["analiz"], job["iste"], job.get("baslik", ""),
+                                      job.get("hedef_tarif", ""))
+        job["sonuc"] = sonuc
+        job["durum"] = "bitti"
+        _telemetri_olay("mockup", "ok", int((time.time() - _bas) * 1000),
+                        model=_model, ai_modu=_ai, token_bas=_tbas)
+    except Exception as e:
+        logger.error(f"Görev mockup hatası: {e}")
+        job["durum"] = "hata"
+        try:
+            from skills.hatalar import insanlastir as _insanlastir
+            _hz = _insanlastir(str(e)) or {}
+            job["hata"] = (_hz.get("baslik") or str(e)) + (f" — {_hz['oneri']}" if _hz.get("oneri") else "")
+        except Exception:
+            job["hata"] = str(e)
+        _telemetri_olay("mockup", "error", int((time.time() - _bas) * 1000),
+                        model=_model, ai_modu=_ai, token_bas=_tbas)
+
+
+def _gorev_mockup_is_baslat(job: dict) -> str:
+    job_id = uuid.uuid4().hex[:12]
+    with _gorev_mockup_lock:
+        _gorev_mockup_isler[job_id] = {"durum": "calisiyor", "sonuc": None, "hata": None,
+                                       "zaman": time.time(), "aktif_bas": time.time(), **job}
+        if len(_gorev_mockup_isler) > 24:
+            bitmis = [j for j in sorted(_gorev_mockup_isler, key=lambda j: _gorev_mockup_isler[j]["zaman"])
+                      if _gorev_mockup_isler[j]["durum"] != "calisiyor"]
+            for eski in bitmis[:max(0, len(_gorev_mockup_isler) - 24)]:
+                _gorev_mockup_isler.pop(eski, None)
+    threading.Thread(target=_gorev_mockup_calistir, args=(job_id,), daemon=True,
+                     name=f"gorev-mockup-{job_id}").start()
+    return job_id
+
+
+@app.route("/api/jira/gorev/mockup", methods=["POST"])
+def gorev_mockup_uret_route():
+    """Görev analizi + yeni iste → ekran mockup'ı ARKA PLANDA üretir. {job_id} döner →
+    /api/jira/gorev/mockup/durum/<job_id> ile polling. Jira'ya YAZMAZ."""
+    data = request.get_json(silent=True) or {}
+    iste = (data.get("iste") or "").strip()
+    if not iste:
+        return jsonify({"ok": False, "error": "Yeni iste / ekran açıklaması boş olamaz."}), 400
+    job_id = _gorev_mockup_is_baslat({
+        "mode": "uret",
+        "analiz": (data.get("analiz") or "")[:120_000],   # skill içinde MAX_CHARS_GENEL ile tekrar sınırlanır
+        "iste": iste[:2000],
+        "baslik": (data.get("baslik") or "").strip()[:300],
+        "hedef_tarif": (data.get("hedef_tarif") or "").strip()[:500],
+    })
+    return jsonify({"ok": True, "job_id": job_id})
+
+
+@app.route("/api/jira/gorev/mockup/duzelt", methods=["POST"])
+def gorev_mockup_duzelt_route():
+    """Mockup'ı analizden AYRI düzelt (sohbet). {talimat} → gorev-mockup.html güncellenir."""
+    data = request.get_json(silent=True) or {}
+    talimat = (data.get("talimat") or "").strip()
+    if not talimat:
+        return jsonify({"ok": False, "error": "Düzeltme talimatı boş olamaz."}), 400
+    if not (OUTPUT_DIR / "gorev-mockup.html").exists():
+        return jsonify({"ok": False, "error": "Önce 'Ekran Mockup'ı' ile üretin."}), 400
+    job_id = _gorev_mockup_is_baslat({"mode": "duzelt", "talimat": talimat[:1000]})
+    return jsonify({"ok": True, "job_id": job_id})
+
+
+@app.route("/api/jira/gorev/mockup/durum/<job_id>", methods=["GET"])
+def gorev_mockup_durum(job_id):
+    """Mockup işi durumu/sonucu (polling) — geçen süre + takılma uyarısı için süreler dahil."""
+    job = _gorev_mockup_isler.get(job_id)
+    if not job:
+        return jsonify({"ok": False, "error": "iş bulunamadı"}), 404
+    simdi = time.time()
+    ortak = {"gecen_sn": int(simdi - job.get("zaman", simdi)),
+             "adim_gecen_sn": int(simdi - job["aktif_bas"]) if job.get("aktif_bas") else 0}
+    if job["durum"] == "bitti":
+        return jsonify({"ok": True, "durum": "bitti", **(job.get("sonuc") or {}), **ortak})
+    if job["durum"] == "hata":
+        return jsonify({"ok": True, "durum": "hata", "error": job.get("hata"), **ortak})
+    return jsonify({"ok": True, "durum": "calisiyor", **ortak})
+
+
+@app.route("/api/jira/gorev/mockup/geri-al", methods=["POST"])
+def gorev_mockup_geri_al():
+    """Son mockup düzeltmesini geri al — yedeği gorev-mockup.html'e geri yazar."""
+    bak = OUTPUT_DIR / _GOREV_MOCKUP_BAK
+    if not bak.exists():
+        return jsonify({"ok": False, "error": "Geri alınacak bir düzeltme yok."}), 400
+    try:
+        yeni = bak.read_text(encoding="utf-8", errors="replace")
+        (OUTPUT_DIR / "gorev-mockup.html").write_text(yeni, encoding="utf-8")
+        bak.unlink(missing_ok=True)
+        return jsonify({"ok": True, "html": yeni})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 

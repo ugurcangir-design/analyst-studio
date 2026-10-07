@@ -3030,6 +3030,37 @@ function temaDegistir() {
           </div>
           <div class="jg-msg" id="jg-yt-msg" style="margin-top:8px"></div>
         </div>
+        <!-- Ekran Mockup'ı — analiz edilen göreve EK yeni isteye göre, mevcut uygulama
+             tasarımını (canlı gözlem) baz alan HTML mockup. Analizden AYRI düzeltilebilir. -->
+        <div class="jg-yenitask" id="jg-mockup-panel" style="display:none">
+          <div class="jg-yt-head">
+            <svg class="ico"><use href="#i-zap"/></svg>
+            <strong>Ekran Mockup'ı</strong>
+            <span class="jg-yt-mode" id="jg-mockup-kaynak"></span>
+          </div>
+          <label class="jg-yt-field jg-yt-wide">
+            <span>Yeni iste / ekran açıklaması</span>
+            <textarea class="setting-input" id="jg-mockup-iste" rows="3" placeholder="Bu göreve EK olarak tasarlanacak yeni ekran/özellik — örn: 'Komisyon oranı girişi için ayrı ayarlar ekranı: oran tablosu + ekle/sil + kaydet'"></textarea>
+          </label>
+          <div class="jg-yt-not" id="jg-mockup-not">Mockup, görev analizini ve <b>canlı uygulamanın mevcut ekran tasarımını</b> baz alır (Bağlam Filtresi → Task canlı uygulama hedefi girilmişse). Analizden <b>ayrı</b> düzeltilebilir.</div>
+          <div class="surec-stall-uyari" id="jg-mockup-uyari" style="display:none"></div>
+          <div class="jg-yt-akt">
+            <button class="btn btn-outline btn-sm" type="button" onclick="jgMockupKapat()">Vazgeç</button>
+            <button class="btn btn-primary btn-sm" id="jg-mockup-btn" onclick="jgMockupUret()"><svg class="ico"><use href="#i-zap"/></svg> Oluştur</button>
+          </div>
+          <div id="jg-mockup-sonuc" style="display:none;margin-top:10px">
+            <div class="jg-duzelt-row" style="display:flex">
+              <input type="text" id="jg-mockup-duzelt" autocomplete="off" placeholder="Mockup'ı düzelt (analizden ayrı) — örn: 'Kaydet butonunu sağ üste al, tabloya durum sütunu ekle'" onkeydown="if(event.key==='Enter')jgMockupDuzelt()">
+              <button class="btn btn-outline btn-sm" id="jg-mockup-duzelt-btn" onclick="jgMockupDuzelt()">Düzelt</button>
+            </div>
+            <div class="jg-yt-akt" style="margin-top:8px">
+              <button class="btn btn-outline btn-sm" id="jg-mockup-geri-btn" onclick="jgMockupGeriAl()" style="display:none">↶ Geri Al</button>
+              <button class="btn btn-outline btn-sm" onclick="jgMockupIndir()"><svg class="ico"><use href="#i-download"/></svg> İndir</button>
+              <button class="btn btn-primary btn-sm" onclick="jgMockupAc()"><svg class="ico"><use href="#i-eye"/></svg> Önizle</button>
+            </div>
+          </div>
+          <div class="jg-msg" id="jg-mockup-msg" style="margin-top:8px"></div>
+        </div>
         <div class="jg-modal-aksiyon">
           <!-- İteratif düzelt sohbeti (ilgili kısmı düzelt; tam yeniden yazma değil) -->
           <div class="jg-duzelt-row" id="jg-duzelt-row" style="display:none">
@@ -3040,6 +3071,9 @@ function temaDegistir() {
           <button class="btn btn-outline btn-sm" onclick="jgPreviewKapat()">İptal</button>
           <button class="btn btn-outline" id="jg-yenitask-btn" onclick="jgYeniTaskPanelAc()" title="Analiz OK ise: seçtiğiniz board/proje'ye, girdiğiniz Epic/Story/Task'a İLİŞKİLİ yeni Task açar (kaynak task'ın üzerine yazmaz).">
             <svg class="ico"><use href="#i-plus"/></svg> Yeni Task Aç
+          </button>
+          <button class="btn btn-outline" id="jg-mockup-panel-btn" onclick="jgMockupPanelAc()" title="Analiz edilen göreve EK yeni bir isteye göre, mevcut uygulama tasarımını baz alan HTML ekran mockup'ı üretir.">
+            <svg class="ico"><use href="#i-zap"/></svg> Ekran Mockup'ı
           </button>
           <button class="btn btn-success" id="jg-approve-btn" onclick="jgJiraGuncelle()">
             <svg class="ico"><use href="#i-check"/></svg> Onayla ve Jira'da Güncelle
@@ -3483,6 +3517,26 @@ function temaDegistir() {
         <div class="jira-modal-foot">
           <span style="flex:1;font-size:11.5px;color:var(--text3)" id="task-viewer-alt"></span>
           <button class="btn btn-primary btn-sm" onclick="taskViewerKapat()">Kapat</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ekran Mockup'ı tam-ekran önizleme (sandbox'lı iframe — AI üretimi HTML izole) -->
+    <div class="jira-modal" id="gorev-mockup-modal" onclick="if(event.target===this)jgMockupModalKapat()" style="z-index:9600">
+      <div class="jira-modal-box" style="max-width:1120px;width:96vw;height:92vh;max-height:92vh">
+        <div class="jira-modal-head">
+          <svg class="ico" style="color:var(--text3)"><use href="#i-zap"/></svg>
+          <span class="jira-modal-title">Ekran Mockup'ı — önizleme</span>
+          <button class="jira-modal-close" onclick="jgMockupModalKapat()" title="Kapat">&times;</button>
+        </div>
+        <div style="flex:1;overflow:hidden;background:#fff">
+          <!-- Sandbox: allow-same-origin BİLEREK yok (AI üretimi HTML'i izole et) -->
+          <iframe id="gorev-mockup-iframe" style="width:100%;height:100%;border:0" sandbox="allow-scripts allow-forms"></iframe>
+        </div>
+        <div class="jira-modal-foot">
+          <span style="flex:1;font-size:11.5px;color:var(--text3)" id="gorev-mockup-foot"></span>
+          <button class="btn btn-outline btn-sm" onclick="jgMockupIndir()"><svg class="ico"><use href="#i-download"/></svg> İndir</button>
+          <button class="btn btn-primary btn-sm" onclick="jgMockupModalKapat()">Kapat</button>
         </div>
       </div>
     </div>
@@ -5268,6 +5322,7 @@ function _jgSonucGoster(key) {
   const ytBtn = document.getElementById('jg-yenitask-btn');
   if (ytBtn) ytBtn.disabled = !!s.hata || !s.markdown;
   jgYeniTaskKapat();   // analiz değişince yeni-task paneli kapansın (içerik yeni analizle yeniden açılır)
+  jgMockupKapat();     // analiz değişince mockup paneli de kapansın (farklı görev/analiz)
   document.getElementById('jg-duzelt-row').style.display = s.hata ? 'none' : '';
   _jgMsg('jg-preview-msg', s.hata ? ('Hata: ' + s.hata) : '', s.hata ? 'err' : '');
   const tab = document.getElementById('jg-modal-tab-sorular');
@@ -5553,6 +5608,7 @@ async function jgAnalizDuzelt() {
 function jgPreviewKapat() {
   _jgPanelGizle();
   jgYeniTaskKapat();
+  jgMockupKapat();
   document.body.style.overflow = '';
   if (_jgAktifJob) { _jgSurenChipGuncelle(true); return; }   // iş sürüyor → kesme, çip göster
   _jgProcBitir();
@@ -5564,6 +5620,7 @@ function jgPreviewKapat() {
   document.querySelector('.jg-modal-aksiyon').style.display = '';
   _jgCurrent = null;
   _jgAnalizSeti = {}; _jgAktifAnalizKey = null; _jgSecimBirincil = null;
+  _jgMockupHtml = '';   // yeni görev farklı mockup — bayat sonuç bloğu gösterme
   _jgSetKaydet();   // panel kapandı (iş yok) → kalıcı seti de temizle
 }
 
@@ -5667,6 +5724,154 @@ async function jgYeniTaskPanelAc() {
 
 function jgYeniTaskKapat() {
   document.getElementById('jg-yenitask-panel').style.display = 'none';
+}
+
+// ── Ekran Mockup'ı — analiz edilen göreve EK yeni isteye göre, mevcut uygulama
+//    tasarımını (canlı gözlem) baz alan HTML mockup. Analizden AYRI düzeltilir;
+//    üretim/düzeltme arka plan iş (uzun AI + Chrome MCP) → polling + takılma uyarısı.
+let _jgMockupHtml = '';          // en güncel mockup HTML (önizleme/indir için bellekte)
+let _jgMockupJob = null;         // aktif iş id'i
+let _jgMockupTimer = null;       // polling timer
+let _jgMockupCalisiyor = false;
+
+function jgMockupPanelAc() {
+  if (!_jgCurrent) return;
+  if (_jgMesgul()) { toast('İşlem sürüyor — bitince mockup üretilebilir', 'info'); return; }
+  jgYeniTaskKapat();   // iki panel aynı anda açık kalmasın
+  // Aktif editör içeriğini sete kaydet (mockup bağlamı güncel analiz olsun)
+  const ed = document.getElementById('jg-preview-editor');
+  if (ed && _jgAnalizSeti[_jgAktifAnalizKey] && ed.style.display !== 'none') _jgAnalizSeti[_jgAktifAnalizKey].markdown = ed.value;
+  const panel = document.getElementById('jg-mockup-panel');
+  panel.style.display = '';
+  _jgMsg('jg-mockup-msg', '');
+  document.getElementById('jg-mockup-uyari').style.display = 'none';
+  // Bu task için üretilmiş mockup varsa sonuç bloğunu göster (tek güncel dosya modeli)
+  document.getElementById('jg-mockup-sonuc').style.display = _jgMockupHtml ? '' : 'none';
+  document.getElementById('jg-mockup-btn').disabled = false;
+  panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function jgMockupKapat() {
+  document.getElementById('jg-mockup-panel').style.display = 'none';
+}
+
+function _jgMockupKilit(kilitli) {
+  _jgMockupCalisiyor = kilitli;
+  ['jg-mockup-btn', 'jg-mockup-duzelt-btn'].forEach(id => {
+    const b = document.getElementById(id); if (b) b.disabled = kilitli;
+  });
+}
+
+function jgMockupUret() {
+  if (_jgMockupCalisiyor) return;
+  const iste = (document.getElementById('jg-mockup-iste').value || '').trim();
+  if (!iste) { toast('Önce yeni iste / ekran açıklamasını yazın', 'info'); return; }
+  const key = _jgAktifAnalizKey, s = _jgAnalizSeti[key] || {};
+  const g = _jgGorevCoz(key);
+  _jgIsBaslatMockup('/api/jira/gorev/mockup', {
+    iste, analiz: s.markdown || '', baslik: (g.summary || _jgCurrent.summary || ''), hedef_tarif: iste
+  }, false);
+}
+
+function jgMockupDuzelt() {
+  if (_jgMockupCalisiyor) return;
+  const inp = document.getElementById('jg-mockup-duzelt');
+  const talimat = (inp.value || '').trim();
+  if (!talimat) { toast('Bir düzeltme yazın', 'info'); return; }
+  inp.value = '';
+  _jgIsBaslatMockup('/api/jira/gorev/mockup/duzelt', { talimat }, true);
+}
+
+async function _jgIsBaslatMockup(url, govde, isDuzelt) {
+  _jgMockupKilit(true);
+  _jgMsg('jg-mockup-msg', isDuzelt ? 'Mockup düzeltiliyor…' : 'Ekran mockup\'ı üretiliyor (canlı uygulama gözlemi sürebilir)…');
+  document.getElementById('jg-mockup-uyari').style.display = 'none';
+  try {
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(govde) });
+    const d = await r.json();
+    if (!d.ok) { _jgMsg('jg-mockup-msg', d.error || 'Hata', 'err'); _jgMockupKilit(false); return; }
+    _jgMockupJob = d.job_id;
+    _jgMockupPollBasla(isDuzelt);
+  } catch (e) { _jgMsg('jg-mockup-msg', _jgHataMetni(e), 'err'); _jgMockupKilit(false); }
+}
+
+function _jgMockupPollBasla(isDuzelt) {
+  clearInterval(_jgMockupTimer);
+  _jgMockupTimer = setInterval(() => _jgMockupPoll(isDuzelt), 2500);
+}
+
+async function _jgMockupPoll(isDuzelt) {
+  if (!_jgMockupJob) { clearInterval(_jgMockupTimer); return; }
+  let d;
+  try {
+    const r = await fetch('/api/jira/gorev/mockup/durum/' + _jgMockupJob);
+    d = await r.json();
+  } catch (e) { return; }   // ağ blip'i — bir sonraki tur dener
+  if (!d.ok) { clearInterval(_jgMockupTimer); _jgMsg('jg-mockup-msg', d.error || 'İş bulunamadı', 'err'); _jgMockupKilit(false); return; }
+  if (d.durum === 'calisiyor') {
+    const sn = d.adim_gecen_sn || d.gecen_sn || 0;
+    const uy = document.getElementById('jg-mockup-uyari');
+    if (uy) {
+      if (sn >= _JG_STALL_SN) {
+        uy.innerHTML = `⚠ Mockup üretimi beklenenden uzun sürüyor (${Math.floor(sn/60)} dk). Agent canlı uygulamaya erişemiyor olabilir — <b>VPN / ağ</b> ya da Task canlı uygulama hedefini kontrol edin. İş arka planda sürüyor.`;
+        uy.style.display = '';
+      } else { uy.style.display = 'none'; }
+    }
+    return;
+  }
+  clearInterval(_jgMockupTimer);
+  document.getElementById('jg-mockup-uyari').style.display = 'none';
+  _jgMockupJob = null;
+  _jgMockupKilit(false);
+  if (d.durum === 'hata') { _jgMsg('jg-mockup-msg', d.error || 'Üretim hatası', 'err'); return; }
+  // bitti
+  _jgMockupHtml = d.html || '';
+  document.getElementById('jg-mockup-sonuc').style.display = '';
+  document.getElementById('jg-mockup-geri-btn').style.display = d.geri_al ? '' : 'none';
+  const kaynak = d.tasarim_kaynagi === 'canli' ? '🌐 canlı tasarım baz alındı' : '⚠ jenerik tasarım (canlı hedef yok)';
+  document.getElementById('jg-mockup-kaynak').textContent = kaynak;
+  const boyutKb = d.boyut ? (d.boyut / 1024).toFixed(0) + ' KB' : '';
+  _jgMsg('jg-mockup-msg', `✓ Mockup hazır${boyutKb ? ' · ' + boyutKb : ''}${d.tasarim_kaynagi === 'jenerik' ? ' · mevcut tasarımla eşleşme için Bağlam Filtresi → Task canlı uygulama hedefini girin' : ''}`, 'ok');
+  if (!isDuzelt) jgMockupAc();   // ilk üretimde önizlemeyi aç
+  else { const f = document.getElementById('gorev-mockup-iframe'); if (f && document.getElementById('gorev-mockup-modal').classList.contains('visible')) f.srcdoc = _jgMockupHtml; }
+}
+
+function jgMockupAc() {
+  if (!_jgMockupHtml) { toast('Önce mockup üretin', 'info'); return; }
+  document.getElementById('gorev-mockup-iframe').srcdoc = _jgMockupHtml;
+  document.getElementById('gorev-mockup-foot').textContent = (document.getElementById('jg-mockup-kaynak').textContent || '');
+  document.getElementById('gorev-mockup-modal').classList.add('visible');
+}
+
+function jgMockupModalKapat() {
+  document.getElementById('gorev-mockup-modal').classList.remove('visible');
+  document.getElementById('gorev-mockup-iframe').srcdoc = '';
+}
+
+async function jgMockupGeriAl() {
+  if (_jgMockupCalisiyor) return;
+  try {
+    const r = await fetch('/api/jira/gorev/mockup/geri-al', { method: 'POST' });
+    const d = await r.json();
+    if (!d.ok) { _jgMsg('jg-mockup-msg', d.error || 'Geri alınamadı', 'err'); return; }
+    _jgMockupHtml = d.html || _jgMockupHtml;
+    document.getElementById('jg-mockup-geri-btn').style.display = 'none';
+    const f = document.getElementById('gorev-mockup-iframe');
+    if (f && document.getElementById('gorev-mockup-modal').classList.contains('visible')) f.srcdoc = _jgMockupHtml;
+    _jgMsg('jg-mockup-msg', '↶ Son düzeltme geri alındı.', 'ok');
+  } catch (e) { _jgMsg('jg-mockup-msg', _jgHataMetni(e), 'err'); }
+}
+
+function jgMockupIndir() {
+  if (!_jgMockupHtml) { toast('İndirilecek mockup yok', 'info'); return; }
+  try {
+    const blob = new Blob([_jgMockupHtml], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'ekran-mockup.html';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (e) { toast('İndirme hatası', 'error'); }
 }
 
 async function _jgYtProjelerYukle() {
