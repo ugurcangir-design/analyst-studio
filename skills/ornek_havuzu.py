@@ -198,6 +198,60 @@ def durum() -> dict:
     return {"toplam": len(hepsi), "tipler": tipler, "limit": _MAX_ORNEK, "son_cekim": son}
 
 
+def tani() -> dict:
+    """Teşhis: sink 'ornekler' ucuna AYNEN istek atıp ham yanıtı özetler — '0 çekildi' nedeni.
+    Owner panelinde gösterilir; sır (anahtar/e-posta) döndürmez, yalnız gönderilip gönderilmediğini."""
+    out: dict = {"email_gonderildi": False, "read_gonderildi": False}
+    try:
+        from . import telemetri
+        import requests
+        url = telemetri._sink_url()
+        out["url_son"] = ("…" + url[-32:]) if url else ""
+        if not url:
+            out["hata"] = "Sink URL yok."
+            return out
+        params = {"ornekler": "1"}
+        try:
+            em = (telemetri.analist_eposta_oku() or "").strip()
+            if em:
+                params["email"] = em
+                out["email_gonderildi"] = True
+        except Exception:
+            pass
+        try:
+            k = telemetri._sink_key()
+            if k:
+                params["read"] = k
+                out["read_gonderildi"] = True
+        except Exception:
+            pass
+        r = requests.get(url, params=params, timeout=20)
+        out["http_status"] = r.status_code
+        out["ham_ozet"] = (r.text or "")[:200]
+        try:
+            veri = r.json()
+        except Exception:
+            out["yanit_tipi"] = "metin (JSON değil — muhtemelen yetki/forbidden ya da eski kod)"
+            return out
+        if isinstance(veri, list):
+            out["yanit_tipi"] = "liste"
+            out["liste_adet"] = len(veri)
+            out["gecerli_ornek"] = sum(
+                1 for o in veri if isinstance(o, dict)
+                and (o.get("tip") in ("surec", "teknik")) and len((o.get("icerik") or "")) >= 300)
+            # Örnek şeması mı yoksa kullanım-olayı mı (eski kod bunu döndürür)?
+            ilk = veri[0] if veri else {}
+            out["ornek_semasi"] = isinstance(ilk, dict) and ("icerik" in ilk or "tip" in ilk)
+            out["kullanim_semasi"] = isinstance(ilk, dict) and ("olay" in ilk)
+        elif isinstance(veri, dict):
+            out["yanit_tipi"] = "nesne"
+            out["mesaj"] = str(veri.get("error", ""))[:200]
+        return out
+    except Exception as e:
+        out["hata"] = str(e)[:200]
+        return out
+
+
 def _oku_hepsi() -> list[dict]:
     out = []
     try:

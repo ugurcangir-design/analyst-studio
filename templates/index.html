@@ -3205,6 +3205,7 @@ function temaDegistir() {
               <div id="ku-ornek-ozet" style="color:var(--text2);margin-top:2px">Yükleniyor…</div>
             </div>
             <button class="btn btn-outline btn-sm" id="ku-ornek-cek-btn" onclick="ornekCek()" title="Merkezi havuzdan ekip örneklerini şimdi indir">Şimdi Çek</button>
+            <button class="btn btn-ghost btn-sm" onclick="ornekTani()" title="0 çekiliyorsa nedenini gösterir">Teşhis</button>
           </div>
           <!-- Ekip verisi okuma anahtarı — app-sahibinden alınır, YEREL kaydedilir (git'e girmez).
                Ayarlı değilken "Uzaktan Çek" çalışmaz → yalnız bu makinenin kayıtları görünür. -->
@@ -4308,6 +4309,24 @@ async function ornekCek() {
     toast(d.ok ? (d.mesaj || 'Çekildi') : ('Çekilemedi: ' + (d.mesaj || '')), d.ok ? 'success' : 'error');
   } catch (e) { toast('Çekme hatası: ' + e, 'error'); }
   finally { if (btn) btn.disabled = false; ornekDurumYukle(); }
+}
+
+async function ornekTani() {
+  const el = document.getElementById('ku-ornek-ozet');
+  if (el) el.textContent = 'Teşhis çalışıyor…';
+  try {
+    const r = await fetch('/api/ornekler/tani');
+    const d = await r.json();
+    let tani;
+    if (d.hata) tani = '⚠ ' + d.hata;
+    else if (d.yanit_tipi === 'liste' && d.ornek_semasi) tani = `✓ Sink doğru (örnek şeması) · listede ${d.liste_adet}, geçerli ${d.gecerli_ornek}` + (d.liste_adet === 0 ? ' — Ornekler sekmesi BOŞ (deploy sonrası yeni analiz onayla/Jira\'ya yaz)' : '');
+    else if (d.yanit_tipi === 'liste' && d.kullanim_semasi) tani = '⚠ Bu URL\'de ESKİ kod çalışıyor (kullanım olayları döndü, örnek değil) → "Yeni sürüm" ile AYNI dağıtımı güncelle (yeni dağıtım URL\'i değiştirir)';
+    else if (d.yanit_tipi && d.yanit_tipi.indexOf('metin') === 0) tani = '⚠ Yetki reddi ya da eski kod (JSON değil): ' + (d.ham_ozet || '');
+    else if (d.yanit_tipi === 'nesne') tani = '⚠ Sink reddetti: ' + (d.mesaj || 'yetki');
+    else tani = JSON.stringify(d);
+    const detay = ` [email: ${d.email_gonderildi ? 'var' : 'YOK'} · read: ${d.read_gonderildi ? 'var' : 'yok'} · http ${d.http_status || '?'}]`;
+    el.innerHTML = escHtml(tani) + '<span style="color:var(--text3)">' + escHtml(detay) + '</span>';
+  } catch (e) { if (el) el.textContent = 'Teşhis hatası: ' + e; }
 }
 
 async function kullanimUzaktanCek() {

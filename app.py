@@ -3384,6 +3384,14 @@ def ornekler_durum():
     return jsonify({"ok": True, **durum()})
 
 
+@app.route("/api/ornekler/tani", methods=["GET"])
+@usage_gerekli
+def ornekler_tani():
+    """Teşhis (owner): merkezi sink 'ornekler' ucunun ham yanıtını özetler — '0 çekildi' nedeni."""
+    from skills.ornek_havuzu import tani
+    return jsonify({"ok": True, **tani()})
+
+
 @app.route("/api/ornekler/sil", methods=["POST"])
 @usage_gerekli
 def ornekler_sil():
