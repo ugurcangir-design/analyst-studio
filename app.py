@@ -5230,6 +5230,28 @@ def jira_gorev_formatla():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@app.route("/api/jira/gorev/getir", methods=["GET"])
+def jira_gorev_getir_tek():
+    """Tek bir Jira görevinin GÜNCEL açıklamasını (+başlık) döndürür — Task analizi içeriği
+    bellekten kaybolduysa (güncelleme/yenileme) analisti kurtarır: analiz Jira'ya yazıldıysa
+    açıklamadan geri yüklenir. GET /api/jira/gorev/getir?key=X."""
+    key = (request.args.get("key") or "").strip().upper()
+    if not key:
+        return jsonify({"ok": False, "error": "key gerekli"}), 400
+    hata = _jira_baglanti_eksik()
+    if hata:
+        return jsonify({"ok": False, "error": hata}), 400
+    try:
+        from skills.jira_gorevleri import gorev_getir
+        g = gorev_getir(key)
+        if not g:
+            return jsonify({"ok": False, "error": "Görev bulunamadı"}), 404
+        return jsonify({"ok": True, "key": g.get("key", key), "summary": g.get("summary", ""),
+                        "description": g.get("description", "")})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/api/jira/gorev/analiz", methods=["POST"])
 def jira_gorev_analiz():
     """Özellik 2 — görevi teknik analiz motoruyla detaylandırır (önizleme; Jira'ya YAZMAZ).

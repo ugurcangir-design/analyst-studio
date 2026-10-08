@@ -5347,12 +5347,20 @@ function _jgSetYukle() {
     _jgAktifAnalizKey = (d.aktif && _jgAnalizSeti[d.aktif]) ? d.aktif : Object.keys(_jgAnalizSeti)[0];
   } catch (e) {}
 }
+// Editörü sete GÜVENLİ yaz: BOŞ editör, DOLU kayıtlı markdown'ı ASLA ezmez (yenileme/panel-aç
+// sırasında "İçerik yükleniyor" boş hâli iyi analizi silip veri kaybına yol açıyordu).
+function _jgEditorKaydet(key) {
+  if (!key || !_jgAnalizSeti[key] || _jgAnalizSeti[key].hata) return;
+  const ed = document.getElementById('jg-preview-editor');
+  if (!ed || ed.style.display === 'none') return;
+  const v = ed.value;
+  if (v.trim() || !((_jgAnalizSeti[key].markdown || '').trim())) _jgAnalizSeti[key].markdown = v;
+}
 // Aktif entry'nin ekrandaki (DOM) editör + cevaplarını sete yaz (yenileme/kapanış öncesi).
 function _jgAktifDomKaydet() {
   const k = _jgAktifAnalizKey;
   if (!k || !_jgAnalizSeti[k] || _jgAnalizSeti[k].hata) return;
-  const ed = document.getElementById('jg-preview-editor');
-  if (ed && ed.style.display !== 'none') _jgAnalizSeti[k].markdown = ed.value;
+  _jgEditorKaydet(k);
   _jgAnalizSeti[k].cevaplar = _jgCevaplariTopla();
 }
 // Chip "Göster": paneli aç + kayıtlı aktif analizi doldur (yenileme sonrası).
@@ -5428,11 +5436,9 @@ function _jgSurenChipGuncelle(gorunur, metin) {
 // Bir analiz sonucunu editör/sorular alanına döker + aktif yapar + switcher'ı günceller.
 function _jgSonucGoster(key) {
   if (_jgMesgul()) return;   // iş sürerken task içeriği GÖSTERİLMEZ (çift güvenlik)
-  // Geçiş öncesi mevcut editör içeriğini aktif entry'e KAYDET → FE/BE arası geçişte edit kaybolmaz
+  // Geçiş öncesi mevcut editör içeriğini aktif entry'e GÜVENLİ KAYDET (boş, doluyu ezmez)
   if (_jgAktifAnalizKey && _jgAnalizSeti[_jgAktifAnalizKey] && !_jgAnalizSeti[_jgAktifAnalizKey].hata) {
-    const _ed = document.getElementById('jg-preview-editor');
-    if (_ed && _ed.style.display !== 'none') _jgAnalizSeti[_jgAktifAnalizKey].markdown = _ed.value;
-    // Açık soru cevaplarını da KAYDET → FE/BE arası geçişte girilen cevaplar kaybolmaz
+    _jgEditorKaydet(_jgAktifAnalizKey);
     _jgAnalizSeti[_jgAktifAnalizKey].cevaplar = _jgCevaplariTopla();
   }
   const s = _jgAnalizSeti[key] || {};
@@ -5453,6 +5459,14 @@ function _jgSonucGoster(key) {
   if (!s.hata) _jgMockupStaleKontrol(key, s.markdown || '');   // bu entry'nin analizi değiştiyse mockup'ı "eski" işaretle
   document.getElementById('jg-duzelt-row').style.display = s.hata ? 'none' : '';
   _jgMsg('jg-preview-msg', s.hata ? ('Hata: ' + s.hata) : '', s.hata ? 'err' : '');
+  // İçerik bellekte yoksa (güncelleme/yenileme sonrası) → Jira'dan geri yükleme sun
+  if (!s.hata && !((s.markdown || '').trim()) && !_jgMesgul() && /^[A-Z][A-Z0-9]+-\d+$/.test(key)) {
+    const m = document.getElementById('jg-preview-msg');
+    m.className = 'jg-msg';
+    m.innerHTML = `İçerik bellekte yok (güncelleme/yenileme sonrası kaybolmuş olabilir). `
+      + `<button class="btn btn-outline btn-xs" onclick="jgIcerikJiradanCek('${escHtml(key)}')" style="margin-left:4px">Jira'dan içeriği çek</button>`
+      + ` <span style="color:var(--text3)">· ya da görevi yeniden analiz edin.</span>`;
+  }
   const tab = document.getElementById('jg-modal-tab-sorular');
   const a = (s.acik_sorular || '').trim();
   if (a && !/Açık soru tespit edilmedi/i.test(a)) {
@@ -5462,6 +5476,27 @@ function _jgSonucGoster(key) {
   _jgSwitcherRender();
   _jgSetKaydet();   // yenilemeye dayanıklı: güncel set + aktif key'i sakla
 }
+// Kurtarma: Task analizi içeriği bellekten gittiyse Jira açıklamasından geri yükle
+async function jgIcerikJiradanCek(key) {
+  const m = document.getElementById('jg-preview-msg');
+  m.className = 'jg-msg'; m.textContent = key + ' Jira\'dan çekiliyor…';
+  try {
+    const r = await fetch('/api/jira/gorev/getir?key=' + encodeURIComponent(key));
+    const d = await r.json();
+    if (!d.ok) { m.className = 'jg-msg err'; m.textContent = d.error || 'Çekilemedi'; return; }
+    const desc = (d.description || '').trim();
+    if (!desc) { m.className = 'jg-msg'; m.textContent = 'Jira açıklaması boş — bu görevin analizi Jira\'ya yazılmamış. Görevi yeniden analiz edin.'; return; }
+    document.getElementById('jg-preview-editor').value = desc;
+    if (_jgAnalizSeti[key]) _jgAnalizSeti[key].markdown = desc;
+    else _jgAnalizSeti[key] = { markdown: desc, summary: d.summary || '', acik_sorular: '', katman: '' };
+    _jgAktifAnalizKey = key; _jgCurrent = { key: key, summary: d.summary || (_jgAnalizSeti[key] || {}).summary || '' };
+    document.getElementById('jg-approve-btn').disabled = false;
+    const yt = document.getElementById('jg-yenitask-btn'); if (yt) yt.disabled = false;
+    _jgSetKaydet();
+    m.className = 'jg-msg ok'; m.textContent = '✓ İçerik Jira açıklamasından yüklendi (gerekirse düzenleyip tekrar güncelleyin).';
+  } catch (e) { m.className = 'jg-msg err'; m.textContent = _jgHataMetni(e); }
+}
+
 function _jgSwitcherRender() {
   const keys = Object.keys(_jgAnalizSeti);
   const sw = document.getElementById('jg-analiz-switcher');
@@ -5790,9 +5825,8 @@ async function jgJiraGuncelle() {
 // (başlık "FE - "), BE→FE Blocks bağı kurulur. GERİ DÖNDÜRÜLEMEZ.
 async function jgFeBeOnayla() {
   if (_jgMesgul()) { toast('İşlem sürüyor', 'info'); return; }
-  // Aktif editör içeriğini (BE ya da FE) sete kaydet — analistin düzenlemesi kaybolmasın
-  const ed = document.getElementById('jg-preview-editor');
-  if (ed && _jgAnalizSeti[_jgAktifAnalizKey]) _jgAnalizSeti[_jgAktifAnalizKey].markdown = ed.value;
+  // Aktif editör içeriğini (BE ya da FE) sete GÜVENLİ kaydet — analistin düzenlemesi kaybolmasın
+  _jgEditorKaydet(_jgAktifAnalizKey);
   const kaynak = (_jgAnalizSeti[_jgAktifAnalizKey] || {}).feBeKaynak;
   const be = _jgAnalizSeti[kaynak] || {}, fe = _jgAnalizSeti[kaynak + '::FE'] || {};
   const be_md = (be.markdown || '').trim(), fe_md = (fe.markdown || '').trim();
@@ -5830,7 +5864,7 @@ async function jgYeniTaskPanelAc() {
   if (_jgMesgul()) { toast('İşlem sürüyor — bitince yeni task açılabilir', 'info'); return; }
   // Aktif editör içeriğini sete kaydet (kaybolmasın)
   const ed = document.getElementById('jg-preview-editor');
-  if (ed && _jgAnalizSeti[_jgAktifAnalizKey] && ed.style.display !== 'none') _jgAnalizSeti[_jgAktifAnalizKey].markdown = ed.value;
+  _jgEditorKaydet(_jgAktifAnalizKey);   // güvenli: boş editör doluyu ezmez
   const panel = document.getElementById('jg-yenitask-panel');
   panel.style.display = '';
   _jgMsg('jg-yt-msg', '');
@@ -5886,7 +5920,7 @@ function jgMockupPanelAc() {
   jgYeniTaskKapat();   // iki panel aynı anda açık kalmasın
   // Aktif editör içeriğini sete kaydet (mockup bağlamı güncel analiz olsun)
   const ed = document.getElementById('jg-preview-editor');
-  if (ed && _jgAnalizSeti[_jgAktifAnalizKey] && ed.style.display !== 'none') _jgAnalizSeti[_jgAktifAnalizKey].markdown = ed.value;
+  _jgEditorKaydet(_jgAktifAnalizKey);   // güvenli: boş editör doluyu ezmez
   const panel = document.getElementById('jg-mockup-panel');
   panel.style.display = '';
   _jgMsg('jg-mockup-msg', '');
@@ -6191,7 +6225,7 @@ async function jgYeniTaskAc() {
   const baslik = (document.getElementById('jg-yt-baslik').value || '').trim();
   // Aktif editör içeriğini sete kaydet
   const ed = document.getElementById('jg-preview-editor');
-  if (ed && _jgAnalizSeti[_jgAktifAnalizKey] && ed.style.display !== 'none') _jgAnalizSeti[_jgAktifAnalizKey].markdown = ed.value;
+  _jgEditorKaydet(_jgAktifAnalizKey);   // güvenli: boş editör doluyu ezmez
   const fb = _jgYtFebeSet();
   let body;
   if (fb) {
