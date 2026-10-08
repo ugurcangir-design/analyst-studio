@@ -45,8 +45,29 @@ def _temizle(md: str) -> str:
         return md or ""
 
 
+def _ayni_key_temizle(jira_key: str, yeni_id: str) -> None:
+    """Aynı jira_key'e ait ESKİ yerel örnekleri sil → task başına EN GÜNCEL tek örnek
+    (yeniden üretim/düzenleme havuzu şişirmesin). jira_key boşsa no-op (pipeline onayları)."""
+    jk = (jira_key or "").strip()
+    if not jk:
+        return
+    try:
+        for p in ORNEK_DIR.glob("*.json"):
+            if p.name.startswith("."):
+                continue
+            try:
+                o = json.loads(p.read_text(encoding="utf-8"))
+                if (o.get("jira_key") or "").strip() == jk and o.get("id") != yeni_id:
+                    p.unlink(missing_ok=True)
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+
 def _yaz(kayit: dict) -> None:
     ORNEK_DIR.mkdir(parents=True, exist_ok=True)
+    _ayni_key_temizle(kayit.get("jira_key", ""), kayit["id"])
     yol = ORNEK_DIR / f"{kayit['tip']}_{kayit['id']}.json"
     yol.write_text(json.dumps(kayit, ensure_ascii=False), encoding="utf-8")
     _buda()

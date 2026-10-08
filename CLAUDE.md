@@ -244,10 +244,19 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   `telemetri._sink_key()` env+dosyayı okur; `GET/POST /api/usage/sink-key` (owner rolü) opsiyonel/eski yöntem. UI:
   Kullanım Raporu açılınca ekip verisi OTOMATİK çekilir (`_kuAutoPullYapildi`, anahtar GEREKMEZ); "Okuma anahtarı"
   alanı opsiyonel (eski yöntem). Yetkisizde çekme `⚠ e-postanız owner listesinde değil` mesajı döner (başlıkta kalıcı).
+- **Task analizi SUNUCU DEPOSU + EĞİTİM TOPLAMA (Jira'sız da — `skills/gorev_deposu.py`):** Üretilen her Task
+  analizi (`_adim_isle` başarı → `app._gorev_egitim_topla`) **(C)** `output/gorev-analizleri/<key>.json`'a yazılır
+  (kalıcı; restart/yenileme kurtarması; **30 gün sonra `prune()` ile otomatik silinir**, `SAKLAMA_GUN`) **VE (A)**
+  few-shot havuzuna yakalanır — **analist Jira'ya YAZMASA da** (kopyala-yapıştır kendi task'ını açsa da) analiz
+  toplanır. **(B)** Task modalında **"Eğitime Ekle"** (`jgEgitimeEkle` → `POST /api/jira/gorev/egitime-ekle`) editördeki
+  NİHAİ/düzenlenmiş içeriği havuza+depoya yazar. **KURTARMA:** içerik bellekte yoksa `jgIcerikJiradanCek` ÖNCE sunucu
+  deposu (`GET /api/jira/gorev/analiz-kayit`), yoksa Jira açıklaması (`/getir`). `formatla` modu toplanmaz (eğitim
+  değeri yok). **Per-task dedup:** `ornek_havuzu._ayni_key_temizle` aynı `jira_key`'in eski yerel örneğini siler →
+  task başına EN GÜNCEL tek örnek (havuz şişmesin; owner yine kürasyonla siler).
 - **Onaylı Analiz Örnek Havuzu (few-shot — ORTAK EĞİTİM, `skills/ornek_havuzu.py`):** Analist bir analizi
   ONAYLAYINCA (`/api/approve` süreç · `/api/approve-teknik(-no-jira)` teknik → `app._ornek_yakala`) **VEYA bir
   görev analizini JİRA'YA YAZINCA** (`/api/jira/gorev/guncelle` · `/api/jira/gorev/fe-be-olustur` → `app._ornek_yakala_md`,
-  tip='teknik') kaliteli çıktı bir "örnek" olur (hepsi arka plan, best-effort, akışı bloklamaz): (1) YEREL
+  tip='teknik') **VEYA Task analizi tamamlanınca (otomatik)** kaliteli çıktı bir "örnek" olur (hepsi arka plan, best-effort, akışı bloklamaz): (1) YEREL
   `reference/ornekler/<tip>_<id>.json` (gitignore), (2) merkezi sink'e `olay='ornek'` + İÇERİK push (`ornek_kaydet`
   → `_sink_push`; **analiz içeriğini merkeze taşır — app-sahibi bilinçli kararı**). `ornekleri_cek()` (günlük oto-sync
   + boot + `POST /api/ornekler/cek`) sink'ten `?ornekler=1&email=<şirket domaini>` ile **TÜM ekip örneklerini** yerel

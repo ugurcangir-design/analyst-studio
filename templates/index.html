@@ -3078,6 +3078,9 @@ function temaDegistir() {
           </div>
           <span class="jg-warn">⚠ Onayla'ya basınca Jira görevinin açıklaması ÜZERİNE YAZILIR (geri alınamaz). Açık Sorular Jira'ya YAZILMAZ.</span>
           <button class="btn btn-outline btn-sm" onclick="jgPreviewKapat()">İptal</button>
+          <button class="btn btn-outline btn-sm" id="jg-egitim-btn" onclick="jgEgitimeEkle()" title="Bu analizi (Jira'ya yazılmasa da) ortak eğitim havuzuna + sunucuya ekler — agent kaliteli analizlerden öğrensin.">
+            <svg class="ico"><use href="#i-zap"/></svg> Eğitime Ekle
+          </button>
           <button class="btn btn-outline" id="jg-yenitask-btn" onclick="jgYeniTaskPanelAc()" title="Analiz OK ise: seçtiğiniz board/proje'ye, girdiğiniz Epic/Story/Task'a İLİŞKİLİ yeni Task açar (kaynak task'ın üzerine yazmaz).">
             <svg class="ico"><use href="#i-plus"/></svg> Yeni Task Aç
           </button>
@@ -5476,25 +5479,60 @@ function _jgSonucGoster(key) {
   _jgSwitcherRender();
   _jgSetKaydet();   // yenilemeye dayanıklı: güncel set + aktif key'i sakla
 }
-// Kurtarma: Task analizi içeriği bellekten gittiyse Jira açıklamasından geri yükle
+// Kurtarma: içerik bellekten gittiyse ÖNCE sunucu deposundan (tam analiz + açık sorular),
+// yoksa Jira açıklamasından geri yükle.
 async function jgIcerikJiradanCek(key) {
   const m = document.getElementById('jg-preview-msg');
-  m.className = 'jg-msg'; m.textContent = key + ' Jira\'dan çekiliyor…';
+  m.className = 'jg-msg'; m.textContent = key + ' içeriği kurtarılıyor…';
   try {
-    const r = await fetch('/api/jira/gorev/getir?key=' + encodeURIComponent(key));
-    const d = await r.json();
+    // 1) Sunucu deposu (en zengin: markdown + açık sorular)
+    try {
+      const sr = await (await fetch('/api/jira/gorev/analiz-kayit?key=' + encodeURIComponent(key))).json();
+      if (sr.ok && sr.var && (sr.markdown || '').trim()) {
+        _jgKurtarmaUygula(key, sr.markdown, sr.acik_sorular || '', sr.summary || '', sr.katman || '');
+        m.className = 'jg-msg ok'; m.textContent = '✓ İçerik sunucu deposundan yüklendi (son analiz).';
+        return;
+      }
+    } catch (e) {}
+    // 2) Jira açıklaması (analiz Jira'ya yazıldıysa)
+    const d = await (await fetch('/api/jira/gorev/getir?key=' + encodeURIComponent(key))).json();
     if (!d.ok) { m.className = 'jg-msg err'; m.textContent = d.error || 'Çekilemedi'; return; }
     const desc = (d.description || '').trim();
-    if (!desc) { m.className = 'jg-msg'; m.textContent = 'Jira açıklaması boş — bu görevin analizi Jira\'ya yazılmamış. Görevi yeniden analiz edin.'; return; }
-    document.getElementById('jg-preview-editor').value = desc;
-    if (_jgAnalizSeti[key]) _jgAnalizSeti[key].markdown = desc;
-    else _jgAnalizSeti[key] = { markdown: desc, summary: d.summary || '', acik_sorular: '', katman: '' };
-    _jgAktifAnalizKey = key; _jgCurrent = { key: key, summary: d.summary || (_jgAnalizSeti[key] || {}).summary || '' };
-    document.getElementById('jg-approve-btn').disabled = false;
-    const yt = document.getElementById('jg-yenitask-btn'); if (yt) yt.disabled = false;
-    _jgSetKaydet();
-    m.className = 'jg-msg ok'; m.textContent = '✓ İçerik Jira açıklamasından yüklendi (gerekirse düzenleyip tekrar güncelleyin).';
+    if (!desc) { m.className = 'jg-msg'; m.textContent = 'İçerik ne sunucuda ne Jira\'da var — görevi yeniden analiz edin.'; return; }
+    _jgKurtarmaUygula(key, desc, '', d.summary || '', '');
+    m.className = 'jg-msg ok'; m.textContent = '✓ İçerik Jira açıklamasından yüklendi (gerekirse düzenleyip güncelleyin).';
   } catch (e) { m.className = 'jg-msg err'; m.textContent = _jgHataMetni(e); }
+}
+function _jgKurtarmaUygula(key, markdown, acik_sorular, summary, katman) {
+  document.getElementById('jg-preview-editor').value = markdown;
+  if (_jgAnalizSeti[key]) { _jgAnalizSeti[key].markdown = markdown; _jgAnalizSeti[key].acik_sorular = acik_sorular; }
+  else _jgAnalizSeti[key] = { markdown, acik_sorular, summary, katman };
+  _jgAktifAnalizKey = key; _jgCurrent = { key: key, summary: summary || (_jgAnalizSeti[key] || {}).summary || '' };
+  document.getElementById('jg-approve-btn').disabled = false;
+  const yt = document.getElementById('jg-yenitask-btn'); if (yt) yt.disabled = false;
+  const a = (acik_sorular || '').trim();
+  const tab = document.getElementById('jg-modal-tab-sorular');
+  if (a && !/Açık soru tespit edilmedi/i.test(a)) { const n = _jgSorulariRender(a); tab.style.display = ''; document.getElementById('jg-sorular-rozet').textContent = n || '!'; }
+  _jgSetKaydet();
+}
+
+// (B) "Eğitime Ekle" — editördeki güncel analizi ortak havuza + sunucu deposuna yazar (Jira'sız).
+async function jgEgitimeEkle() {
+  const key = _jgCurrent && _jgCurrent.key;
+  if (!key) { toast('Aktif analiz yok', 'info'); return; }
+  const md = (document.getElementById('jg-preview-editor').value || '').trim();
+  if (md.length < 300) { toast('İçerik eğitime eklenemeyecek kadar kısa', 'info'); return; }
+  const s = _jgAnalizSeti[_jgAktifAnalizKey] || {};
+  const btn = document.getElementById('jg-egitim-btn'); if (btn) btn.disabled = true;
+  try {
+    const r = await fetch('/api/jira/gorev/egitime-ekle', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: _jgGercekKey(_jgAktifAnalizKey) || key, markdown: md, summary: s.summary || (_jgCurrent.summary || ''), katman: s.katman || '', acik_sorular: s.acik_sorular || '' })
+    });
+    const d = await r.json();
+    toast(d.ok ? (d.mesaj || 'Eğitime eklendi') : (d.error || 'Eklenemedi'), d.ok ? 'success' : 'error');
+  } catch (e) { toast('Hata: ' + e, 'error'); }
+  finally { if (btn) btn.disabled = false; }
 }
 
 function _jgSwitcherRender() {

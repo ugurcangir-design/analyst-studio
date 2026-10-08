@@ -1615,6 +1615,31 @@ def _ornek_yakala_md(tip: str, md: str, ozet: str = "", proje: str = "", jira_ke
     threading.Thread(target=_worker, daemon=True).start()
 
 
+def _gorev_egitim_topla(key: str, summary: str, katman: str, mode: str, sonuc: dict) -> None:
+    """Task analizi tamamlanınca: (C) sunucu deposuna yaz (kalıcı, 30g) + (A) few-shot havuzuna
+    yakala — Jira'ya YAZILMASA da üretilen analiz toplansın. BEST-EFFORT, arka plan."""
+    if mode == "formatla":
+        return  # salt biçimlendirme — eğitim değeri yok
+    try:
+        from skills.gorev_deposu import kaydet as _gd_kaydet
+        proje = key.split("-")[0].upper()
+        if sonuc.get("fe_be"):
+            fb = sonuc.get("fe_be") or {}
+            for kat in ("be", "fe"):
+                part = fb.get(kat) or {}
+                pmd = (part.get("markdown") or "").strip()
+                if len(pmd) >= 300:
+                    _gd_kaydet(f"{key}::{kat.upper()}", pmd, part.get("acik_sorular", ""), summary, kat)
+                    _ornek_yakala_md("teknik", pmd, ozet=summary, proje=proje, jira_key=key)
+            return
+        md = (sonuc.get("markdown") or "").strip()
+        if len(md) >= 300:
+            _gd_kaydet(key, md, sonuc.get("acik_sorular", ""), summary, katman)
+            _ornek_yakala_md("teknik", md, ozet=summary, proje=proje, jira_key=key)
+    except Exception as e:
+        logger.warning("Görev eğitim toplama atlandı (%s): %s", key, e)
+
+
 @app.route("/api/approve", methods=["POST"])
 def approve():
     import workflow as wf
@@ -5085,6 +5110,8 @@ def _gorev_is_calistir(job_id: str) -> None:
             with _gorev_is_lock:
                 job["sonuclar"][key] = {**sonuc, "summary": gorev.get("summary", ""),
                                         "katman": adim.get("katman", "")}
+            # (C) sunucu deposu + (A) few-shot yakalama — Jira'ya yazılmasa da toplansın (arka plan)
+            _gorev_egitim_topla(key, gorev.get("summary", ""), adim.get("katman", ""), mode, sonuc)
             _telemetri_olay("gorev_analiz", "ok", int((time.time() - _bas) * 1000),
                             model=_model, ai_modu=_ai_modu, baglam={"gorev": key, "islem": adim.get("mode", "analiz")},
                             token_bas=_tbas)
@@ -5248,6 +5275,43 @@ def jira_gorev_getir_tek():
             return jsonify({"ok": False, "error": "Görev bulunamadı"}), 404
         return jsonify({"ok": True, "key": g.get("key", key), "summary": g.get("summary", ""),
                         "description": g.get("description", "")})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/jira/gorev/analiz-kayit", methods=["GET"])
+def jira_gorev_analiz_kayit():
+    """Sunucu deposundaki Task analizini getirir (kalıcı; restart/yenileme kurtarması).
+    GET ?key=X → {ok, var, markdown, acik_sorular, summary, katman, ts}."""
+    key = (request.args.get("key") or "").strip().upper()
+    if not key:
+        return jsonify({"ok": False, "error": "key gerekli"}), 400
+    try:
+        from skills.gorev_deposu import oku
+        k = oku(key)
+        if not k:
+            return jsonify({"ok": True, "var": False})
+        return jsonify({"ok": True, "var": True, **k})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/jira/gorev/egitime-ekle", methods=["POST"])
+def jira_gorev_egitime_ekle():
+    """(B) Analist 'Eğitime Ekle' → editördeki GÜNCEL analizi few-shot havuzuna + sunucu
+    deposuna yazar (Jira'ya yazılmasa da). Body: {key, markdown, summary?, katman?}."""
+    data = request.get_json(silent=True) or {}
+    key = (data.get("key") or "").strip().upper()
+    md = (data.get("markdown") or "").strip()
+    if not key or len(md) < 300:
+        return jsonify({"ok": False, "error": "key ve yeterli içerik (≥300 krk) gerekli."}), 400
+    summary = (data.get("summary") or "").strip()
+    katman = (data.get("katman") or "").strip()
+    try:
+        from skills.gorev_deposu import kaydet as _gd_kaydet
+        _gd_kaydet(key, md, data.get("acik_sorular", ""), summary, katman)
+        _ornek_yakala_md("teknik", md, ozet=summary or key, proje=key.split("-")[0].upper(), jira_key=key)
+        return jsonify({"ok": True, "mesaj": "Analiz eğitim havuzuna eklendi."})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
