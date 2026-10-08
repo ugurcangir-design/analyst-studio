@@ -144,18 +144,19 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   (1) başlık eşleşmesi (teknik analiz — ID başlıkta), (2) başarısızsa **gövde-içi ID fallback** (süreç analizi —
   ID gövdede satır-içi `**PA-003:** …`; `anahtar`'daki ID token'ını içeren EN DERİN bölüm) → süreç Q&A cevapları da
   hedefli/ucuz uygulanır, tam-regenerasyona düşmez. ID yoksa/bulunmazsa None (tam-regen — doğru davranış).
-- **Değişiklik Etkisi + Testçi Gözü + Zorunlu Soru (test ekibinden gereksiz soru gelmesin):**
+- **Değişiklik Etkisi + Süreç/Ekran Bütünlüğü + Zorunlu Soru (analiz uçtan uca kapansın, BÜYÜMESİN):**
   `skills/degisiklik_etkisi.py` (0 token) girdide zorunluluk kaldırma/silme/alan kaldırma/pasif/güncelleme/tip
   değişimi sinyali bulursa değişen öğe adlarını Swagger+Confluence+Jira referanslarında arar (**Olası
-  Tüketiciler**) ve analize "DEĞİŞİKLİK ETKİSİ MODU" talimatı ekler → `### Değişiklik Etkisi ve Veri Yaşam
-  Döngüsü` tablosu (kullanan yerler · mevcut kayıtlar · yeni davranış); süreç (girdi) · teknik (süreç metni;
-  DB/API/cache karşılığı) · Task (hata modunda yalnız `Etki:` maddesi). `_TEST_GOZU_KURALLARI` (base.py)
-  `prompt_yukle` ile süreç/teknik/görev promptlarına HEP eklenir (override'da da): BR/AF/EF kriter kapsamı,
-  sınır/rol/eski kayıt, **doğrulama noktası**, ön koşul. Belirlenemeyen etki → `- Zorunlu: Evet` soru →
-  parse `zorunlu`, `zorunlu_acik`, kırmızı ZORUNLU rozeti; **YUMUŞAK ENGEL** (owner kararı): süreç/teknik onay
-  ve Task Jira yazma/yeni task öncesi `confirm` — devam edilirse Task gövdesine `## ❗ Cevap Bekleyen Zorunlu
-  Sorular` eklenir (few-shot'tan temizlenir). Süreç sonuna `test_kapsam_denetimi` (kriteri olmayan BR/AF/EF).
-  Ayrıntı → `docs/MIMARI.md` "Analiz Zenginleştirmeleri". Test: `tests/test_degisiklik_etkisi.py`.
+  Tüketiciler**) ve analize "DEĞİŞİKLİK ETKİSİ" talimatı ekler — AYRI bölüm değil: süreçte mevcut Etki Analizi'ne
+  kısa tablo + etki ilgili akış adımına işlenir; teknik DB/API/cache karşılığı; Task hata modunda tek `Etki:`;
+  yalnız 'güncelleme' sinyalinde tablo yok. `_BUTUNLUK_KURALLARI` (base.py) `prompt_yukle` ile süreç/teknik/görev
+  promptlarına HEP eklenir (override'da da): **testçi kontrol listesi DEĞİL** — süreç↔ekran eşleşmesi,
+  giriş-çıkış, karar noktalarının tüm dalları, veri sürekliliği, etki akışta, kriterler akışı doğrular; eksik
+  halka ilgili MEVCUT bölümde tamamlanır. Belirlenemeyen riskli nokta → `- Zorunlu: Evet` soru → parse
+  `zorunlu`, `zorunlu_acik`, kırmızı ZORUNLU rozeti; **YUMUŞAK ENGEL** (owner kararı): süreç/teknik onay ve Task
+  Jira yazma/yeni task öncesi `confirm` — devam edilirse Task gövdesine `## ❗ Cevap Bekleyen Zorunlu Sorular`
+  eklenir (few-shot'tan temizlenir). Süreç sonuna `akis_butunluk_denetimi` (akışa bağlanmamış AF/EF/EK/BR +
+  tanımsız referans). Ayrıntı → `docs/MIMARI.md` "Analiz Zenginleştirmeleri". Test: `tests/test_degisiklik_etkisi.py`.
 - **Kaynak-öncelik sırası (KANONİK, tek liste — `_ORTAK_EK_KURALLAR` + 4 rol promptu hizalı):**
   `Swagger > Canlı Uygulama Gözlemi > Confluence > BRD/Süreç > Jira > UI`. İlke: **gözlemlenen/doğrulanabilir
   gerçek veri (Swagger sözleşmesi + MCP canlı gözlem), tarif edilen istekten (BRD) ÜSTÜNDÜR** — BRD
@@ -360,7 +361,7 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   `test_baglam_jira.py` (bağlam filtresi Jira key'leri yerel export'ta yoksa uzaktan bulkfetch — yalnız eksik, hata yutulur; ağ MOCK/0-token),
   `test_soru_hedefli.py` (soru cevabı hedefli düzeltme yönlendirmesi — süreç/teknik kendine, bölüm bulunamazsa tam üretim; AI MOCK/0-token),
   `test_roller.py` (kullanıcı-bazlı ekran yetkisi — hash/PII'siz, etkin rol/görünürlük, owner sınırı, CRUD; offline/0-token),
-  `test_degisiklik_etkisi.py` (değişiklik sinyali/tüketici taraması/testçi kuralları/zorunlu soru/kapsam denetimi + motor bağlantısı; AI MOCK/0-token),
+  `test_degisiklik_etkisi.py` (değişiklik sinyali/tüketici taraması/bütünlük kuralları/zorunlu soru/akış bütünlük denetimi + motor bağlantısı; AI MOCK/0-token),
   `test_gorev_egitim.py` (Task analizi depo + eğitim toplama — egitime-ekle, dedup, FE+BE anahtarları; sink MOCK/0-token),
   `test_jira_hiyerarsi.py` (hiyerarşi oluşturma KISMİ HATA dayanıklılığı — bir issue reddedilse de kalanlar açılır + hatalar raporlanır; Jira MOCK/0-token).
 - **Faz 3.a — Kod kaynağı:** `skills/kod_kaynagi.py` salt-okuma yerel git/dosya arayüzü (yol repo köküne

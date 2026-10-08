@@ -1244,7 +1244,7 @@ def _gorev_acik_sorular_uret(teknik_metni: str, gorev: dict,
         "tercihe bağlı/kozmetik/küçük konu için SORU ÜRETME.\n"
         "- Önem: Kritik/Yüksek öncelikli; Orta/Düşük ancak gerçekten gerekiyorsa. **EN FAZLA 6 soru.**\n"
         "- Cevapsız kalırsa veri kaybı/bozulması, başka ekran/rapor/entegrasyonun kırılması ya da testin beklenen "
-        "sonucunun bilinmemesi doğacaksa (özellikle 'Değişiklik Etkisi' belirsizlikleri) soruya `- Zorunlu: Evet` "
+        "sonucunun bilinmemesi doğacaksa (özellikle veri değişikliği etkisi ve akışın tanımsız dalları) soruya `- Zorunlu: Evet` "
         "satırı ekle; diğerlerine yazma. Zorunlu sorular yakınsamada da cevaplanana kadar KORUNUR.\n"
         "- Soru bağımsız cevaplanabilir, tek konuya odaklı olmalı.\n"
         "- Hiç bloklayan belirsizlik yoksa SADECE şu satırı dön: 'Açık soru tespit edilmedi.'\n\n"

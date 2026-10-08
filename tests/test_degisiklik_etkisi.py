@@ -1,13 +1,13 @@
-"""Değişiklik Etkisi + Testçi Gözü + Zorunlu Soru — offline, 0 token (AI MOCK).
+"""Değişiklik Etkisi + Süreç/Ekran Bütünlüğü + Zorunlu Soru — offline, 0 token (AI MOCK).
 
 Kapsam:
   1. Sinyal tespiti (zorunluluk/silme/kaldırma/pasif/güncelleme) + negatif
   2. Değişen öğe adayları (tırnaklı ad, 'X alanı', camelCase)
   3. Tüketici taraması (geçici referans dizini: Swagger $ref alanı, Confluence, Jira) + aday dağılımı
   4. Prompt bloğu (hedefe göre yerleşim, hata modunda tablo yok, sinyalsizse boş)
-  5. Test kapsam denetimi (AC'siz BR/AF/EF)
+  5. Akış bütünlük denetimi (akışa bağlanmamış dal/ekran/kural, tanımsız referans)
   6. Zorunlu soru parse + istatistik; few-shot temizliği
-  7. prompt_yukle testçi-gözü kuralları (override'da da)
+  7. prompt_yukle bütünlük kuralları (override'da da)
   8. Motor bağlantısı: süreç / teknik / görev analizi bloğu prompta koyuyor (AI MOCK)
 """
 import json
@@ -89,21 +89,31 @@ chk("adaylar arasında sırayla dağıtım", {t["aday"] for t in tk2} == {"Doğu
 
 print("4) prompt bloğu")
 b = DE.degisiklik_blogu(METIN, "surec", ref)
-chk("başlık + tablo + tüketiciler", "DEĞİŞİKLİK ETKİSİ MODU" in b and "| Değişen Öğe |" in b and "Olası Tüketiciler" in b)
+chk("başlık + tablo + tüketiciler", "DEĞİŞİKLİK ETKİSİ" in b and "| Değişen Öğe |" in b and "Olası Tüketiciler" in b)
+chk("süreçte AYRI bölüm açtırmaz (mevcut Etki Analizi'ne)", "AYRI bölüm AÇMA" in b and "Etki Analizi" in b)
+bg = DE.degisiklik_blogu("Limit değeri güncellenecek.", "surec", ref)
+chk("yalnız güncelleme → kompakt (tablo yok)", bg and "| Değişen Öğe |" not in bg and "tablo AÇMA" in bg, bg[:200])
 chk("zorunlu soru kuralı", "Zorunlu: Evet" in b)
 chk("teknik yerleşimi (§4 DB)", "§4" in DE.degisiklik_blogu(METIN, "teknik", ref))
 bh = DE.degisiklik_blogu(METIN, "gorev_hata", ref)
 chk("hata modunda tablo yok + Etki maddesi", "| Değişen Öğe |" not in bh and "Etki:" in bh)
 chk("sinyalsiz → boş", DE.degisiklik_blogu("Liste ekranı açılır.", "surec", ref) == "")
 
-print("5) test kapsam denetimi")
-analiz = ("### İş Gereksinimleri\n| BR-001 | x | y |\n| BR-002 | x | y |\n\n**EF-001:** hata\n\n"
-          "### Kabul Kriterleri\n**AC-001:** ... Bağlı kural: BR-001\n\n### Açık Sorular\nBR-002 EF-001 burada sayılmaz\n")
-d = base.test_kapsam_denetimi(analiz)
-chk("AC'siz BR-002 ve EF-001 raporlandı", "BR-002" in d and "EF-001" in d and "| BR-001 |" not in d, d)
-chk("AC bölümü yoksa boş", base.test_kapsam_denetimi("| BR-001 | x |") == "")
-chk("hepsi kapsanmışsa boş", base.test_kapsam_denetimi(
-    "| BR-001 | x |\n### Kabul Kriterleri\nAC-1 BR-001\n") == "")
+print("5) akış bütünlük denetimi")
+analiz = ("### İş Gereksinimleri\n| BR-001 | x | y |\n| BR-002 | x | y |\n| BR-003 | x | y |\n\n"
+          "### Ekranlar\n**EK-001** · Bağlı adım: PA-001\n**EK-002** · yeni ekran\n\n"
+          "### Süreç Adımları\n**PA-001:** kaydet · Bağlı kural: BR-001 → AF-001\n"
+          "**PA-002:** onay · kurallar BR-002–BR-003 · → EF-009\n"
+          "**AF-001:** iptal\n**AF-002:** hiçbir yerden bağlanmayan dal\n**EF-001:** hata\n\n"
+          "### Açık Sorular\n### Q-001: x\n- Bağlı ID: AF-002, EF-001, EK-002\n")
+d = base.akis_butunluk_denetimi(analiz)
+chk("bağlanmamış AF-002 / EF-001 / EK-002", all(f"| {i} |" in d for i in ("AF-002", "EF-001", "EK-002")), d)
+chk("Açık Sorular'daki atıf akışa bağlamış sayılmaz", "| AF-002 |" in d)
+chk("tanımsız referans EF-009", "| EF-009 |" in d and "tanımı yok" in d)
+chk("bağlı öğeler raporlanmaz (AF-001, EK-001, BR-001)", not any(f"| {i} |" in d for i in ("AF-001", "EK-001", "BR-001")), d)
+chk("aralık (BR-002–BR-003) referans sayılır", "| BR-003 |" not in d and "| BR-002 |" not in d, d)
+chk("temiz akışta boş", base.akis_butunluk_denetimi("**PA-001:** x → AF-001\n**AF-001:** y\n") == "")
+chk("ID yoksa boş", base.akis_butunluk_denetimi("düz metin") == "")
 
 print("6) zorunlu soru parse + istatistik + few-shot temizliği")
 from skills import sorular as SQ  # noqa: E402
@@ -122,16 +132,19 @@ from skills import ornek_havuzu as OH  # noqa: E402
 tem = OH._temizle("## Çözüm\nyap\n\n## ❗ Cevap Bekleyen Zorunlu Sorular\n- **Q-T-1:** x\n\n## Kabul\nAC-1\n")
 chk("few-shot'tan zorunlu soru bölümü çıkarıldı", "Cevap Bekleyen" not in tem and "## Kabul" in tem, tem)
 
-print("7) prompt_yukle — testçi gözü kuralları")
+print("7) prompt_yukle — bütünlük kuralları")
 for sid in ("surec_analizi", "teknik_analiz_bolumler", "gorev_teknik_analiz"):
-    chk(f"{sid} içeriyor", "Testçi Gözü" in base.prompt_yukle(sid) and "Zorunlu Açık Soru" in base.prompt_yukle(sid))
-chk("ilgisiz skill içermiyor", "Testçi Gözü" not in base.prompt_yukle("test_senaryolari"))
+    _p = base.prompt_yukle(sid)
+    chk(f"{sid} içeriyor", "Süreç ve Ekran Bütünlüğü" in _p and "Zorunlu Açık Soru" in _p)
+chk("analizi büyütme ilkesi + kontrol listesi yasağı", "BÜYÜTMEK değil" in base._BUTUNLUK_KURALLARI
+    and "ayrı bölüm" in base._BUTUNLUK_KURALLARI)
+chk("ilgisiz skill içermiyor", "Süreç ve Ekran Bütünlüğü" not in base.prompt_yukle("test_senaryolari"))
 _eski_pp = base.PROMPTS_PATH
 base.PROMPTS_PATH = Path(tempfile.mkdtemp()) / "prompts.json"
 base.PROMPTS_PATH.write_text(json.dumps({"gorev_teknik_analiz": "OZEL PROMPT"}), encoding="utf-8")
 p_ov = base.prompt_yukle("gorev_teknik_analiz")
 base.PROMPTS_PATH = _eski_pp
-chk("prompts.json override'ında da korunur", p_ov.startswith("OZEL PROMPT") and "Testçi Gözü" in p_ov)
+chk("prompts.json override'ında da korunur", p_ov.startswith("OZEL PROMPT") and "Süreç ve Ekran Bütünlüğü" in p_ov)
 
 print("8) motor bağlantısı (AI MOCK)")
 from skills import surec_analizi as SA  # noqa: E402
@@ -144,7 +157,7 @@ def _sahte_api(sistem, mesajlar, *a, **k):
     yakala["sistem"] = sistem
     yakala["metin"] = "\n".join(p.get("text", "") for p in mesajlar[0]["content"] if isinstance(p, dict))
     return ("<teknik_analiz>## 1. Amaç\nx\n</teknik_analiz>" if "teknik" in yakala.get("mod", "")
-            else "### İş Gereksinimleri\n| BR-001 | x |\n### Kabul Kriterleri\nAC-001 yok\n")
+            else "### İş Gereksinimleri\n| BR-001 | x |\n**AF-001:** bağlanmamış dal\n")
 
 
 kaydedilen: dict = {}
@@ -154,12 +167,12 @@ SA.canli_uygulama_baglami_hazirla = lambda *a, **k: ""
 SA._kaydet = lambda ad, icerik: kaydedilen.update({ad: icerik}) or Path(ad)
 SA.yonetici_ozeti_olustur = lambda *a, **k: ""
 SA.surec_analizi_yap(icerik_override=[{"type": "text", "text": METIN}], ozel_atla=True)
-chk("süreç: blok prompta girdi", "DEĞİŞİKLİK ETKİSİ MODU" in yakala.get("metin", ""))
-chk("süreç: testçi kuralları sistemde", "Testçi Gözü" in yakala.get("sistem", ""))
-chk("süreç: test kapsam denetimi eklendi", "Test Kapsam Denetimi" in kaydedilen.get("surec-analizi.md", ""))
+chk("süreç: blok prompta girdi", "DEĞİŞİKLİK ETKİSİ" in yakala.get("metin", ""))
+chk("süreç: bütünlük kuralları sistemde", "Süreç ve Ekran Bütünlüğü" in yakala.get("sistem", ""))
+chk("süreç: akış bütünlük denetimi eklendi", "Akış Bütünlük Denetimi" in kaydedilen.get("surec-analizi.md", ""))
 yakala.clear()
 SA.surec_analizi_yap(icerik_override=[{"type": "text", "text": "Liste ekranı açılır."}], ozel_atla=True)
-chk("süreç: sinyalsiz girdide blok yok", "DEĞİŞİKLİK ETKİSİ MODU" not in yakala.get("metin", "x"))
+chk("süreç: sinyalsiz girdide blok yok", "DEĞİŞİKLİK ETKİSİ" not in yakala.get("metin", "x"))
 
 # Teknik: yalnız Aşama-1 mesajını yakala, sonra dur (sonraki adımlar kapsam dışı)
 class _Dur(Exception):
@@ -184,7 +197,7 @@ try:
     TA.teknik_analiz_yap(ozel_atla=True)
 except _Dur:
     pass
-chk("teknik: blok prompta girdi (§4 yerleşimi)", "DEĞİŞİKLİK ETKİSİ MODU" in yakala.get("metin", "")
+chk("teknik: blok prompta girdi (§4 yerleşimi)", "DEĞİŞİKLİK ETKİSİ" in yakala.get("metin", "")
     and "§4" in yakala.get("metin", ""))
 chk("teknik: zorunlu soru kuralı açık soru adımında", "Zorunlu: Evet" in TA._acik_sorular_prompt_olustur())
 
@@ -197,7 +210,7 @@ yakala.clear()
 yakala["mod"] = "teknik"
 JG.gorev_analiz_et({"key": "PRJ-1", "summary": "Doğum tarihi zorunluluğu kaldırılsın",
                     "description": '"Doğum Tarihi" alanı zorunlu olmayacak.', "issuetype": "Story"})
-chk("görev: blok + tablo prompta girdi", "DEĞİŞİKLİK ETKİSİ MODU" in yakala.get("metin", "")
+chk("görev: blok + tablo prompta girdi", "DEĞİŞİKLİK ETKİSİ" in yakala.get("metin", "")
     and "| Değişen Öğe |" in yakala.get("metin", ""))
 yakala.clear()
 yakala["mod"] = "teknik"

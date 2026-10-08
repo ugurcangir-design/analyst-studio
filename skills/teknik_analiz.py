@@ -80,8 +80,8 @@ def _acik_sorular_prompt_olustur() -> str:
         "- Her soru BAĞIMSIZ cevaplanabilir ve tek konuya odaklı olmalı\n"
         "- Önem sırasına göre (Kritik → Yüksek → Orta → Düşük) sırala\n"
         "- Cevapsız kalırsa veri kaybı/bozulması, başka ekran/rapor/entegrasyonun kırılması ya da testin "
-        "beklenen sonucunun bilinmemesi sonucunu doğuracak sorulara `- Zorunlu: Evet` satırı ekle "
-        "(özellikle 'Değişiklik Etkisi ve Veri Yaşam Döngüsü' bölümünde belirsiz kalan satırlar); diğerlerine yazma\n\n"
+        "beklenen sonucun bilinmemesi sonucunu doğuracak sorulara `- Zorunlu: Evet` satırı ekle "
+        "(özellikle belirsiz kalan veri değişikliği etkileri ve akışın tanımsız dalları); diğerlerine yazma\n\n"
         "Çıktıyı TEK bir XML bloğu halinde ver:\n\n"
         f"<acik_sorular>\n{sorular}\n</acik_sorular>"
     )

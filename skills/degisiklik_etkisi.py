@@ -2,10 +2,11 @@
 
 Girdide (doküman / süreç analizi / Jira görevi) veri değiştiren bir işlem sinyali
 (zorunluluk kaldırma, silme, alan kaldırma, pasife alma, güncelleme, tip/isim değişimi)
-varsa analize "DEĞİŞİKLİK ETKİSİ MODU" talimatı + **Olası Tüketiciler** bloğu eklenir:
+varsa analize "DEĞİŞİKLİK ETKİSİ" talimatı + **Olası Tüketiciler** bloğu eklenir:
 değişen öğenin adı Swagger / Confluence / Jira referanslarında aranır → o veriyi kullanan
-endpoint/sayfa/task'lar kaynaklarıyla listelenir. Model her tüketiciyi ele almak ya da açık
-soruya taşımak zorundadır (sessiz atlama yok). Cevaplanamayan etki → `Zorunlu: Evet` soru.
+endpoint/sayfa/task'lar kaynaklarıyla listelenir. Amaç analizi büyütmek DEĞİL: etki ayrı bölüm
+olarak değil, mevcut Etki Analizi + ilgili akış adımına işlenir (uçtan uca akış kapansın).
+Etkilenip etkilenmediği belirlenemeyen nokta → açık soru (riskliyse `Zorunlu: Evet`).
 
 AI çağrısı YOK; base.py IMPORT ETMEZ (ucuz, döngüsel import yok). Hata durumunda boş döner —
 analiz akışını ASLA kırmaz.
@@ -323,17 +324,18 @@ def tuketici_tara(adaylar: list[str], ref_dir: Path | None = None) -> list[dict]
 
 # ── Prompt bloğu ─────────────────────────────────────────────────────────────
 _HEDEF_YERLESIM = {
-    "surec": ("Raporda **İlişkili Ekranlar / Süreçler ve Etki Analizi** bölümünden HEMEN SONRA "
-              "`### Değişiklik Etkisi ve Veri Yaşam Döngüsü` başlığı aç."),
-    "teknik": ("`## 3. Teknik Gereksinimler` içinde `### Değişiklik Etkisi ve Veri Yaşam Döngüsü` alt başlığı aç; "
-               "DB karşılığını (NOT NULL kaldırma/migration, FK ON DELETE davranışı, soft-delete bayrağı, mevcut veri "
-               "dönüşümü) §4'te, API sözleşme etkisini (alan opsiyonel/kaldırıldı, geri uyumluluk) §5'te, "
-               "cache/event etkisini §6'da yaz. Her satır için §11'de en az bir kabul kriteri olsun."),
-    "gorev": ("`## 3. Teknik Gereksinimler` içinde `### Değişiklik Etkisi ve Veri Yaşam Döngüsü` alt başlığı aç "
-              "(yalnız bu görevin değiştirdiği veriler için)."),
-    "gorev_hata": ("HATA/BASİT İŞ modu: ayrı tablo AÇMA — `## Çözüm` altına tek madde `Etki:` ile değişen verinin "
+    "surec": ("AYRI bölüm AÇMA: mevcut **İlişkili Ekranlar / Süreçler ve Etki Analizi** bölümüne kısa bir "
+              "`Veri Değişikliği Etkisi` tablosu ekle ve her etkiyi ilgili süreç adımına / alternatif akışa işle."),
+    "teknik": ("Etkiyi §3 akışında ilgili adıma işle; DB karşılığını (NOT NULL kaldırma/migration, FK ON DELETE, "
+               "soft-delete, mevcut veri dönüşümü) §4'te, API sözleşme etkisini (alan opsiyonel/kaldırıldı, geri "
+               "uyumluluk) §5'te, cache/event etkisini §6'da yaz. Ayrı tablo yalnız birden fazla öğe değişiyorsa, kısa."),
+    "gorev": ("Etkiyi `## 3. Teknik Gereksinimler` akışında ilgili adıma işle; birden fazla öğe değişiyorsa kısa bir "
+              "`Veri Değişikliği Etkisi` tablosu ekle (yalnız bu görevin değiştirdiği veriler)."),
+    "gorev_hata": ("HATA/BASİT İŞ modu: tablo AÇMA — `## Çözüm` altına tek madde `Etki:` ile değişen verinin "
                    "kullanıldığı yerleri ve mevcut kayıtlara etkisini KISA yaz; belirsizse açık soru."),
 }
+# Yalnız 'güncelleme' sinyali (BRD'lerde çok yaygın) → tablo yok, tek kısa talimat (analiz büyümesin).
+_KOMPAKT_HEDEF = {"surec", "teknik", "gorev"}
 
 
 def degisiklik_blogu(metin: str, hedef: str = "surec", ref_dir: Path | None = None) -> str:
@@ -346,41 +348,46 @@ def degisiklik_blogu(metin: str, hedef: str = "surec", ref_dir: Path | None = No
         tuketiciler = tuketici_tara(adaylar, ref_dir)
     except Exception:
         return ""
+    yalniz_guncelleme = all(s["tip"] == "guncelleme" for s in sl)
+    tablo = hedef in _KOMPAKT_HEDEF and not yalniz_guncelleme
 
     satirlar = [
-        "### DEĞİŞİKLİK ETKİSİ MODU (otomatik tespit — KRİTİK)",
-        "Girdide veri değiştiren işlem sinyalleri bulundu. Bu işlemler YALNIZ kaynak ekranı değil, o veriyi "
-        "okuyan/kullanan TÜM ekran, rapor, servis ve entegrasyonları etkiler. Analizde her biri için verinin "
-        "yaşam döngüsünü çıkar; test ekibinin 'X silinince/boş kalınca Y ekranında ne olur?' sorusu cevapsız kalmasın.",
+        "### DEĞİŞİKLİK ETKİSİ (otomatik tespit)",
+        "Girdide veri değiştiren işlemler var. Bu işlemler kaynak ekranla sınırlı kalmaz; o veriyi gösteren/"
+        "kullanan ekran, rapor, servis ve entegrasyonlarda da davranışı değiştirir. Uçtan uca akış bu etkiyle "
+        "birlikte kapanmalı: 'X silinince/boş kalınca Y ekranında ne olur?' sorusu analizde cevapsız kalmasın. "
+        "Analizi BÜYÜTME — yalnız gerçekten veri değiştiren öğeleri ele al.",
         "",
         "**Tespit edilen sinyaller:**",
     ]
     for s in sl:
         satirlar.append(f"- **{s['ad']}** — ör. «{s['ornekler'][0][:140]}»")
-    satirlar += ["", "**Yerleşim:** " + _HEDEF_YERLESIM.get(hedef, _HEDEF_YERLESIM["surec"]), ""]
-    if hedef != "gorev_hata":
+    if yalniz_guncelleme and hedef != "gorev_hata":
+        satirlar += ["", "**Yerleşim:** tablo AÇMA. Güncellenen verinin onu gösteren diğer ekranlarda/kayıtlarda "
+                     "nasıl yansıdığını ilgili süreç adımında kısaca belirt."]
+    else:
+        satirlar += ["", "**Yerleşim:** " + _HEDEF_YERLESIM.get(hedef, _HEDEF_YERLESIM["surec"])]
+    if tablo:
         satirlar += [
-            "Tablo (değişen HER öğe için bir satır; gerçekten veri değişmeyen 'güncelle' ifadelerini ALMA):",
-            "| Değişen Öğe | Değişiklik Tipi | Veriyi Kullanan Yerler (kaynaklı) | Mevcut Kayıtlar Ne Olur | "
-            "Yeni Davranış | Karar/Soru |",
-            "|---|---|---|---|---|---|",
             "",
+            "| Değişen Öğe | Değişiklik | Kullanan Yerler (kaynaklı) | Mevcut Kayıtlar | Yeni Davranış / Bağlı Adım |",
+            "|---|---|---|---|---|",
         ]
-    satirlar.append("**Her tip için mutlaka cevaplanacak kontroller:**")
+    satirlar += ["", "**Netleştirilecek noktalar (yalnız ilgili olanlar):**"]
     for s in sl:
         satirlar.append(f"- *{s['ad']}:* {_KONTROL[s['tip']]}")
     satirlar += [
         "",
         "**KURALLAR:** Kullanan yerleri yalnız kaynaklardan (Swagger/Confluence/Jira/canlı gözlem) yaz, uydurma. "
-        "Etkisi kaynaktan belirlenemeyen her satır `[K: ❓ Belirsiz]` + açık soruya taşınır ve o soru "
-        "`- Zorunlu: Evet` olarak işaretlenir (cevapsız kalırsa veri kaybı/kırılma/yanlış test riski). "
-        "Her satır için en az bir kabul kriteri yaz (mevcut kayıtlarla ve kullanan ekranda doğrulama dahil).",
+        "Etkisi kaynaktan belirlenemeyen nokta `[K: ❓ Belirsiz]` + açık soru olur ve cevapsız kalması veri kaybı/"
+        "kırılma riski taşıyorsa `- Zorunlu: Evet` işaretlenir. Kabul kriteri yalnız akışın kritik dalı için.",
     ]
     if tuketiciler:
         satirlar += [
             "",
             "#### Olası Tüketiciler (deterministik kaynak taraması — değişen öğe adları referanslarda arandı)",
-            "Aşağıdaki HER satırı tabloda ele al ya da neden ilgisiz olduğunu tek cümleyle belirt; sessizce atlama.",
+            "Her satırı değerlendir: etkileniyorsa akışta/tabloda ele al, etkilenmiyorsa atla (gerekçe yazmana "
+            "gerek yok). Etkilenip etkilenmediği belirlenemiyorsa açık soru.",
             "| Aday Öğe | Kaynak | Nerede | Eşleşme |",
             "|---|---|---|---|",
         ]
@@ -389,5 +396,5 @@ def degisiklik_blogu(metin: str, hedef: str = "surec", ref_dir: Path | None = No
             satirlar.append(f"| {t['aday']} | {t['kaynak']} | {nerede} | {t['eslesme']} |")
     elif adaylar:
         satirlar += ["", f"_Aday öğeler ({', '.join(adaylar)}) referanslarda bulunamadı — kullanan yerleri "
-                         "canlı gözlem/kaynaklardan doğrula; belirlenemiyorsa Zorunlu açık soru aç._"]
+                         "canlı gözlem/kaynaklardan doğrula; belirlenemiyorsa açık soru aç._"]
     return "\n".join(satirlar)

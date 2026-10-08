@@ -4,7 +4,7 @@ from pathlib import Path
 from .base import (
     _api_cagri, _kaydet, input_hazirla, prompt_yukle, ozel_prompt_oku,
     _domain_kurallari_oku,
-    OZEL_PROMPT_DOGRULUK_EKI, belirsizlik_denetimi, test_kapsam_denetimi, ai_ara_sozleri_temizle,
+    OZEL_PROMPT_DOGRULUK_EKI, belirsizlik_denetimi, akis_butunluk_denetimi, ai_ara_sozleri_temizle,
     referans_dosyalari_hazirla, _ref_bloklari_olustur,
     canli_uygulama_baglami_hazirla,
     yonetici_ozeti_olustur,
@@ -121,10 +121,10 @@ def surec_analizi_yap(icerik_override: list | None = None,
 
     # Yönetici Özeti (TL;DR) — analist hızlı tarayıp onaylasın. Süreç analizi Jira'ya
     # gitmez ama tutarlılık için aynı format (açık sorular doküman içinde, tablo formatı).
-    # Test Kapsam Denetimi — deterministik, 0 token: kabul kriteri olmayan BR/AF/EF'ler.
-    test_kapsam = test_kapsam_denetimi(yanit)
-    if test_kapsam:
-        print("  🧪 Test kapsam denetimi: kabul kriterinde karşılığı olmayan kural/akışlar — rapora eklendi.")
+    # Akış Bütünlük Denetimi — deterministik, 0 token: akışa bağlanmamış dal/ekran/kural + tanımsız ID.
+    butunluk = akis_butunluk_denetimi(yanit)
+    if butunluk:
+        print("  🔗 Akış bütünlük denetimi: akışa bağlanmamış/tanımsız öğeler — rapora eklendi.")
 
     ozet = yonetici_ozeti_olustur(yanit)
-    return _kaydet("surec-analizi.md", ozet + yanit + belirsizlik + test_kapsam)
+    return _kaydet("surec-analizi.md", ozet + yanit + belirsizlik + butunluk)

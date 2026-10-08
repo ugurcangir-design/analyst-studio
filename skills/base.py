@@ -301,32 +301,36 @@ _ORTAK_EK_KURALLAR = (
     "- Önceki aşamada tanımlı bir ID'nin bu çıktıda karşılığı yoksa Açık Sorular'a taşı"
 )
 
-# Testçi gözü + zorunlu açık soru — analiz/test ekibi soru sormadan test yazabilsin diye.
-# prompt_yukle() bu kuralları _TEST_GOZU_SKILL_IDS'e (prompts.json override'ı olsa da) ekler.
-_TEST_GOZU_KURALLARI = (
-    "\n\n## EK KURALLAR — Testçi Gözü (Kabul Kriteri Kapsamı)\n\n"
-    "Analiz, test ekibinin EK SORU SORMADAN test senaryosu yazabileceği netlikte olmalı. "
-    "Kabul kriterlerini yazarken eksik bırakma:\n"
-    "1. **Kapsam:** her iş kuralı (BR) için ≥1 kriter; her alternatif (AF) ve hata akışı (EF) için ≥1 "
-    "NEGATİF kriter — kriterde bağlı ID'yi yaz.\n"
-    "2. **Sınırlar:** kuralı olan her alan için geçerli + geçersiz değer davranışı "
-    "(boş/zorunlu, min-max, uzunluk, format, özel karakter).\n"
-    "3. **Roller:** rol/yetki etkisi varsa yetkili rolün sonucu + yetkisiz rolün davranışı "
-    "(buton gizli mi, hata mı).\n"
-    "4. **Mevcut veri:** veri değişikliği varsa değişiklik ÖNCESİ oluşmuş kayıtlarla davranış.\n"
-    "5. **Doğrulama noktası:** her kriterde sonucun NEREDE gözlemleneceği (ekran/alan, liste, rapor, "
-    "log/audit, endpoint yanıtı + status, DB). 'Başarılı olur / doğru çalışır' gibi gözlemlenemez sonuç YASAK.\n"
-    "6. **Ön koşul / test verisi:** kriterin koşulabilmesi için gereken veri durumu (hangi kayıt, hangi "
-    "statüde, hangi rolle).\n"
-    "7. **Kaynak:** beklenen değer (mesaj metni, status, alan) kaynakta yoksa UYDURMA → `[K: ❓ Belirsiz]` + açık soru.\n"
-    "Küçük/hata işlerinde yalnız ilgili 1-3 kriter yeterli — kurallar doldurmak için değil, eksik bırakmamak içindir.\n\n"
+# Süreç ve ekran BÜTÜNLÜĞÜ + zorunlu açık soru. Amaç analizi büyütmek DEĞİL: uçtan uca akışı
+# kapatmak → geliştirilebilir olsun, test edilirken süreçsel/işleyiş olarak atlanmış nokta kalmasın.
+# prompt_yukle() bu kuralları _BUTUNLUK_SKILL_IDS'e (prompts.json override'ı olsa da) ekler.
+_BUTUNLUK_KURALLARI = (
+    "\n\n## EK KURALLAR — Süreç ve Ekran Bütünlüğü (Uçtan Uca Akış)\n\n"
+    "Amaç analizi BÜYÜTMEK değil; geliştirilebilir olmasını ve test edilirken süreçsel ya da işleyiş "
+    "olarak atlanmış, açık kalmış bir nokta bulunmamasını sağlamaktır. Yazmadan önce akışı uçtan uca "
+    "zihninde yürüt ve aşağıdaki halkaları kontrol et. Eksik halkayı İLGİLİ MEVCUT BÖLÜMDE tamamla "
+    "(süreç adımı, alternatif/hata akışı, ekran alanı/aksiyonu, iş kuralı). Bu kontrol için ayrı bölüm, "
+    "kontrol listesi ya da tekrar YAZMA. Kaynaktan tamamlanamıyorsa açık soru aç.\n"
+    "1. **Süreç ↔ ekran:** süreçteki her kullanıcı adımının ekranda bir karşılığı (alan/aksiyon), ekrandaki "
+    "her buton/aksiyonun süreçte bir adımı var; karşılıksız adım ya da işlevi tanımsız buton kalmaz.\n"
+    "2. **Giriş–çıkış:** akış hangi koşulla/nereden başlar, nerede biter; her aksiyondan sonra kullanıcı "
+    "nereye gider ve ekran hangi durumda kalır (liste yenilenir mi, mesaj, yönlendirme, form temizlenir mi).\n"
+    "3. **Karar noktaları:** her koşulun TÜM dalları (başarılı/hatalı, boş/dolu, var/yok, yetkili/yetkisiz) "
+    "tanımlı ve dalın ana akışa dönüşü ya da sonu belli.\n"
+    "4. **Veri sürekliliği:** bir adımda girilen/değişen veri, sonraki adımlarda ve onu gösteren/kullanan "
+    "ekranlarda (liste, detay, rapor, entegrasyon) tutarlı; durum (status) geçişleri eksiksiz.\n"
+    "5. **Etki akışta:** değişiklik başka ekran/süreci etkiliyorsa etki yalnız listelenmez; ilgili adımda ya "
+    "da alternatif akışta nasıl işlediği yazılır.\n"
+    "6. **Kabul kriterleri akışı doğrular:** ana akış + kritik dallar; her kriterin sonucu gözlemlenebilir ve "
+    "nerede görüleceği belli. Akışta karşılığı olmayan, tekrarlayan ya da sayı doldurmak için kriter YAZMA.\n"
+    "Küçük/hata işlerinde yalnız işin dokunduğu halkayı kontrol et.\n\n"
     "## EK KURALLAR — Zorunlu Açık Soru\n\n"
     "Bir açık soru cevapsız kalırsa geliştirme/test YANLIŞ davranış üretecekse (veri kaybı/bozulması, başka "
-    "ekran/rapor/entegrasyonun kırılması, iş kuralının belirsiz kalması, testin beklenen sonucunun "
+    "ekran/rapor/entegrasyonun kırılması, akışın bir dalının tanımsız kalması, beklenen sonucun "
     "bilinmemesi) soru bloğuna `- Zorunlu: Evet` satırı ekle; bu sorular Öncelik: Kritik veya Yüksek olur. "
     "Diğer sorulara bu satırı YAZMA."
 )
-_TEST_GOZU_SKILL_IDS = frozenset({
+_BUTUNLUK_SKILL_IDS = frozenset({
     "surec_analizi",
     "teknik_analiz_bolumler",
     "gorev_teknik_analiz",
@@ -1526,8 +1530,8 @@ def _prompt_ekleri(skill_id: str, icerik: str) -> str:
     """Skill'e göre otomatik ortak blokları ekler (editörde görünmez, override'da da korunur)."""
     if skill_id in _EK_KURAL_SKILL_IDS:
         icerik = icerik + _ORTAK_EK_KURALLAR
-    if skill_id in _TEST_GOZU_SKILL_IDS:
-        icerik = icerik + _TEST_GOZU_KURALLARI
+    if skill_id in _BUTUNLUK_SKILL_IDS:
+        icerik = icerik + _BUTUNLUK_KURALLARI
     if skill_id in _EK_KURAL_SKILL_IDS:
         icerik = icerik + _domain_kurallari_oku()
     return icerik
@@ -1660,43 +1664,69 @@ def belirsizlik_denetimi(metin: str) -> str:
     )
 
 
-# ─── Test Kapsam Denetimi — deterministik, 0 token ───────────────────────────
-# Testçi gözü: TANIMLANAN her iş kuralı / alternatif / hata akışı (BR/AF/EF) Kabul Kriterleri
-# bölümünde en az bir kez referans ediliyor mu? Edilmeyen → testçinin "bunu nasıl test ederim?"
-# sorusu. Süreç analizi sonuna eklenir (belirsizlik denetimi gibi).
-_TEST_KAPSAM_TANIM = re.compile(r"(?:^\|\s*|\*\*)((?:BR|AF|EF)-\d{2,4})\b", re.MULTILINE)
-_TEST_KAPSAM_TUR = {"BR": "İş kuralı", "AF": "Alternatif akış", "EF": "Hata akışı"}
+# ─── Akış Bütünlük Denetimi — deterministik, 0 token ─────────────────────────
+# Süreç analizinde TANIMLANAN adım/dal/ekran/kural ID'leri akışa bağlı mı? Tanımlandığı yer dışında
+# HİÇ referans almayan alternatif/hata akışı (karar noktasından bağlanmamış dal), ekran ya da iş kuralı
+# ile tanımsız ID'ye yapılan referanslar → testte "bu nereden tetikleniyor / nerede uygulanıyor?" sorusu.
+_AKIS_TANIM = re.compile(r"(?:^\|\s*|\*\*)((?:PA|BR|AF|EF|EK)-\d{2,4})\b", re.MULTILINE)
+_AKIS_REF = re.compile(r"\b((?:PA|BR|AF|EF|EK)-\d{2,4})\b")
+_AKIS_ARALIK = re.compile(r"\b(PA|BR|AF|EF|EK)-(\d{2,4})\s*(?:–|—|-|\.\.|~)\s*(?:\1-)?(\d{2,4})\b")
+_AKIS_TUR = {"PA": "Süreç adımı", "BR": "İş kuralı", "AF": "Alternatif akış", "EF": "Hata akışı", "EK": "Ekran"}
+_AKIS_YETIM_NEDEN = {"AF": "Hiçbir adım/karar noktası bu dala bağlanmıyor",
+                     "EF": "Hiçbir adım bu hatayı tetiklemiyor",
+                     "EK": "Hiçbir süreç adımı bu ekranı kullanmıyor",
+                     "BR": "Hiçbir adım/ekran/kriter bu kuralı uygulamıyor"}
 
 
-def _kabul_kriterleri_bolumu(metin: str) -> str | None:
-    """'Kabul Kriter' başlıklı bölümün içeriği (aynı/üst seviye sonraki başlığa kadar); yoksa None."""
-    m = re.search(r"^(#{1,4})\s+[^\n]*Kabul Kriter[^\n]*$", metin, re.MULTILINE | re.IGNORECASE)
-    if not m:
-        return None
-    seviye = len(m.group(1))
-    son = re.search(rf"^#{{1,{seviye}}}\s", metin[m.end():], re.MULTILINE)
-    return metin[m.end(): m.end() + son.start()] if son else metin[m.end():]
+def _akis_govdesi(metin: str) -> str:
+    """Açık Sorular ve otomatik denetim bölümleri HARİÇ analiz gövdesi (oradaki atıf akışa bağlamaz)."""
+    m = re.search(r"^#{1,4}\s+[^\n]*(?:Açık Sorular|Karar Bekleyen|Denetim)[^\n]*$", metin, re.MULTILINE)
+    return metin[:m.start()] if m else metin
 
 
-def test_kapsam_denetimi(metin: str) -> str:
-    """Kabul kriteri olmayan BR/AF/EF'leri raporlar; bulgu yoksa (ya da AC bölümü yoksa) ''."""
-    ac = _kabul_kriterleri_bolumu(metin or "")
-    if ac is None:
-        return ""
-    tanimli = list(dict.fromkeys(_TEST_KAPSAM_TANIM.findall(metin)))
+def akis_butunluk_denetimi(metin: str) -> str:
+    """Akışa bağlanmamış AF/EF/EK/BR + tanımsız ID referanslarını raporlar; bulgu yoksa ''."""
+    govde = _akis_govdesi(metin or "")
+    tanim_yerleri = list(_AKIS_TANIM.finditer(govde))
+    tanimli = list(dict.fromkeys(m.group(1) for m in tanim_yerleri))
     if not tanimli:
         return ""
-    ac_idler = set(re.findall(r"\b(?:BR|AF|EF)-\d{2,4}\b", ac))
-    eksik = [i for i in tanimli if i not in ac_idler]
-    if not eksik:
+    sayac: dict[str, int] = {}
+    for m in _AKIS_REF.finditer(govde):
+        sayac[m.group(1)] = sayac.get(m.group(1), 0) + 1
+    for m in _AKIS_ARALIK.finditer(govde):   # BR-001–BR-005 → aradakiler de referans sayılır
+        on, a, b = m.group(1), int(m.group(2)), int(m.group(3))
+        if 0 < b - a <= 50:
+            for n in range(a + 1, b):
+                k = f"{on}-{n:0{len(m.group(2))}d}"
+                sayac[k] = sayac.get(k, 0) + 1
+    tanim_sayisi: dict[str, int] = {}
+    tanimda_adim: set[str] = set()   # tanım satırı kendi bağlı adımını taşıyor (şablon: "Bağlı adım: PA-…")
+    for m in tanim_yerleri:
+        i = m.group(1)
+        tanim_sayisi[i] = tanim_sayisi.get(i, 0) + 1
+        bas = govde.rfind("\n", 0, m.start()) + 1
+        son = govde.find("\n", m.end())
+        satir = govde[bas: son if son != -1 else len(govde)]
+        if any(r != i for r in re.findall(r"\bPA-\d{2,4}\b", satir)):
+            tanimda_adim.add(i)
+    bulgular: list[str] = []
+    for i in tanimli:
+        tur = i.split("-")[0]
+        if (tur in _AKIS_YETIM_NEDEN and i not in tanimda_adim
+                and sayac.get(i, 0) - tanim_sayisi.get(i, 0) <= 0):
+            bulgular.append(f"| {i} | {_AKIS_TUR[tur]} | {_AKIS_YETIM_NEDEN[tur]} |")
+    tanimli_k = set(tanimli)
+    for i in dict.fromkeys(m.group(1) for m in _AKIS_REF.finditer(govde)):
+        if i not in tanimli_k and i.split("-")[0] in ("PA", "AF", "EF", "EK"):
+            bulgular.append(f"| {i} | {_AKIS_TUR[i.split('-')[0]]} | Referans var ama tanımı yok |")
+    if not bulgular:
         return ""
-    satirlar = [f"| {i} | {_TEST_KAPSAM_TUR[i.split('-')[0]]} | Kabul kriterinde referans yok |" for i in eksik]
     return (
-        "\n\n---\n\n## 🧪 Test Kapsam Denetimi\n\n"
-        f"_Deterministik tarama (0 token) — {len(tanimli) - len(eksik)}/{len(tanimli)} kural/akış kabul "
-        "kriteriyle kapsanıyor. Aşağıdakiler için test ekibi 'bunu nasıl doğrularım?' diye soracak: "
-        "kriter ekleyin (Bu adımı düzelt) ya da bilinçliyse yok sayın._\n\n"
-        "| ID | Tür | Durum |\n|---|---|---|\n" + "\n".join(satirlar) + "\n"
+        "\n\n---\n\n## 🔗 Akış Bütünlük Denetimi\n\n"
+        "_Deterministik tarama (0 token) — akışa bağlanmamış ya da tanımsız öğeler. Her biri ya akışa "
+        "bağlanmalı (Bu adımı düzelt) ya da gereksizse çıkarılmalı; bilinçliyse yok sayılabilir._\n\n"
+        "| ID | Tür | Bulgu |\n|---|---|---|\n" + "\n".join(bulgular[:30]) + "\n"
     )
 
 
