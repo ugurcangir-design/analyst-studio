@@ -93,6 +93,12 @@ kontrol("gorev/mockup jira boş key → 400", mkjira.status_code == 400)
 # Ortak eğitim havuzu (few-shot) durum ucu deterministik dönmeli.
 od = json_al(istemci.get("/api/ornekler/durum"))
 kontrol("ornekler/durum ok + alanlar", od.get("ok") is True and "toplam" in od and "tipler" in od)
+op = json_al(istemci.post("/api/ornekler/paylas", headers=ORIGIN))
+kontrol("ornekler/paylas ok (yerel re-push)", op.get("ok") is True and "paylasilan" in op)
+oji = istemci.post("/api/ornekler/jira-import", json={"projeler": []}, headers=ORIGIN)
+kontrol("ornekler/jira-import boş proje / jira yok → 400", oji.status_code == 400)
+ojd = json_al(istemci.get("/api/ornekler/jira-import/durum"))
+kontrol("ornekler/jira-import durum ok", ojd.get("ok") is True and "calisiyor" in ojd)
 
 o = json_al(istemci.get("/api/oturum"))
 kontrol("oturum ok + katalog", o.get("ok") and len(o.get("ciktilar", [])) >= 9)

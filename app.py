@@ -3392,6 +3392,54 @@ def ornekler_tani():
     return jsonify({"ok": True, **tani()})
 
 
+@app.route("/api/ornekler/paylas", methods=["POST"])
+def ornekler_paylas():
+    """Bu makinenin yerel örneklerini merkezi havuza (yeniden) gönderir (Yol 1 — eski işleri
+    ortaklaştır). Her analist kendi makinesinde çalıştırabilir; günlük sync de otomatik yapar."""
+    from skills.ornek_havuzu import ornekleri_paylas
+    n = ornekleri_paylas()
+    return jsonify({"ok": True, "paylasilan": n, "mesaj": f"{n} yerel örnek merkeze gönderildi."})
+
+
+_jira_import_durum: dict = {"calisiyor": False, "sonuc": None, "ts": ""}
+
+
+@app.route("/api/ornekler/jira-import", methods=["POST"])
+@usage_gerekli
+def ornekler_jira_import():
+    """Yol 2 (owner) — geçmiş Jira analizlerini örnek havuzuna aktarır (arka plan; uzun).
+    Body: {projeler:[...], gun?}. Durum: GET /api/ornekler/jira-import/durum."""
+    if _jira_import_durum.get("calisiyor"):
+        return jsonify({"ok": False, "error": "İçe aktarma zaten sürüyor."}), 409
+    hata = _jira_baglanti_eksik()
+    if hata:
+        return jsonify({"ok": False, "error": hata}), 400
+    data = request.get_json(silent=True) or {}
+    projeler = data.get("projeler") or []
+    gun = data.get("gun") or 180
+    if not isinstance(projeler, list) or not projeler:
+        return jsonify({"ok": False, "error": "En az bir proje seçin."}), 400
+
+    def _worker():
+        _jira_import_durum.update({"calisiyor": True, "sonuc": None, "ts": time.strftime("%H:%M")})
+        try:
+            from skills.jira_gorevleri import jira_gecmis_import
+            _jira_import_durum["sonuc"] = jira_gecmis_import(projeler, gun=gun)
+        except Exception as e:
+            _jira_import_durum["sonuc"] = {"hata": str(e)[:200]}
+        finally:
+            _jira_import_durum["calisiyor"] = False
+            _jira_import_durum["ts"] = time.strftime("%H:%M")
+    threading.Thread(target=_worker, daemon=True, name="jira-import").start()
+    return jsonify({"ok": True, "baslatildi": True})
+
+
+@app.route("/api/ornekler/jira-import/durum", methods=["GET"])
+@usage_gerekli
+def ornekler_jira_import_durum():
+    return jsonify({"ok": True, **_jira_import_durum})
+
+
 @app.route("/api/ornekler/sil", methods=["POST"])
 @usage_gerekli
 def ornekler_sil():

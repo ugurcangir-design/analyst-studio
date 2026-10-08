@@ -3205,8 +3205,23 @@ function temaDegistir() {
               <div id="ku-ornek-ozet" style="color:var(--text2);margin-top:2px">Yükleniyor…</div>
             </div>
             <button class="btn btn-outline btn-sm" id="ku-ornek-cek-btn" onclick="ornekCek()" title="Merkezi havuzdan ekip örneklerini şimdi indir">Şimdi Çek</button>
+            <button class="btn btn-ghost btn-sm" onclick="ornekPaylas()" title="Bu makinenin yerel örneklerini merkezi havuza gönderir (eski işleri ortaklaştır)">Yerelimi Paylaş</button>
             <button class="btn btn-ghost btn-sm" onclick="ornekTani()" title="0 çekiliyorsa nedenini gösterir">Teşhis</button>
           </div>
+          <!-- Yol 2 — geçmiş Jira analizlerini havuza aktar (owner backfill) -->
+          <details id="ku-ornek-import" style="margin-bottom:14px;font-size:12.5px">
+            <summary style="cursor:pointer;color:var(--text2)">Eski işleri Jira'dan içe aktar (backfill)</summary>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:9px">
+              <input type="text" id="ku-import-proje" class="setting-input" placeholder="Projeler (virgülle): MBSTRADE, MBSOPS, MBSUATEAM" style="flex:1;min-width:240px" autocomplete="off">
+              <select id="ku-import-gun" class="ctx-input" style="width:auto">
+                <option value="90">Son 90 gün</option>
+                <option value="180" selected>Son 180 gün</option>
+                <option value="365">Son 1 yıl</option>
+              </select>
+              <button class="btn btn-outline btn-sm" id="ku-import-btn" onclick="ornekJiraImport()">Jira'dan İçe Aktar</button>
+              <span id="ku-import-msg" style="color:var(--text3);width:100%"></span>
+            </div>
+          </details>
           <!-- Ekip verisi okuma anahtarı — app-sahibinden alınır, YEREL kaydedilir (git'e girmez).
                Ayarlı değilken "Uzaktan Çek" çalışmaz → yalnız bu makinenin kayıtları görünür. -->
           <div id="ku-key-row" style="display:none;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:14px;padding:10px 13px;border:1px solid var(--border);background:var(--surface2);border-radius:9px;font-size:12.5px">
@@ -4309,6 +4324,47 @@ async function ornekCek() {
     toast(d.ok ? (d.mesaj || 'Çekildi') : ('Çekilemedi: ' + (d.mesaj || '')), d.ok ? 'success' : 'error');
   } catch (e) { toast('Çekme hatası: ' + e, 'error'); }
   finally { if (btn) btn.disabled = false; ornekDurumYukle(); }
+}
+
+let _ornekImportTimer = null;
+async function ornekJiraImport() {
+  const proj = (document.getElementById('ku-import-proje').value || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+  const gun = parseInt(document.getElementById('ku-import-gun').value || '180', 10);
+  const msg = document.getElementById('ku-import-msg');
+  const btn = document.getElementById('ku-import-btn');
+  if (!proj.length) { toast('En az bir proje girin', 'info'); return; }
+  if (!confirm(`${proj.join(', ')} projelerinde son ${gun} günün analiz içeren task'ları havuza aktarılacak. Devam?`)) return;
+  btn.disabled = true; msg.textContent = 'Başlatılıyor…';
+  try {
+    const r = await fetch('/api/ornekler/jira-import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ projeler: proj, gun }) });
+    const d = await r.json();
+    if (!d.ok) { msg.textContent = '⚠ ' + (d.error || 'Başlatılamadı'); btn.disabled = false; return; }
+    msg.textContent = 'İçe aktarılıyor (sürebilir)…';
+    clearInterval(_ornekImportTimer);
+    _ornekImportTimer = setInterval(async () => {
+      try {
+        const dr = await (await fetch('/api/ornekler/jira-import/durum')).json();
+        if (dr.calisiyor) return;
+        clearInterval(_ornekImportTimer);
+        btn.disabled = false;
+        const s = dr.sonuc || {};
+        if (s.hata) msg.textContent = '⚠ ' + s.hata;
+        else msg.textContent = `✓ ${s.eklenen || 0} eklendi · ${s.taranan || 0} tarandı · ${s.atlanan || 0} atlandı`;
+        ornekDurumYukle();
+      } catch (e) {}
+    }, 3000);
+  } catch (e) { msg.textContent = 'Hata: ' + e; btn.disabled = false; }
+}
+
+async function ornekPaylas() {
+  const el = document.getElementById('ku-ornek-ozet');
+  if (el) el.textContent = 'Yerel örnekler merkeze gönderiliyor…';
+  try {
+    const r = await fetch('/api/ornekler/paylas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const d = await r.json();
+    toast(d.ok ? (d.mesaj || 'Gönderildi') : 'Gönderilemedi', d.ok ? 'success' : 'error');
+  } catch (e) { toast('Paylaşım hatası: ' + e, 'error'); }
+  finally { ornekDurumYukle(); }
 }
 
 async function ornekTani() {

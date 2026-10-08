@@ -256,7 +256,13 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   /`teknik_analiz_yap`/`gorev_analiz_et`). `[K:]` temizlenir; örnek ≤45k (Sheet hücre limiti); havuz ≤80 (en yeni).
   Kürasyon/görünürlük: `GET /api/ornekler` (owner liste) · `GET /api/ornekler/durum` (owner — havuz adedi+tip+son çekim,
   `ornek_havuzu.durum`; `.durum.json` meta, `_oku_hepsi`/`_buda` nokta-dosyayı atlar) · `POST /api/ornekler/sil`. UI:
-  Kullanım Raporu'nda **"Ortak Eğitim Havuzu"** paneli (`ornekDurumYukle`/`ornekCek` — adet + son çekim + "Şimdi Çek").
+  Kullanım Raporu'nda **"Ortak Eğitim Havuzu"** paneli (`ornekDurumYukle`/`ornekCek` — adet + son çekim + "Şimdi Çek"
+  + "Teşhis" `GET /api/ornekler/tani` ham sink yanıtı + '0 çekildi' nedeni). **ESKİ İŞLERİ KURTARMA:** (Yol 1) yerel
+  örnekleri merkeze taşı — `ornekleri_paylas(mevcut_idler)` (`POST /api/ornekler/paylas` + `ornekleri_cek` içinde
+  OTOMATİK: çekilen-id'de olmayan yerel örnekleri re-push → her analistin günlük sync'i havuzu birleştirir, sink
+  id-dedup'lar). (Yol 2) `jira_gorevleri.jira_gecmis_import(projeler, gun, limit)` (`POST /api/ornekler/jira-import`
+  arka plan + `/durum`): JQL ile geçmiş task açıklamalarından `_agent_analiz_ayikla` (marker '🤖' sonrası / analiz-şablonu
+  sinyalli uzun gövde; junk eler) agent analizini ayıklayıp `ornek_kaydet`'e verir. UI: panelde "Jira'dan İçe Aktar" (proje+gün).
   **SUNUCU TARAFI (KRİTİK — unblock):** merkezi paylaşımın çalışması için Google Apps Script'te **'Ornekler' sekmesi
   (POST olay=='ornek' içerikle saklar, id-dedup) + GET `?ornekler=1` (şirket-domaini VEYA okuma-anahtarı kapısı → tüm
   analistler çeker)** gerekir — TAM KOD + deploy adımları `docs/telemetri-apps-script.md`'de (owner bir kez yapıştırır,

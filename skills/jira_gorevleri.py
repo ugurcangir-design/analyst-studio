@@ -328,6 +328,72 @@ def _taze_issue_oku(keys: list[str], cloud_id: str) -> dict[str, dict]:
     return taze
 
 
+def _agent_analiz_ayikla(metin: str) -> str | None:
+    """Jira task açıklamasından AGENT ANALİZİNİ ayıklar (Yol 2 backfill filtresi).
+    Marker '🤖' (Jira Köprüsü '## 🤖 Teknik Analiz') varsa o başlıktan SONRASI; yoksa
+    analiz-şablonu sinyalleri + yeterli uzunluk varsa tüm gövde; değilse None (örnek değil)."""
+    t = (metin or "").strip()
+    if len(t) < 400:
+        return None
+    idx = t.find("🤖")
+    if idx != -1:
+        sonrasi = t[idx:]
+        nl = sonrasi.find("\n")
+        analiz = (sonrasi[nl + 1:] if nl != -1 else "").strip()
+        return analiz if len(analiz) >= 400 else None
+    dusuk = t.lower()
+    sinyaller = ("## amaç", "kabul kriter", "iş mantığı", "endpoint", "## sorun", "## çözüm",
+                 "etkilenen", "ekran/bileşen", "veri modeli", "## kapsam", "bağımlılık", "hata yönetimi")
+    vurus = sum(1 for s in sinyaller if s in dusuk)
+    return t if (vurus >= 2 and len(t) >= 600) else None
+
+
+def jira_gecmis_import(projeler: list[str], gun: int = 180, limit: int = 300) -> dict:
+    """Yol 2 — Geçmiş Jira analizlerini örnek havuzuna aktarır (ortak few-shot backfill).
+    Belirtilen projelerde son `gun` gün içinde GÜNCELLENMİŞ, açıklaması OLAN task'ları tarar;
+    `_agent_analiz_ayikla` ile agent analizini ayıklayıp `ornek_kaydet` ile yerel+sink havuzuna
+    yazar (idempotent — id-dedup). Dönen: {taranan, eklenen, atlanan, hata}."""
+    from .ornek_havuzu import ornek_kaydet
+    projeler = [str(p).strip().upper() for p in (projeler or []) if str(p).strip()]
+    if not projeler:
+        return {"taranan": 0, "eklenen": 0, "atlanan": 0, "hata": "Proje seçilmedi."}
+    try:
+        gun = max(1, min(int(gun or 180), 1095))
+    except (TypeError, ValueError):
+        gun = 180
+    cloud_id = _cloud_id()
+    jql = (f"project in ({','.join(projeler)}) AND updated >= -{gun}d "
+           f"AND description is not EMPTY ORDER BY updated DESC")
+    taranan = eklenen = atlanan = 0
+    next_token = None
+    try:
+        while taranan < limit:
+            body = {"jql": jql, "fields": _ISSUE_ALANLARI, "maxResults": 100}
+            if next_token:
+                body["nextPageToken"] = next_token
+            data = atlassian_post("/rest/api/3/search/jql", body=body, cloud_id=cloud_id)
+            issues = data.get("issues", []) or []
+            if not issues:
+                break
+            for issue in issues:
+                taranan += 1
+                g = _issue_ayrıstir(issue)
+                analiz = _agent_analiz_ayikla(g.get("description", ""))
+                if analiz and ornek_kaydet("teknik", analiz, girdi_ozeti=g.get("summary", ""),
+                                           proje=g["key"].split("-")[0], jira_key=g["key"]):
+                    eklenen += 1
+                else:
+                    atlanan += 1
+                if taranan >= limit:
+                    break
+            next_token = data.get("nextPageToken")
+            if not next_token:
+                break
+        return {"taranan": taranan, "eklenen": eklenen, "atlanan": atlanan, "hata": ""}
+    except Exception as e:
+        return {"taranan": taranan, "eklenen": eklenen, "atlanan": atlanan, "hata": str(e)[:200]}
+
+
 def alt_gorevleri_cek(parent_key: str) -> list[dict]:
     """Verilen Epic/Story KEY'inin BİR SEVİYE altındaki görevleri çeker. Üç bağ
     modelini BİRLEŞTİRİR (tekrarsız): `parent = KEY` (sub-task/team-managed çocuk),

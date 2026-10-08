@@ -83,6 +83,26 @@ def _sink_push(kayit: dict) -> None:
         pass  # sink erişilemezse yerel havuz yine dolar
 
 
+def ornekleri_paylas(mevcut_idler: set | None = None) -> int:
+    """Yerel havuzdaki örnekleri merkezi sink'e (yeniden) push eder — 'eski işleri' ortak
+    havuza taşır (Yol 1). `mevcut_idler` (çekilen merkez id'leri) verilirse onlar atlanır →
+    gereksiz push yok, yalnız yerelde olup merkezde olmayanlar gider. Sink id-dedup'lar.
+    Dönen: push denenen örnek sayısı. Best-effort (asla patlamaz)."""
+    n = 0
+    try:
+        mevcut = mevcut_idler or set()
+        for o in _oku_hepsi():
+            oid = o.get("id")
+            if not oid or oid in mevcut:
+                continue
+            if (o.get("tip") in ("surec", "teknik")) and len((o.get("icerik") or "")) >= 300:
+                _sink_push(o)
+                n += 1
+    except Exception:
+        pass
+    return n
+
+
 def ornek_kaydet(tip: str, cikti_md: str, girdi_ozeti: str = "",
                  proje: str = "", jira_key: str = "") -> bool:
     """Onaylı analizi örnek olarak yereli+sink'e kaydeder. tip: 'surec'|'teknik'. Fail-safe."""
@@ -164,9 +184,18 @@ def ornekleri_cek() -> tuple[bool, str]:
                 n += 1
             except Exception:
                 continue
+        # Yerelde olup merkezde OLMAYAN örnekleri merkeze taşı (eski işleri ortaklaştır;
+        # sink id-dedup'lar → çift satır olmaz). Her analistin günlük sync'i havuzu birleştirir.
+        paylasilan = 0
+        try:
+            cekilen_idler = {o.get("id") for o in veri if isinstance(o, dict) and o.get("id")}
+            paylasilan = ornekleri_paylas(cekilen_idler)
+        except Exception:
+            paylasilan = 0
         _buda()
-        _durum_yaz(True, f"{n} örnek çekildi.")
-        return True, f"{n} örnek çekildi."
+        msg = f"{n} örnek çekildi" + (f", {paylasilan} yerel örnek paylaşıldı" if paylasilan else "") + "."
+        _durum_yaz(True, msg)
+        return True, msg
     except Exception as e:
         _durum_yaz(False, f"Çekme başarısız: {e}")
         return False, f"Çekme başarısız: {e}"
