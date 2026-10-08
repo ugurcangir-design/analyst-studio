@@ -253,6 +253,9 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   deposu (`GET /api/jira/gorev/analiz-kayit`), yoksa Jira açıklaması (`/getir`). `formatla` modu toplanmaz (eğitim
   değeri yok). **Per-task dedup:** `ornek_havuzu._ayni_key_temizle` aynı `jira_key`'in eski yerel örneğini siler →
   task başına EN GÜNCEL tek örnek (havuz şişmesin; owner yine kürasyonla siler).
+  **Anahtar = UI entry anahtarı:** FE+BE ayrı analizde BE=`<key>`, FE=`<key>::FE` (depo + örnek `jira_key`) →
+  dedup katman başına (FE, BE örneğini SİLMEZ) + kurtarma (`/analiz-kayit`) aynı anahtarla bulur; "Eğitime Ekle" de
+  entry anahtarını gönderir (gerçek key'e çözmez). Test: `tests/test_gorev_egitim.py` (sink MOCK/0-token).
 - **Onaylı Analiz Örnek Havuzu (few-shot — ORTAK EĞİTİM, `skills/ornek_havuzu.py`):** Analist bir analizi
   ONAYLAYINCA (`/api/approve` süreç · `/api/approve-teknik(-no-jira)` teknik → `app._ornek_yakala`) **VEYA bir
   görev analizini JİRA'YA YAZINCA** (`/api/jira/gorev/guncelle` · `/api/jira/gorev/fe-be-olustur` → `app._ornek_yakala_md`,
@@ -345,6 +348,7 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   `test_baglam_jira.py` (bağlam filtresi Jira key'leri yerel export'ta yoksa uzaktan bulkfetch — yalnız eksik, hata yutulur; ağ MOCK/0-token),
   `test_soru_hedefli.py` (soru cevabı hedefli düzeltme yönlendirmesi — süreç/teknik kendine, bölüm bulunamazsa tam üretim; AI MOCK/0-token),
   `test_roller.py` (kullanıcı-bazlı ekran yetkisi — hash/PII'siz, etkin rol/görünürlük, owner sınırı, CRUD; offline/0-token),
+  `test_gorev_egitim.py` (Task analizi depo + eğitim toplama — egitime-ekle, dedup, FE+BE anahtarları; sink MOCK/0-token),
   `test_jira_hiyerarsi.py` (hiyerarşi oluşturma KISMİ HATA dayanıklılığı — bir issue reddedilse de kalanlar açılır + hatalar raporlanır; Jira MOCK/0-token).
 - **Faz 3.a — Kod kaynağı:** `skills/kod_kaynagi.py` salt-okuma yerel git/dosya arayüzü (yol repo köküne
   hapsedilir; yazma/komut yok). Config `reference/kod_kaynagi.json` (gitignore + `.example` seed, seed listesinde).

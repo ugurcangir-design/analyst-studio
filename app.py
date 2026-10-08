@@ -1629,8 +1629,11 @@ def _gorev_egitim_topla(key: str, summary: str, katman: str, mode: str, sonuc: d
                 part = fb.get(kat) or {}
                 pmd = (part.get("markdown") or "").strip()
                 if len(pmd) >= 300:
-                    _gd_kaydet(f"{key}::{kat.upper()}", pmd, part.get("acik_sorular", ""), summary, kat)
-                    _ornek_yakala_md("teknik", pmd, ozet=summary, proje=proje, jira_key=key)
+                    # Anahtar = UI entry anahtarı (BE=orijinal key, FE=key::FE) → kurtarma aynı
+                    # anahtarla bulur + örnek dedup'ı katman başına (FE, BE örneğini SİLMEZ).
+                    ek = key if kat == "be" else f"{key}::FE"
+                    _gd_kaydet(ek, pmd, part.get("acik_sorular", ""), summary, kat)
+                    _ornek_yakala_md("teknik", pmd, ozet=summary, proje=proje, jira_key=ek)
             return
         md = (sonuc.get("markdown") or "").strip()
         if len(md) >= 300:

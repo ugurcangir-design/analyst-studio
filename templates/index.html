@@ -5527,7 +5527,9 @@ async function jgEgitimeEkle() {
   try {
     const r = await fetch('/api/jira/gorev/egitime-ekle', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: _jgGercekKey(_jgAktifAnalizKey) || key, markdown: md, summary: s.summary || (_jgCurrent.summary || ''), katman: s.katman || '', acik_sorular: s.acik_sorular || '' })
+      // Entry anahtarı (BE=orijinal key, FE=key::FE) — gerçek key'e ÇÖZÜLMEZ: FE kaydı BE'yi ezmesin,
+      // kurtarma (analiz-kayit) aynı anahtarla bulsun.
+      body: JSON.stringify({ key: _jgAktifAnalizKey || key, markdown: md, summary: s.summary || (_jgCurrent.summary || ''), katman: s.katman || '', acik_sorular: s.acik_sorular || '' })
     });
     const d = await r.json();
     toast(d.ok ? (d.mesaj || 'Eğitime eklendi') : (d.error || 'Eklenemedi'), d.ok ? 'success' : 'error');
