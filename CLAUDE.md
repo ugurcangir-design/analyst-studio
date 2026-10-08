@@ -244,19 +244,24 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   `telemetri._sink_key()` env+dosyayı okur; `GET/POST /api/usage/sink-key` (owner rolü) opsiyonel/eski yöntem. UI:
   Kullanım Raporu açılınca ekip verisi OTOMATİK çekilir (`_kuAutoPullYapildi`, anahtar GEREKMEZ); "Okuma anahtarı"
   alanı opsiyonel (eski yöntem). Yetkisizde çekme `⚠ e-postanız owner listesinde değil` mesajı döner (başlıkta kalıcı).
-- **Onaylı Analiz Örnek Havuzu (few-shot eğitimi — `skills/ornek_havuzu.py`):** Analist bir analizi ONAYLAYINCA
-  (`/api/approve` süreç · `/api/approve-teknik(-no-jira)` teknik → `app._ornek_yakala` arka planda, best-effort)
-  onaylı çıktı bir "örnek" olur: (1) YEREL `reference/ornekler/<tip>_<id>.json`'a (gitignore) yazılır, (2) merkezi
-  sink'e `olay='ornek'` + İÇERİK olarak push edilir (kullanım raporundaki telemetri sink'i; **bu, analiz içeriğini
-  merkeze taşır — app-sahibi bilinçli kararı**). `ornekleri_cek()` ('Uzaktan Çek' benzeri; günlük referans oto-sync'e
-  + `POST /api/ornekler/cek`'e bağlı) sink'ten `?ornekler=1&email=` ile (owner e-posta kapısı) tüm ekip örneklerini
-  yerel havuza indirir. **Few-shot:** `ornek_bloklari(sorgu, tip, n=2)` mevcut girdiye EN ALAKALI örnekleri BM25
-  (`retrieval.BM25`) ile seçip süreç/teknik prompt'una "ONAYLI ÖRNEK ANALİZ — stil/derinlik referansı" bloğu olarak
-  enjekte eder (`surec_analizi_yap`/`teknik_analiz_yap`). `[K:]` etiketleri temizlenir; örnek başına ≤45k (Sheet
-  hücre limiti). Kürasyon: `GET /api/ornekler` (owner liste) + `POST /api/ornekler/sil` (owner). Havuz ≤80 (en yeni).
-  **NOT:** merkezi paylaşım için Apps Script'e `olay=='ornek'` → 'Ornekler' tab + `?ornekler=1` okuma eklenmeli
-  (owner e-posta kapısıyla aynı); eklenmeden YEREL few-shot yine çalışır (herkes kendi onaylı analizinden öğrenir).
-  Test: `smoke_test` (liste/sil deterministik uçlar). Eski `OWNER_KONSOL`/`YETKI_PANELI`/`USAGE_DASHBOARD` env bayrakları **ARTIK OKUNMAZ** (analiste
+- **Onaylı Analiz Örnek Havuzu (few-shot — ORTAK EĞİTİM, `skills/ornek_havuzu.py`):** Analist bir analizi
+  ONAYLAYINCA (`/api/approve` süreç · `/api/approve-teknik(-no-jira)` teknik → `app._ornek_yakala`) **VEYA bir
+  görev analizini JİRA'YA YAZINCA** (`/api/jira/gorev/guncelle` · `/api/jira/gorev/fe-be-olustur` → `app._ornek_yakala_md`,
+  tip='teknik') kaliteli çıktı bir "örnek" olur (hepsi arka plan, best-effort, akışı bloklamaz): (1) YEREL
+  `reference/ornekler/<tip>_<id>.json` (gitignore), (2) merkezi sink'e `olay='ornek'` + İÇERİK push (`ornek_kaydet`
+  → `_sink_push`; **analiz içeriğini merkeze taşır — app-sahibi bilinçli kararı**). `ornekleri_cek()` (günlük oto-sync
+  + boot + `POST /api/ornekler/cek`) sink'ten `?ornekler=1&email=<şirket domaini>` ile **TÜM ekip örneklerini** yerel
+  havuza indirir → ortak öğrenme. **Few-shot:** `ornek_bloklari(sorgu, tip, n=2)` BM25 ile EN ALAKALI 2 örneği
+  **süreç + teknik + GÖREV analizine** ("ONAYLI ÖRNEK — stil/derinlik referansı") enjekte eder (`surec_analizi_yap`
+  /`teknik_analiz_yap`/`gorev_analiz_et`). `[K:]` temizlenir; örnek ≤45k (Sheet hücre limiti); havuz ≤80 (en yeni).
+  Kürasyon/görünürlük: `GET /api/ornekler` (owner liste) · `GET /api/ornekler/durum` (owner — havuz adedi+tip+son çekim,
+  `ornek_havuzu.durum`; `.durum.json` meta, `_oku_hepsi`/`_buda` nokta-dosyayı atlar) · `POST /api/ornekler/sil`. UI:
+  Kullanım Raporu'nda **"Ortak Eğitim Havuzu"** paneli (`ornekDurumYukle`/`ornekCek` — adet + son çekim + "Şimdi Çek").
+  **SUNUCU TARAFI (KRİTİK — unblock):** merkezi paylaşımın çalışması için Google Apps Script'te **'Ornekler' sekmesi
+  (POST olay=='ornek' içerikle saklar, id-dedup) + GET `?ornekler=1` (şirket-domaini VEYA okuma-anahtarı kapısı → tüm
+  analistler çeker)** gerekir — TAM KOD + deploy adımları `docs/telemetri-apps-script.md`'de (owner bir kez yapıştırır,
+  Web App URL değişmez). Deploy edilene kadar push çalışır ama pull boş döner → YEREL few-shot (herkesin kendi işi)
+  yine çalışır; ortak paylaşım deploy sonrası açılır. Test: `smoke_test` (liste/sil/durum deterministik uçlar). Eski `OWNER_KONSOL`/`YETKI_PANELI`/`USAGE_DASHBOARD` env bayrakları **ARTIK OKUNMAZ** (analiste
   kopyalanan owner `.env`'i bu ekranları açıyordu — kapatıldı). Dosya git'e gitmez, `.env` paylaşımıyla
   taşınmaz, `.example`'dan **false** seed edilir (`_runtime_config_seed`) → güncelleme sonrası owner
   HARİCİNDEKİ tüm agent'larda KAPALI. Owner kendi makinesinde dosyayı `true` yapar (tek seferlik; UI'da

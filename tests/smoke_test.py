@@ -90,6 +90,10 @@ kontrol("gorev/mockup durum bilinmeyen job → 404", mkdur.status_code == 404)
 mkjira = istemci.post("/api/jira/gorev/mockup/jira", json={"key": ""}, headers=ORIGIN)
 kontrol("gorev/mockup jira boş key → 400", mkjira.status_code == 400)
 
+# Ortak eğitim havuzu (few-shot) durum ucu deterministik dönmeli.
+od = json_al(istemci.get("/api/ornekler/durum"))
+kontrol("ornekler/durum ok + alanlar", od.get("ok") is True and "toplam" in od and "tipler" in od)
+
 o = json_al(istemci.get("/api/oturum"))
 kontrol("oturum ok + katalog", o.get("ok") and len(o.get("ciktilar", [])) >= 9)
 

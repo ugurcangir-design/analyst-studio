@@ -1,31 +1,60 @@
-# Kullanım Telemetrisi — Google Apps Script (write-only) Kurulumu
+# Merkezî Sink — Google Apps Script (kullanım telemetrisi + ortak örnek havuzu)
 
-Amaç: Her analistin lokal Analyst Studio'su kullanım olaylarını **yalnız yazabildiği** merkezî
-bir Google Sheet'e gönderir. Sheet **sadece sende** (owner). Analistler hiçbir şey okuyamaz.
-Yalnız metadata gider — BRD/analiz içeriği ASLA.
+Analistlerin lokal Analyst Studio'ları iki şey gönderir:
+1. **Kullanım olayları** (yalnız metadata — BRD/analiz içeriği YOK) → owner raporu.
+2. **Onaylı/kaliteli analiz ÖRNEKLERİ** (içerikle) → **ortak few-shot havuzu**: her analistin
+   agent'ı diğerlerinin kaliteli analizinden öğrenir (`ornekleri_cek` ile günlük iner).
 
-## 1. Google Sheet oluştur
-1. https://sheets.google.com → yeni boş sheet (ör. adı **"Analyst Studio Kullanım"**).
-2. Bu sheet senin Google hesabında; kimseyle paylaşma.
+> **Örnek havuzu, analiz İÇERİĞİNİ merkeze taşır** (owner'ın bilinçli kararı). Sheet senin
+> Google hesabında; yazma herkese açık, okuma kapıdan geçer (aşağıda).
 
-## 2. Apps Script'i ekle
-1. Sheet'te **Uzantılar → Apps Script**.
-2. Açılan editöre aşağıdaki kodu yapıştır (mevcut içeriği sil):
+---
+
+## 1. Google Sheet
+https://sheets.google.com → yeni boş sheet (ör. **"Analyst Studio"**). Sheet sende kalır.
+Sekmeler script tarafından otomatik açılır: ilk sekme = **kullanım**, **"Ornekler"** = örnek havuzu.
+
+## 2. Apps Script — TAM KOD (mevcut içeriği SİL, bunu yapıştır)
+
+**Uzantılar → Apps Script** → editöre:
 
 ```javascript
-// Yazma (analist app'leri) + owner okuma anahtarı.
-const OKUMA_ANAHTARI = 'BURAYA-UZUN-RASTGELE-ANAHTAR';   // owner .env → USAGE_SINK_KEY
-const YAZMA_TOKEN   = '';                                 // opsiyonel: doluysa POST'ta ?t=<token> beklenir
+// ===================== YAPILANDIRMA (sadece bu 4 satırı düzenle) =====================
+const OKUMA_ANAHTARI = 'BURAYA-UZUN-RASTGELE-ANAHTAR';          // owner .env USAGE_SINK_KEY ile AYNI
+const SIRKET_DOMAIN  = 'sans-technology.com';                   // örnek çekebilen e-posta domaini (tüm ekip)
+const OWNER_EMAILS   = ['ugur.cangir@sans-technology.com'];     // EKİP KULLANIM raporunu çekebilenler
+const YAZMA_TOKEN    = '';                                      // opsiyonel: doluysa POST'ta ?t=<token> beklenir
+// =====================================================================================
 
-function _sheet() {
-  return SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+const _KULLANIM_BAS = ['ts','analist','olay','durum','sure_ms','model','ai_modu',
+                       'jira_toplam','proje','dokuman','makine','app_versiyon'];
+const _ORNEK_BAS    = ['ts','id','tip','analist','eposta','proje','jira_key','ozet','icerik'];
+
+function _kullanimSheet() {
+  // Mevcut veriyi KORU: ilk sekme kullanım verisidir (adı ne olursa olsun).
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+  if (sh.getLastRow() === 0) sh.appendRow(_KULLANIM_BAS);
+  return sh;
 }
-
-function _basliklar(sh) {
-  if (sh.getLastRow() === 0) {
-    sh.appendRow(['ts','analist','olay','durum','sure_ms','model','ai_modu',
-                  'jira_toplam','proje','dokuman','makine','app_versiyon']);
-  }
+function _ornekSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName('Ornekler');
+  if (!sh) { sh = ss.insertSheet('Ornekler'); sh.appendRow(_ORNEK_BAS); }
+  if (sh.getLastRow() === 0) sh.appendRow(_ORNEK_BAS);
+  return sh;
+}
+function _json(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+         .setMimeType(ContentService.MimeType.JSON);
+}
+function _emailDomainOk(em) {
+  em = (em || '').toString().toLowerCase().trim();
+  return em.indexOf('@') !== -1 && em.slice(-(SIRKET_DOMAIN.length + 1)) === ('@' + SIRKET_DOMAIN);
+}
+function _ownerOk(p) {
+  if (p.read && p.read === OKUMA_ANAHTARI) return true;
+  const em = (p.email || '').toString().toLowerCase().trim();
+  return OWNER_EMAILS.map(function (x) { return x.toLowerCase(); }).indexOf(em) !== -1;
 }
 
 function doPost(e) {
@@ -33,13 +62,29 @@ function doPost(e) {
     if (YAZMA_TOKEN && (!e.parameter || e.parameter.t !== YAZMA_TOKEN)) {
       return ContentService.createTextOutput('forbidden');
     }
-    const o = JSON.parse(e.postData.contents || '{}');
-    const sh = _sheet(); _basliklar(sh);
+    const o = JSON.parse((e.postData && e.postData.contents) || '{}');
+
+    // --- Örnek (few-shot içerikli) → ayrı 'Ornekler' sekmesi, id ile tekilleştir ---
+    if (o.olay === 'ornek') {
+      const sh = _ornekSheet();
+      if (o.id && sh.getLastRow() > 1) {
+        const ids = sh.getRange(2, 2, sh.getLastRow() - 1, 1).getValues();
+        for (var i = 0; i < ids.length; i++) {
+          if (ids[i][0] === o.id) return ContentService.createTextOutput('dup');
+        }
+      }
+      sh.appendRow([o.ts || '', o.id || '', o.tip || '', o.analist || '', o.eposta || '',
+                    o.proje || '', o.jira_key || '', o.ozet || '', o.icerik || '']);
+      return ContentService.createTextOutput('ok');
+    }
+
+    // --- Kullanım olayı (yalnız metadata) → ilk sekme ---
+    const sh = _kullanimSheet();
     const jira = o.jira && typeof o.jira === 'object' ? (o.jira.toplam || 0) : '';
     const baglam = o.baglam || {};
-    sh.appendRow([o.ts||'', o.analist||'', o.olay||'', o.durum||'', o.sure_ms||'',
-                  o.model||'', o.ai_modu||'', jira,
-                  baglam.proje||'', baglam.dokuman||'', o.makine||'', o.app_versiyon||'']);
+    sh.appendRow([o.ts || '', o.analist || '', o.olay || '', o.durum || '', o.sure_ms || '',
+                  o.model || '', o.ai_modu || '', jira,
+                  baglam.proje || '', baglam.dokuman || '', o.makine || '', o.app_versiyon || '']);
     return ContentService.createTextOutput('ok');
   } catch (err) {
     return ContentService.createTextOutput('error');
@@ -47,57 +92,77 @@ function doPost(e) {
 }
 
 function doGet(e) {
-  // Owner okuma: ?read=<OKUMA_ANAHTARI> → tüm olayları JSON dizi döndürür.
-  if (!e.parameter || e.parameter.read !== OKUMA_ANAHTARI) {
-    return ContentService.createTextOutput('forbidden');
+  const p = (e && e.parameter) || {};
+
+  // --- Örnek havuzu çekme: TÜM şirket analistleri (domain) + owner ---
+  if (p.ornekler) {
+    if (!(_emailDomainOk(p.email) || (p.read && p.read === OKUMA_ANAHTARI))) {
+      return _json({ error: 'forbidden' });
+    }
+    const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Ornekler');
+    if (!sh || sh.getLastRow() < 2) return _json([]);
+    const veri = sh.getDataRange().getValues();
+    const bas = veri.shift();
+    const out = veri.map(function (r) { const o = {}; bas.forEach(function (k, i) { o[k] = r[i]; }); return o; });
+    return _json(out);
   }
-  const sh = _sheet();
+
+  // --- Ekip kullanım raporu: owner (read anahtarı VEYA owner e-posta) ---
+  if (!_ownerOk(p)) return ContentService.createTextOutput('forbidden');
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+  if (!sh || sh.getLastRow() < 2) return _json([]);
   const veri = sh.getDataRange().getValues();
-  const bas = veri.shift() || [];
-  const olaylar = veri.map(function(r) {
-    const o = {}; bas.forEach(function(k, i) { o[k] = r[i]; });
-    return {ts:o.ts, analist:o.analist, olay:o.olay, durum:o.durum,
-            sure_ms:o.sure_ms, model:o.model, ai_modu:o.ai_modu,
-            jira:{toplam:o.jira_toplam||0},
-            baglam:{proje:o.proje, dokuman:o.dokuman},
-            makine:o.makine, app_versiyon:o.app_versiyon};
+  const bas = veri.shift();
+  const olaylar = veri.map(function (r) {
+    const o = {}; bas.forEach(function (k, i) { o[k] = r[i]; });
+    return { ts: o.ts, analist: o.analist, olay: o.olay, durum: o.durum,
+             sure_ms: o.sure_ms, model: o.model, ai_modu: o.ai_modu,
+             jira: { toplam: o.jira_toplam || 0 },
+             baglam: { proje: o.proje, dokuman: o.dokuman },
+             makine: o.makine, app_versiyon: o.app_versiyon };
   });
-  return ContentService.createTextOutput(JSON.stringify(olaylar))
-         .setMimeType(ContentService.MimeType.JSON);
+  return _json(olaylar);
 }
 ```
 
-3. `OKUMA_ANAHTARI` değerini uzun rastgele bir metinle değiştir (ör. bir parola üreticiden).
+**Doldur:** `OKUMA_ANAHTARI` (uzun rastgele; owner `.env` `USAGE_SINK_KEY` ile birebir aynı) ·
+`OWNER_EMAILS` (kullanım raporunu çekecek owner e-posta(ları)) · `SIRKET_DOMAIN` (ekip domaini —
+bu domainli her analist ÖRNEK çeker, kullanım raporunu çekemez).
 
-## 3. Web App olarak yayınla
-1. Sağ üst **Dağıt → Yeni dağıtım**.
-2. Tür: **Web uygulaması**.
-3. "Şu kişi olarak çalıştır": **ben (senin hesabın)**.
-4. "Erişimi olan": **Herkes** (analistlerin POST edebilmesi için — okuma yine anahtarla korunur).
-5. **Dağıt** → çıkan **Web App URL**'ini kopyala.
+## 3. Yayınla (URL'yi DEĞİŞTİRMEDEN güncelle)
+- **İlk kez:** Dağıt → Yeni dağıtım → tür **Web uygulaması** → "çalıştır: ben" · "erişim: Herkes" → Dağıt → **Web App URL**'ini al.
+- **Zaten varsa (URL korunur):** Dağıt → **Dağıtımları yönet** → kalem (düzenle) → **Sürüm: Yeni sürüm** → Dağıt.
+  URL AYNI kalır → analistlerde hiçbir değişiklik gerekmez (kod zaten o URL'e yazıyor).
 
-## 4. Analist makinelerine (herkese) — `.env` GEREKMEZ
-Toplayıcı URL kodda gömülü (`skills/telemetri.py → VARSAYILAN_SINK_URL`), o yüzden analist
-hiçbir `.env` ayarı yapmaz. Her analistin tek işi:
-1. **Güncelle** (Güncelleme sekmesi → yeni telemetri kodunu çeker + restart).
-2. **Ayarlar → "Analist Adı Soyadı"** alanına adını yazıp **Kaydet** (bir kez). Bu ad
-   `analist.json`'a yazılır ve kullanım kayıtlarında atıf için kullanılır.
-> Not: Ekip panele **kendi kullanıcı adıyla login** oluyorsa (AUTH açık) isim otomatik alınır,
-> Ayarlar'a bile girmelerine gerek kalmaz.
-> `USAGE_DASHBOARD` ve `USAGE_SINK_KEY` analist makinelerine **EKLENMEZ** — onlar yalnız yazar, görmez.
-> (Gömülü URL yalnız-yazma; okuma `USAGE_SINK_KEY` ister. URL'yi değiştirmek istersen analist
-> `.env`'inde `USAGE_SINK_URL=...` ile override edebilir.)
+> Web App URL kodda gömülü (`skills/telemetri.py → VARSAYILAN_SINK_URL`). Farklıysa owner
+> `.env`'de `USAGE_SINK_URL=` ile override eder; URL'yi değiştirdiysen gömülüyü de güncelle.
 
-## 5. Owner makinesine (yalnız sen)
-`.env`'ine ekle:
+## 4. Owner `.env` (yalnız sen)
 ```
 USAGE_DASHBOARD=true
 USAGE_SINK_URL=<Web App URL>
-USAGE_SINK_KEY=<OKUMA_ANAHTARI ile aynı değer>
+USAGE_SINK_KEY=<OKUMA_ANAHTARI ile aynı>
 ```
-Uygulamayı yeniden başlat → sol menüde **"Kullanım"** sekmesi çıkar. **Uzaktan Çek** ile ekip verisini Sheet'ten çeker; tablo + Excel export hazır.
+Yeniden başlat → **Kullanım Raporu**'nda **Uzaktan Çek** (ekip metadata) + **Örnek Havuzu** paneli
+(few-shot durumu + "Şimdi Çek").
+
+## 5. Analistler — hiçbir şey yapmaz
+- **Kullanım:** zaten gönderiyorlar (metadata). Değişiklik yok.
+- **Örnek havuzu:** güncelleme (AUTO_UPDATE) yeni client kodunu çeker → **günlük oto-sync**
+  (`ornekleri_cek`) sink'ten örnekleri `reference/ornekler/`'e indirir → sonraki analizlerde
+  few-shot olarak prompt'a girer. Elle: Ayarlar/Referanslar → Güncelle. Ek `.env` GEREKMEZ.
+
+## Nasıl çalışır (özet)
+`Analist onaylar / Jira'ya yazar` → `ornek_kaydet` → (a) yerel `reference/ornekler/`, (b) sink
+'Ornekler' sekmesi (push). `ornekleri_cek` (günlük + elle) → sink'ten `?ornekler=1&email=<domain>` ile
+TÜM örnekleri indirir. `ornek_bloklari` → her süreç/teknik/görev analizinde EN ALAKALI 2 örneği
+(BM25) "ONAYLI ÖRNEK — stil/derinlik referansı" olarak prompt'a enjekte eder. Havuz ≤80 (en yeni),
+örnek başına ≤45k (Sheet hücre limiti).
 
 ## Notlar
-- Yalnız metadata gönderilir (analist, olay tipi, süre, durum, model, açılan task adedi, proje/doküman adı). İçerik yok.
-- Transport başarısız olursa (ağ yok) olay lokal `logs/usage/events.jsonl`'de kalır; kaybolmaz.
-- İlerde paylaşmak istersen: Sheet'i salt-okunur paylaş veya owner listesini genişlet.
+- Kullanım olaylarında içerik YOK. Örnek havuzunda İÇERİK var (bilinçli) — Sheet owner'da, çekme
+  domain/owner kapılı.
+- Transport başarısız olursa (ağ yok) kullanım olayı lokal `logs/usage/events.jsonl`'de kalır; örnek
+  yereli yine dolar.
+- Kötü/eski örnek: Kullanım Raporu → Örnek Havuzu → Sil (yerel); merkezden kalıcı silmek için
+  'Ornekler' sekmesinden satırı sil.

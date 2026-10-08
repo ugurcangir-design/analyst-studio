@@ -104,6 +104,15 @@ birebir KONMAZ. Few-shot yapısal iskelet olarak damıtılır (derinlik/yapı/ka
 
 ## Kürasyon Günlüğü
 
+- **2026-10-08** — **Ortak eğitim (few-shot) uçtan uca kuruldu.** Kök neden: client (push/pull/günlük
+  sync/yakalama) doğruydu ama **Google Apps Script sunucu tarafı hiç deploy edilmemişti** → push içeriği
+  sink'te düşüyor, pull boş. Yapılan: (1) **Apps Script TAM KOD** `docs/telemetri-apps-script.md`'ye — 'Ornekler'
+  sekmesi (içerik + id-dedup) + GET `?ornekler=1` **şirket-domaini kapılı** (tüm analistler çeker) + mevcut kullanım
+  sheet'i korur + "Yeni sürüm"le URL değişmez. **Owner bir kez deploy eder (tek manuel adım).** (2) Yakalama
+  genişletildi: görev analizini Jira'ya yazınca da örnek olur (`_ornek_yakala_md`, `/api/jira/gorev/guncelle`+
+  `fe-be-olustur`). (3) Few-shot görev analizine de enjekte (`gorev_analiz_et`→`ornek_bloklari`). (4) Görünürlük:
+  `/api/ornekler/durum` + Kullanım Raporu "Ortak Eğitim Havuzu" paneli (adet/tip/son çekim/Şimdi Çek). Client
+  round-trip offline doğrulandı. Deploy sonrası owner "Şimdi Çek" → few-shot ekip çapında devrede.
 - **2026-09-17** — Yol haritası + `reference/domain-kurallari.md` mekanizması kuruldu
   (`_domain_kurallari_oku` → tüm analiz promptlarına otomatik enjeksiyon; şablonken no-op).
   Teşhis: prompts.json boş + gitignore, services/jira boş, confluence tek PDF. Memory yazıldı.

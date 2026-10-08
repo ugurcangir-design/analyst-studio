@@ -892,6 +892,14 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
             "- Hedef: geliştirici 20 saniyede okuyup ne yapacağını anlasın. Doğruluk/kaynak-etiketi kuralları "
             "yine geçerli ama KISA."
         )})
+    # Few-shot: onaylı EKİP örneklerinden stil/derinlik referansı (Task analizi de havuzdan öğrenir).
+    try:
+        from .ornek_havuzu import ornek_bloklari
+        _os = (str(gorev.get("summary", "")) + "\n" + str(gorev.get("description", "") or ""))[:4000]
+        for _blok in ornek_bloklari(_os, tip="teknik", n=2):
+            icerik.append(_blok)
+    except Exception:
+        pass
     icerik.append(
         {"type": "text", "text": "Bu görev için teknik analiz raporunu üret (açık sorular HARİÇ — onlar ayrı adımda üretilecek)."}
     )

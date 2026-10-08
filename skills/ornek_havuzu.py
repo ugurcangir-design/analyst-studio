@@ -22,6 +22,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).parent.parent
 ORNEK_DIR = BASE_DIR / "reference" / "ornekler"
+_DURUM_DOSYA = ORNEK_DIR / ".durum.json"   # son çekim bilgisi (görünürlük; few-shot'ı etkilemez)
 _MAX_ORNEK = 80          # yerel havuz üst sınırı (en yeni tutulur)
 _MAX_ICERIK = 45000      # örnek başına içerik tavanı (Sheet hücre limiti ~50k)
 
@@ -54,7 +55,8 @@ def _yaz(kayit: dict) -> None:
 def _buda() -> None:
     """Havuzu _MAX_ORNEK ile sınırla (en eski JSON'ları sil)."""
     try:
-        dosyalar = sorted(ORNEK_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+        dosyalar = sorted((p for p in ORNEK_DIR.glob("*.json") if not p.name.startswith(".")),
+                          key=lambda p: p.stat().st_mtime, reverse=True)
         for p in dosyalar[_MAX_ORNEK:]:
             p.unlink(missing_ok=True)
     except Exception:
@@ -163,15 +165,45 @@ def ornekleri_cek() -> tuple[bool, str]:
             except Exception:
                 continue
         _buda()
+        _durum_yaz(True, f"{n} örnek çekildi.")
         return True, f"{n} örnek çekildi."
     except Exception as e:
+        _durum_yaz(False, f"Çekme başarısız: {e}")
         return False, f"Çekme başarısız: {e}"
+
+
+def _durum_yaz(ok: bool, mesaj: str) -> None:
+    try:
+        ORNEK_DIR.mkdir(parents=True, exist_ok=True)
+        _DURUM_DOSYA.write_text(json.dumps(
+            {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "ok": ok, "mesaj": mesaj},
+            ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def durum() -> dict:
+    """Görünürlük: yerel havuz adedi (tip bazlı) + son çekim bilgisi. Owner panelinde gösterilir."""
+    hepsi = _oku_hepsi()
+    tipler: dict = {}
+    for o in hepsi:
+        t = o.get("tip", "?")
+        tipler[t] = tipler.get(t, 0) + 1
+    son = {}
+    try:
+        if _DURUM_DOSYA.exists():
+            son = json.loads(_DURUM_DOSYA.read_text(encoding="utf-8"))
+    except Exception:
+        son = {}
+    return {"toplam": len(hepsi), "tipler": tipler, "limit": _MAX_ORNEK, "son_cekim": son}
 
 
 def _oku_hepsi() -> list[dict]:
     out = []
     try:
         for p in ORNEK_DIR.glob("*.json"):
+            if p.name.startswith("."):   # .durum.json gibi meta dosyaları örnek sayma
+                continue
             try:
                 out.append(json.loads(p.read_text(encoding="utf-8")))
             except Exception:

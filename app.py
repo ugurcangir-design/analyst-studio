@@ -1601,6 +1601,19 @@ def _ornek_yakala(tip: str, dosya: str) -> None:
     threading.Thread(target=_worker, daemon=True).start()
 
 
+def _ornek_yakala_md(tip: str, md: str, ozet: str = "", proje: str = "", jira_key: str = "") -> None:
+    """İçerikten DOĞRUDAN few-shot örneği yakala (dosya değil) — Task/Jira'ya yazılan
+    analizler için (pipeline onayı dışındaki kaliteli analizler de havuza girsin).
+    Arka plan, BEST-EFFORT — akışı ASLA bloklamaz."""
+    def _worker():
+        try:
+            from skills.ornek_havuzu import ornek_kaydet
+            ornek_kaydet(tip, md or "", girdi_ozeti=ozet, proje=proje, jira_key=jira_key)
+        except Exception as e:
+            logger.warning("Örnek yakalama (md) atlandı (%s): %s", tip, e)
+    threading.Thread(target=_worker, daemon=True).start()
+
+
 @app.route("/api/approve", methods=["POST"])
 def approve():
     import workflow as wf
@@ -3361,6 +3374,14 @@ def ornekler_liste():
     """Örnek havuzu özeti (owner — kürasyon). İçerik dönmez, yalnız meta."""
     from skills.ornek_havuzu import ornek_listesi
     return jsonify({"ok": True, "ornekler": ornek_listesi()})
+
+
+@app.route("/api/ornekler/durum", methods=["GET"])
+@usage_gerekli
+def ornekler_durum():
+    """Few-shot eğitim görünürlüğü (owner): yerel örnek adedi (tip bazlı) + son çekim bilgisi."""
+    from skills.ornek_havuzu import durum
+    return jsonify({"ok": True, **durum()})
 
 
 @app.route("/api/ornekler/sil", methods=["POST"])
@@ -5254,6 +5275,9 @@ def jira_gorev_guncelle():
     try:
         from skills.jira_gorevleri import gorev_jiraya_yaz
         gorev_jiraya_yaz(key, markdown, summary=summary)
+        # Jira'ya yazılan görev analizi = kaliteli örnek → ortak havuza (few-shot).
+        _ornek_yakala_md("teknik", markdown, ozet=(summary or key.upper()),
+                         proje=key.split("-")[0].upper(), jira_key=key.upper())
         _telemetri_olay("gorev_guncelle", "ok", int((time.time() - _bas) * 1000),
                         baglam={"gorev": key.upper()},
                         jira={"toplam": 0, "keyler": [key.upper()], "islem": "guncellendi"})
@@ -5288,6 +5312,10 @@ def jira_gorev_fe_be_olustur():
     try:
         from skills.jira_gorevleri import gorev_fe_be_task_olustur
         r = gorev_fe_be_task_olustur(key, be_md, fe_md, summary=summary)
+        # BE + FE analizlerini ayrı örnekler olarak ortak havuza (few-shot).
+        _pr = key.split("-")[0].upper()
+        _ornek_yakala_md("teknik", be_md, ozet=("BE " + (summary or key.upper())), proje=_pr, jira_key=r.get("be_key", key.upper()))
+        _ornek_yakala_md("teknik", fe_md, ozet=("FE " + (summary or key.upper())), proje=_pr, jira_key=r.get("fe_key", ""))
         _telemetri_olay("gorev_guncelle", "ok", int((time.time() - _bas) * 1000),
                         baglam={"gorev": key.upper(), "islem": "fe-be-ayir"},
                         jira={"toplam": 1, "keyler": [r["be_key"], r["fe_key"]], "islem": "fe-be açıldı"})
