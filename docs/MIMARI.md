@@ -52,6 +52,28 @@ Yeni output dosyası → `app.py` `IZIN_VERILEN_CIKTILAR` set'ine ekle.
   tanım satırında kendi bağlı PA'sı yok — şablon "Bağlı adım: PA-…" taşır) + tanımsız PA/AF/EF/EK referansları
   → "🔗 Akış Bütünlük Denetimi" bölümü (bulgu varsa). Açık Sorular/denetim bölümlerindeki atıf bağ sayılmaz;
   `BR-002–BR-005` aralıkları çözülür. Test: `tests/test_degisiklik_etkisi.py`.
+- **Akış Kapatma — Faz 3** (`skills/akis_kapatma.py`): bütünlük kuralları modelin kendi kontrolü, akış
+  bütünlük denetimi yalnız GÖSTERİR; bu adım boşluğu KAPATIR. (1) **Tespit** — 1 AI çağrısı (`_TESPIT_SISTEM`,
+  MAX_TOKENS_KISA): analiz + kaynak (süreç: girdi doküman · teknik: surec-analizi.md · Task: görev) + deterministik
+  denetim bulguları → `<akis_bosluklari>` JSON (≤8; tür: ekran_eslesme · giris_cikis · karar_dali ·
+  veri_surekliligi · etki · tanimsiz; kozmetik/üslup YOK). Her boşluk `duzelt` (bilgi analizde/kaynakta AÇIKÇA
+  var) ya da `soru`. (2) **Kapatma** — `_hedef_bolum`: hedef ID'nin TANIMLANDIĞI satırı (`**PA-001:**`,
+  `| BR-002 |`, başlık) içeren en derin bölüm (yalnız atıf alan bölüm DEĞİL; `revizyon_ai.bolum_bul` gövde
+  fallback'i 'Bağlı adım: PA-001' yazan ekrana/Kabul Kriterlerine yönlenirdi). Aynı bölümün boşlukları TEK
+  çağrıda (`_DUZELT_SISTEM`, çıktı limiti bölüm boyuna göre); düzeltmeler sırayla, her seferinde GÜNCEL metinde
+  bölüm yeniden bulunarak uygulanır (bölümler iç içe). **Korumalar** (`_duzeltme_gecerli`): başlık aynen ·
+  kısalma <%90 RED (kesik çıktı) · büyüme > max(600, %50) RED (analiz büyümesin) · bölüm >30k krk düzenlenmez
+  → reddedilen boşluk açık soruya döner. (3) **Sorular** `soru_bloklari` (`Kategori: Akış Bütünlüğü`, riskliyse
+  `Zorunlu: Evet`, numara mevcut en büyükten devam): süreç → analizin Açık Sorular sonuna (`Q-`, otomatik denetim
+  bölümlerinden ÖNCE — `sorulari_analize_ekle`) · teknik → `acik-sorular.md` (`Q-T-`) · Task → görevin açık
+  soruları (`Q-T-`). **Otomatik:** `surec_analizi_yap` + `teknik_analiz_yap` SON kayıttan sonra
+  `dosya_akis_kapat` (özel promptta ATLANIR); sonuç TEK revizyon (`yeniden_bazla` → `revizyon_oner` →
+  `onayla`) → Revizyon ekranından Geri Al dosyayı birebir eski hâline döndürür. Özet `output/.akis-kapatma.json`
+  → `/api/pano.akis_kapatma` (bu oturuma ait) → onay kapısı satırı "🔗 Akış kapatma: N boşluk kapatıldı · M soru
+  açıldı (Revizyon'da gör / Geri Al)". **Task:** "Akışı Kapat" butonu (`jgAkisKapat` → iş modu `akis-kapat` →
+  `gorev_akis_kapat`); önceki hâl `akis_onceki`'de → `jgAkisGeriAl`; rapor + detay `_jgAkisRaporGoster`.
+  Kapatma: `.env` `AKIS_KAPATMA=false` ya da `HIZLI_MOD=true`. Hata → None (analiz ASLA kırılmaz). NOT: teknik
+  akışta RTM/test senaryoları/TL;DR akış kapatmadan ÖNCE üretilir (kapatma son adım). Test: `tests/test_akis_kapatma.py`.
 - **İzlenebilirlik Matrisi / RTM** (`izlenebilirlik_matrisi_olustur`, base.py — 0 token):
   süreç ID'si ↔ teknik analizde geçtiği bölüm başlıkları tablosu → `izlenebilirlik-matrisi.md`.
   Süreç metninde ID yoksa (özel prompt çıktısı) üretilmez.

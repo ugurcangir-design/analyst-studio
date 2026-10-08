@@ -347,6 +347,15 @@ def teknik_analiz_yap(ozel_atla: bool = False) -> tuple[Path, Path]:
     ozet = yonetici_ozeti_olustur(teknik_ham, kapsam=kapsam, acik_sorular=sorular)
     teknik_yol = _kaydet("teknik-analiz.md", ozet + teknik_final)
 
+    # Akış Kapatma (Faz 3): teknik akıştaki boşlukları süreç analizine dayanarak kapat; kapatılamayanlar
+    # acik-sorular.md'ye (Q-T). Tek revizyon (Geri Al). Özel promptta atlanır.
+    if not ozel_teknik:
+        try:
+            from .akis_kapatma import dosya_akis_kapat
+            dosya_akis_kapat("teknik-analiz.md", kaynak=surec_metni, tip="teknik", soru_dosya="acik-sorular.md")
+        except Exception as _e:
+            print(f"  ⚠ Akış kapatma atlandı: {_e}")
+
     return teknik_yol, sorular_yol
 
 

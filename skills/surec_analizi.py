@@ -127,4 +127,16 @@ def surec_analizi_yap(icerik_override: list | None = None,
         print("  🔗 Akış bütünlük denetimi: akışa bağlanmamış/tanımsız öğeler — rapora eklendi.")
 
     ozet = yonetici_ozeti_olustur(yanit)
-    return _kaydet("surec-analizi.md", ozet + yanit + belirsizlik + butunluk)
+    yol = _kaydet("surec-analizi.md", ozet + yanit + belirsizlik + butunluk)
+
+    # Akış Kapatma (Faz 3): boşlukları bul → kaynakta bilgi varsa ilgili bölümü minimal düzelt, yoksa
+    # açık soru. Tek revizyon (Geri Al). Özel promptta atlanır (bütünlük kuralları da orada yok).
+    if ozel_atla or not ozel_prompt_oku("surec"):
+        try:
+            from .akis_kapatma import dosya_akis_kapat
+            _kaynak = (" ".join(p.get("text", "") for p in icerik if isinstance(p, dict) and p.get("type") == "text")
+                       if isinstance(icerik, list) else str(icerik))
+            dosya_akis_kapat("surec-analizi.md", kaynak=_kaynak, tip="surec", ek_bulgular=butunluk)
+        except Exception as _e:
+            print(f"  ⚠ Akış kapatma atlandı: {_e}")
+    return yol

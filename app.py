@@ -1643,6 +1643,17 @@ def _gorev_egitim_topla(key: str, summary: str, katman: str, mode: str, sonuc: d
         logger.warning("Görev eğitim toplama atlandı (%s): %s", key, e)
 
 
+def _akis_kapatma_ozet() -> dict:
+    """Bu oturumdaki akış kapatma özetleri {dosya: {bosluk, kapatilan, soru, zorunlu, detay}} (onay kapısı)."""
+    try:
+        from skills.akis_kapatma import rapor_oku
+        esik = _oturum_baslangic()
+        return {d: r for d in ("surec-analizi.md", "teknik-analiz.md")
+                if (r := rapor_oku(d, taze_esik=esik))}
+    except Exception:
+        return {}
+
+
 @app.route("/api/approve", methods=["POST"])
 def approve():
     import workflow as wf
@@ -2972,6 +2983,7 @@ def pano_ozet():
         "onay": onay_adimi,
         "sorular": {"acik": ist.get("acik", 0) + ist.get("bekleniyor", 0), "kritik": ist.get("kritik_acik", 0),
                     "zorunlu": ist.get("zorunlu_acik", 0), "uygulanmamis": ist.get("uygulanmamis", 0)},
+        "akis_kapatma": _akis_kapatma_ozet(),
         "bekleyen_revizyon": bekleyen_rev,
     })
 
@@ -5094,6 +5106,10 @@ def _gorev_is_calistir(job_id: str) -> None:
             elif mode == "duzelt":
                 md = gorev_analiz_duzelt(gorev, adim.get("markdown", ""), adim.get("talimat", ""))
                 sonuc = {"markdown": md, "acik_sorular": adim.get("acik_sorular", "")}
+            elif mode == "akis-kapat":
+                # Akış Kapatma (Faz 3): boşlukları bul → minimal düzelt / açık soru (Q-T). Geri Al UI'da.
+                from skills.akis_kapatma import gorev_akis_kapat
+                sonuc = gorev_akis_kapat(adim.get("markdown", ""), adim.get("acik_sorular", ""), gorev)
             elif mode == "fe-be-ayir":
                 # Tek görevi FE ve BE olarak İKİ AYRI katman-özel analize böl (Option A).
                 r = gorev_fe_be_analiz(gorev, cevaplar=adim.get("cevaplar", ""),

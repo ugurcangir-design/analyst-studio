@@ -3079,6 +3079,9 @@ function temaDegistir() {
           </div>
           <span class="jg-warn">⚠ Onayla'ya basınca Jira görevinin açıklaması ÜZERİNE YAZILIR (geri alınamaz). Açık Sorular Jira'ya YAZILMAZ.</span>
           <button class="btn btn-outline btn-sm" onclick="jgPreviewKapat()">İptal</button>
+          <button class="btn btn-outline btn-sm" id="jg-akis-btn" onclick="jgAkisKapat()" title="Analizi uçtan uca yürütür: süreç/ekran işleyişindeki boşlukları bulur, bilgi varsa ilgili yeri minimal düzeltir, yoksa açık soru ekler (analizi büyütmez). Geri alınabilir.">
+            <svg class="ico"><use href="#i-check"/></svg> Akışı Kapat
+          </button>
           <button class="btn btn-outline btn-sm" id="jg-egitim-btn" onclick="jgEgitimeEkle()" title="Bu analizi (Jira'ya yazılmasa da) ortak eğitim havuzuna + sunucuya ekler — agent kaliteli analizlerden öğrensin.">
             <svg class="ico"><use href="#i-zap"/></svg> Eğitime Ekle
           </button>
@@ -5463,6 +5466,7 @@ function _jgSonucGoster(key) {
   if (!s.hata) _jgMockupStaleKontrol(key, s.markdown || '');   // bu entry'nin analizi değiştiyse mockup'ı "eski" işaretle
   document.getElementById('jg-duzelt-row').style.display = s.hata ? 'none' : '';
   _jgMsg('jg-preview-msg', s.hata ? ('Hata: ' + s.hata) : '', s.hata ? 'err' : '');
+  if (!s.hata && s.akis_rapor) _jgAkisRaporGoster(key, s.akis_rapor);
   // İçerik bellekte yoksa (güncelleme/yenileme sonrası) → Jira'dan geri yükleme sun
   if (!s.hata && !((s.markdown || '').trim()) && !_jgMesgul() && /^[A-Z][A-Z0-9]+-\d+$/.test(key)) {
     const m = document.getElementById('jg-preview-msg');
@@ -5515,6 +5519,43 @@ function _jgKurtarmaUygula(key, markdown, acik_sorular, summary, katman) {
   const tab = document.getElementById('jg-modal-tab-sorular');
   if (a && !/Açık soru tespit edilmedi/i.test(a)) { const n = _jgSorulariRender(a); tab.style.display = ''; document.getElementById('jg-sorular-rozet').textContent = n || '!'; }
   _jgSetKaydet();
+}
+
+// Akış Kapatma (Faz 3) — analizi uçtan uca yürüt: boşlukları bul, bilgi varsa minimal düzelt, yoksa açık soru.
+// Önceki hâl yedeklenir → "Geri Al" ile tek tıkla dönülür.
+function jgAkisKapat() {
+  if (!_jgAktifAnalizKey) return;
+  if (_jgMesgul()) { toast('İşlem sürüyor', 'info'); return; }
+  const key = _jgAktifAnalizKey;
+  _jgEditorKaydet(key);
+  const s = _jgAnalizSeti[key] || {};
+  const markdown = (s.markdown || '').trim();
+  if (markdown.length < 200) { toast('Akışı kapatılacak bir analiz yok', 'info'); return; }
+  s.akis_onceki = { markdown: s.markdown, acik_sorular: s.acik_sorular || '' };
+  _jgIsBaslat([{ key: key, mode: 'akis-kapat', markdown: markdown, acik_sorular: s.acik_sorular || '',
+                 katman: s.katman || '', gorev: _jgGorevCoz(key) }],
+             'Akış kapatılıyor', key, false);
+}
+function _jgAkisRaporGoster(key, r) {
+  const m = document.getElementById('jg-preview-msg');
+  m.className = 'jg-msg ok';
+  const detay = (r.detay || []).map(d => `<li><b>${escHtml(d.hedef || '—')}</b> · ${escHtml(d.tur || '')}: ${escHtml(d.bosluk)} `
+    + `<i>(${escHtml(d.sonuc)}${d.neden ? ' — ' + escHtml(d.neden) : ''})</i></li>`).join('');
+  m.innerHTML = (r.bosluk
+      ? `🔗 Akış kapatma: <b>${r.bosluk}</b> boşluk · <b>${r.kapatilan}</b> kapatıldı · <b>${r.soru}</b> soru eklendi`
+        + (r.zorunlu ? ` (<b style="color:var(--red)">${r.zorunlu} zorunlu</b>)` : '')
+      : '🔗 Akış kapatma: boşluk bulunmadı — akış kapalı.')
+    + ((_jgAnalizSeti[key] || {}).akis_onceki ? ` <button class="btn btn-outline btn-xs" style="margin-left:6px" onclick="jgAkisGeriAl('${escHtml(key)}')">Geri Al</button>` : '')
+    + (detay ? `<details style="margin-top:4px"><summary>Detay</summary><ul style="margin:4px 0 0 16px">${detay}</ul></details>` : '');
+}
+function jgAkisGeriAl(key) {
+  const s = _jgAnalizSeti[key];
+  if (!s || !s.akis_onceki) return;
+  s.markdown = s.akis_onceki.markdown; s.acik_sorular = s.akis_onceki.acik_sorular;
+  delete s.akis_onceki; delete s.akis_rapor;
+  _jgAktifAnalizKey = null;   // editördeki (kapatılmış) içerik geri yüklenen içeriği EZMESİN
+  _jgSonucGoster(key);
+  _jgMsg('jg-preview-msg', '↶ Akış kapatma geri alındı — önceki analiz yüklendi.', 'ok');
 }
 
 // (B) "Eğitime Ekle" — editördeki güncel analizi ortak havuza + sunucu deposuna yazar (Jira'sız).
@@ -5591,7 +5632,12 @@ async function _jgPollDurum() {
       _jgAnalizSeti[k] = { markdown: (fb.be || {}).markdown || '', acik_sorular: (fb.be || {}).acik_sorular || '', summary: rs.summary || '', katman: 'be', feBeKaynak: k, hata: rs.hata };
       _jgAnalizSeti[k + '::FE'] = { markdown: (fb.fe || {}).markdown || '', acik_sorular: (fb.fe || {}).acik_sorular || '', summary: rs.summary || '', katman: 'fe', feBeKaynak: k, feBeYeni: true };
     } else {
-      _jgAnalizSeti[k] = { markdown: rs.markdown || '', acik_sorular: rs.acik_sorular || '', summary: rs.summary || '', katman: rs.katman || (d.katmanlar || {})[k] || '', hata: rs.hata };
+      const eski = _jgAnalizSeti[k] || {};
+      _jgAnalizSeti[k] = { markdown: rs.markdown || '', acik_sorular: rs.acik_sorular || '', summary: rs.summary || '', katman: rs.katman || (d.katmanlar || {})[k] || eski.katman || '', hata: rs.hata,
+                           // FE/BE ayrı setin kimliği korunur (düzelt/akış kapat sonrası Jira yönlendirmesi bozulmasın)
+                           feBeKaynak: eski.feBeKaynak, feBeYeni: eski.feBeYeni,
+                           // Akış kapatma: rapor + Geri Al yedeği (yalnız bu sonuç akış kapatmaysa)
+                           akis_rapor: rs.akis_rapor, akis_onceki: rs.akis_rapor ? eski.akis_onceki : undefined };
     }
   }
   if (d.durum === 'calisiyor') {
@@ -7748,6 +7794,11 @@ async function _onayBaglamYukle(adim) {
     if (!d.ok) return;
     const so = d.sorular || {}, rev = d.bekleyen_revizyon || [];
     const parca = [];
+    const ak = (d.akis_kapatma || {})[adim === 'teknik' ? 'teknik-analiz.md' : 'surec-analizi.md'];
+    if (ak) parca.push(ak.bosluk
+      ? `🔗 Akış kapatma: ${ak.kapatilan} boşluk kapatıldı · ${ak.soru} soru açıldı`
+        + ` (<a href="#" onclick="switchTab('revizyon');return false">Revizyon'da gör / Geri Al</a>)`
+      : '🔗 Akış kapatma: boşluk bulunmadı');
     if (so.zorunlu) parca.push(`<span style="color:var(--red);font-weight:700">❗ ${so.zorunlu} ZORUNLU soru cevapsız</span>`);
     if (so.kritik) parca.push(`<span style="color:var(--red)">⚠ ${so.kritik} kritik açık soru</span>`);
     parca.push(`${so.acik} açık soru`);

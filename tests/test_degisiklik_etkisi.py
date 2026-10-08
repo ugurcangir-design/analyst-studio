@@ -18,6 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 os.environ.setdefault("BILDIRIM", "false")
+os.environ["AKIS_KAPATMA"] = "false"   # motor testleri AI MOCK — akış kapatmanın GERÇEK çağrısı tetiklenmesin
 
 from skills import degisiklik_etkisi as DE  # noqa: E402
 from skills import base  # noqa: E402
