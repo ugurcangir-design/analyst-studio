@@ -5981,11 +5981,19 @@ def gorev_mockup_jiraya():
             hedef_key = tasklar[0]["key"]
             yeni_task = hedef_key
             uyarilar = sonuc.get("uyarilar") or []
-        atlassian_attach(hedef_key, dosya_adi, icerik, "text/html", cloud_id)
+        # Ek yükleme AYRI try: task (yeni-task) açıldıysa ek hata verse de task KAYBOLMASIN;
+        # kısmi başarı + gerçek neden dönülür → UI "Tekrar Ekle" sunar.
+        attach_ok, attach_hata = True, ""
+        try:
+            atlassian_attach(hedef_key, dosya_adi, icerik, "text/html", cloud_id)
+        except Exception as ae:
+            attach_ok, attach_hata = False, str(ae)[:300]
+            logger.warning("Mockup eki yüklenemedi (%s): %s", hedef_key, ae)
         site = jira_site_url(cloud_id)
         link = f"{site}/browse/{hedef_key}" if site else ""
-        _telemetri_olay("jira_gonder", "ok", 0)
+        _telemetri_olay("jira_gonder", "ok" if attach_ok else "error", 0)
         return jsonify({"ok": True, "key": hedef_key, "yeni_task": yeni_task,
+                        "attach_ok": attach_ok, "attach_hata": attach_hata,
                         "link": link, "attachment": dosya_adi, "uyarilar": uyarilar})
     except Exception as e:
         logger.error(f"Mockup Jira'ya ekleme hatası: {e}")

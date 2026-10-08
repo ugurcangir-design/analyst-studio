@@ -3063,6 +3063,10 @@ function temaDegistir() {
               <button class="btn btn-outline btn-sm" id="jg-mockup-jira-yeni-btn" onclick="jgMockupJira('yeni-task')" title="Mockup için ilişkili yeni 'Tasarım' task'ı açar ve dosyayı ona ekler"><svg class="ico"><use href="#i-plus"/></svg> Tasarım Task'ı</button>
               <button class="btn btn-primary btn-sm" onclick="jgMockupAc()"><svg class="ico"><use href="#i-eye"/></svg> Önizle</button>
             </div>
+            <div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap">
+              <input type="text" id="jg-mockup-ek-key" class="setting-input" placeholder="Mockup'ı belirli bir task'a ekle (örn. MBSUATEAM-140)" autocomplete="off" style="flex:1;min-width:240px" onkeydown="if(event.key==='Enter')jgMockupEkKeyGonder()">
+              <button class="btn btn-outline btn-sm" onclick="jgMockupEkKeyGonder()">Bu task'a Ekle</button>
+            </div>
           </div>
           <div class="jg-msg" id="jg-mockup-msg" style="margin-top:8px"></div>
         </div>
@@ -6071,11 +6075,47 @@ async function jgMockupJira(mode) {
     const linkHtml = d.link ? ` · <a href="${escHtml(d.link)}" target="_blank" rel="noopener">${escHtml(d.key)}</a>` : (' · ' + escHtml(d.key));
     const uyari = (d.uyarilar && d.uyarilar.length) ? ' · ⚠ ' + escHtml(d.uyarilar.join('; ')) : '';
     const msgEl = document.getElementById('jg-mockup-msg');
-    msgEl.className = 'jg-msg ok';
-    msgEl.innerHTML = `✓ Mockup ${d.yeni_task ? 'yeni task\'a' : 'task\'a'} eklendi${linkHtml}${uyari}`;
-    toast(`Mockup Jira'ya eklendi: ${d.key}`, 'success');
+    if (d.attach_ok === false) {
+      // Task açıldı ama mockup EKLENEMEDİ → nedeni göster + bu task'a tekrar ekleme sun
+      msgEl.className = 'jg-msg err';
+      msgEl.innerHTML = `⚠ ${escHtml(d.key)} ${d.yeni_task ? 'açıldı' : ''} ama mockup EKLENEMEDİ: ${escHtml(d.attach_hata || 'bilinmeyen')} `
+        + `<button class="btn btn-outline btn-xs" onclick="jgMockupEkTekrar('${escHtml(d.key)}')" style="margin-left:6px">Mockup'ı ${escHtml(d.key)}'e tekrar ekle</button>`;
+      toast('Task açıldı ama mockup eklenemedi — nedeni panelde', 'error');
+    } else {
+      msgEl.className = 'jg-msg ok';
+      msgEl.innerHTML = `✓ Mockup ${d.yeni_task ? 'yeni task\'a' : 'task\'a'} eklendi${linkHtml}${uyari}`;
+      toast(`Mockup Jira'ya eklendi: ${d.key}`, 'success');
+    }
   } catch (e) { _jgMsg('jg-mockup-msg', _jgHataMetni(e), 'err'); }
   finally { if (btn) btn.disabled = false; }
+}
+
+function jgMockupEkKeyGonder() {
+  const key = (document.getElementById('jg-mockup-ek-key').value || '').trim().toUpperCase();
+  if (!/^[A-Z][A-Z0-9]+-\d+$/.test(key)) { toast('Geçerli bir task anahtarı girin (örn. MBSUATEAM-140)', 'info'); return; }
+  jgMockupEkTekrar(key);
+}
+
+// Açılmış bir task'a mockup'ı (yeniden) ekle — yeni-task sonrası ek başarısızsa retry.
+async function jgMockupEkTekrar(key) {
+  if (!_jgMockupHtml) { toast('Mockup yok', 'info'); return; }
+  const msgEl = document.getElementById('jg-mockup-msg');
+  msgEl.className = 'jg-msg'; msgEl.textContent = `${key}'e ekleniyor…`;
+  try {
+    const r = await fetch('/api/jira/gorev/mockup/jira', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, mode: 'ek' })
+    });
+    const d = await r.json();
+    if (d.ok && d.attach_ok !== false) {
+      msgEl.className = 'jg-msg ok';
+      msgEl.innerHTML = `✓ Mockup ${escHtml(key)}'e eklendi` + (d.link ? ` · <a href="${escHtml(d.link)}" target="_blank" rel="noopener">aç</a>` : '');
+      toast('Mockup eklendi', 'success');
+    } else {
+      msgEl.className = 'jg-msg err';
+      msgEl.textContent = '⚠ Yine eklenemedi: ' + (d.attach_hata || d.error || 'bilinmeyen');
+    }
+  } catch (e) { msgEl.className = 'jg-msg err'; msgEl.textContent = _jgHataMetni(e); }
 }
 
 // Analist analiz editörünü ELLE düzenlerse (job değil) ve mockup o entry'den üretildiyse → stale.

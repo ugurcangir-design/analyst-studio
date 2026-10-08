@@ -152,13 +152,18 @@ def atlassian_attach(issue_key: str, dosya_adi: str, icerik: bytes,
     url = f"{base}/rest/api/3/issue/{issue_key}/attachments"
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/json",
                "X-Atlassian-Token": "no-check"}
-    dosyalar = {"file": (dosya_adi, icerik, content_type)}
-    r = _req.post(url, headers=headers, files=dosyalar, timeout=60)
+    r = _req.post(url, headers=headers, files={"file": (dosya_adi, icerik, content_type)}, timeout=60)
     if r.status_code == 401:
         token = atlassian_refresh(env)
         headers["Authorization"] = f"Bearer {token}"
         r = _req.post(url, headers={**headers}, files={"file": (dosya_adi, icerik, content_type)}, timeout=60)
-    r.raise_for_status()
+    if not r.ok:
+        detay = ""
+        try:
+            detay = (r.text or "")[:300]
+        except Exception:
+            pass
+        raise Exception(f"Jira eki yüklenemedi (HTTP {r.status_code}): {detay or 'yanıt yok'}")
     try:
         return r.json()
     except ValueError:
