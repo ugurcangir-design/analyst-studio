@@ -654,6 +654,7 @@ IZIN_VERILEN_CIKTILAR = {
     "jira-sonuc.txt",
     "mockup.html",
     "gorev-mockup.html",          # Task Analizi → yeni isteye göre ekran mockup'ı (ayrı dosya)
+    "gorev-mockup.png",           # mockup'ın PNG görseli (Jira'da satır-içi önizleme için)
     "sorular.json",
     "test-senaryolari.md",        # Gherkin (Given/When/Then) — teknik analiz sonrası Haiku pass'i
     "izlenebilirlik-matrisi.md",  # RTM — deterministik (0 token), süreç ID ↔ teknik bölüm eşlemesi
@@ -5994,19 +5995,37 @@ def gorev_mockup_jiraya():
             hedef_key = tasklar[0]["key"]
             yeni_task = hedef_key
             uyarilar = sonuc.get("uyarilar") or []
-        # Ek yükleme AYRI try: task (yeni-task) açıldıysa ek hata verse de task KAYBOLMASIN;
-        # kısmi başarı + gerçek neden dönülür → UI "Tekrar Ekle" sunar.
-        attach_ok, attach_hata = True, ""
+        # Ek yükleme AYRI try: task (yeni-task) açıldıysa ek hata verse de task KAYBOLMASIN.
+        # Jira HTML'i satır-içi RENDER ETMEZ (kaynak gösterir) → önce PNG görsel ekle (Jira
+        # satır-içi gösterir, tasarım görünür olur), sonra HTML (indirip interaktif açmak için).
+        attach_ok, attach_hata, eklenenler = True, "", []
+        try:
+            from skills.html_render import html_to_png
+            png = OUTPUT_DIR / "gorev-mockup.png"
+            if html_to_png(mockup, png):
+                atlassian_attach(hedef_key, "ekran-mockup.png", png.read_bytes(), "image/png", cloud_id)
+                eklenenler.append("görsel")
+            else:
+                logger.info("Mockup PNG render edilemedi (tarayıcı yok?) — HTML-only.")
+        except Exception as pe:
+            logger.warning("Mockup PNG render/ekleme atlandı (%s): %s", hedef_key, pe)
         try:
             atlassian_attach(hedef_key, dosya_adi, icerik, "text/html", cloud_id)
+            eklenenler.append("HTML")
         except Exception as ae:
-            attach_ok, attach_hata = False, str(ae)[:300]
-            logger.warning("Mockup eki yüklenemedi (%s): %s", hedef_key, ae)
+            logger.warning("Mockup HTML eki yüklenemedi (%s): %s", hedef_key, ae)
+            if not eklenenler:
+                attach_ok, attach_hata = False, str(ae)[:300]
+            else:
+                attach_hata = "HTML eklenemedi: " + str(ae)[:200]
+        if not eklenenler:
+            attach_ok = False
         site = jira_site_url(cloud_id)
         link = f"{site}/browse/{hedef_key}" if site else ""
         _telemetri_olay("jira_gonder", "ok" if attach_ok else "error", 0)
         return jsonify({"ok": True, "key": hedef_key, "yeni_task": yeni_task,
                         "attach_ok": attach_ok, "attach_hata": attach_hata,
+                        "eklenenler": eklenenler, "gorsel": ("görsel" in eklenenler),
                         "link": link, "attachment": dosya_adi, "uyarilar": uyarilar})
     except Exception as e:
         logger.error(f"Mockup Jira'ya ekleme hatası: {e}")
