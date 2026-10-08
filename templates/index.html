@@ -5900,6 +5900,17 @@ function jgMockupPanelAc() {
   if (staleEl) staleEl.style.display = (_jgMockupHtml && ayniGorev && _jgMockupStale) ? '' : 'none';
   document.getElementById('jg-mockup-btn').disabled = false;
   panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  // Bellekte mockup yoksa diskteki son mockup'ı yükle (restart/yenileme sonrası) → sonuç bloğu + Jira'ya ekle etkin
+  if (!_jgMockupHtml) {
+    fetch('/api/jira/gorev/mockup/mevcut').then(r => r.json()).then(d => {
+      if (d && d.var && d.html) {
+        _jgMockupHtml = d.html;
+        document.getElementById('jg-mockup-sonuc').style.display = '';
+        const km = document.getElementById('jg-mockup-kaynak');
+        if (km && !km.textContent) km.textContent = '(diskteki son mockup)';
+      }
+    }).catch(() => {});
+  }
 }
 
 function jgMockupKapat() {

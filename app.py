@@ -5925,6 +5925,19 @@ def gorev_mockup_durum(job_id):
     return jsonify({"ok": True, "durum": "calisiyor", **ortak})
 
 
+@app.route("/api/jira/gorev/mockup/mevcut", methods=["GET"])
+def gorev_mockup_mevcut():
+    """Diskteki güncel gorev-mockup.html'i döndürür (yeniden başlatma/yenileme sonrası UI
+    bellekte tutmadığı için — panel açılınca yükleyip önizleme/Jira'ya ekle etkinleşsin)."""
+    m = OUTPUT_DIR / "gorev-mockup.html"
+    if not m.exists():
+        return jsonify({"ok": True, "var": False})
+    try:
+        return jsonify({"ok": True, "var": True, "html": m.read_text(encoding="utf-8", errors="replace")})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/api/jira/gorev/mockup/geri-al", methods=["POST"])
 def gorev_mockup_geri_al():
     """Son mockup düzeltmesini geri al — yedeği gorev-mockup.html'e geri yazar."""
