@@ -392,6 +392,36 @@ takip-Excel senkron akışı — upload + cerrahi lxml yazımı — bu sürümde
   ✕ Eşleşmedi); task key'leri Jira browse link'i (bold + ↗, yeni sekme); UAT durumu ≠ Hedef durumu olan
   satırlarda iki durum hücresi amber + "≠" ile vurgulanır (`bs-durum-fark`).
   Zaman damgalı `UAT_Mutabakat_YYYY-MM-DD_HHMM.xlsx`, `backlog/` altına.
+- **Takip & kontrol amacı (UAT sürecinde product işlerinin önceliklendirilip analiz edilerek geliştirmeye
+  atanması):** her UAT maddesi için **takip aşaması** (`takip_asamasi`) + her TRADE/OPS task'ı için **analiz
+  durumu** (`analiz_durumu`) — 0 token, açıklamalar mutabakatta zaten çekilir (ek Jira çağrısı YOK).
+  - **`analiz_durumu(aciklama)`** → `yapildi|kismi|yok`: ADF→metinde başlıklar kendi satırına düşer; bizim
+    şablon başlıkları (`_ANALIZ_BASLIKLARI`: süreç→teknik 11 bölüm · Task analizi · FE/BE task şablonu · hata
+    modu Sorun/Çözüm · köprü 🤖 Teknik Analiz · ekip formatı Mevcut Durum/Beklenen Davranış/Teknik Tasarım
+    Önerisi) aranır; altında ≥60 krk içerik olan "dolu". **yapildi:** ≥3 dolu + çözüm tarafı (teknik) · ≥4
+    dolu + amaç ve kabul kriteri tarafı (işlevsel) · Çözüm + (Sorun ya da kriter) (hata) · **kismi:** 1-2 dolu
+    ya da şablonsuz ≥800 krk (serbest metin) · **yok:** boş/kısa. Gerçek veride kalibre edildi (kısa
+    "Amaç + Kabul Kriteri" product brief'leri = kısmi).
+  - **Geliştirmeye atanmamış = yalnız `Backlog`** (`GELISTIRME_ONCESI`). **`takip_asamasi`** (UAT başına):
+    Kapandı (UAT durumu `TAMAM_DURUMLARI`) · Açıkta (task yok) · Teyit bekliyor (yalnız aday) · Analiz bekliyor
+    (Backlog task'larından biri analizsiz) · Analiz kısmi · Atamaya hazır (Backlog task'ları analizli) ·
+    Geliştirmede/sonrası (Backlog'da task kalmadı). Satır alanları: `takip`/`takip_kod`, `uat_analizli` ("x/y"),
+    `hedef_analiz`/`_seviye`/`_dolu`, `hedef_kapsam_disi`; eşleşmeyen hedefte `analiz*`, eşleşmeyen UAT'ta `takip`.
+  - **Sayımlar — TEKİL task, denklem olarak kapanır:** `uat_toplam = uat_eslesen + uat_aday + eslesmeyen_uat`
+    (+`uat_iptal` ayrı, `uat_kapsayici_haric` Epic/Story) · `hedef_toplam = hedef_eslesen + hedef_aday +
+    eslesmeyen_hedef` (+`hedef_iptal`, `eslesmeyen_hedef_aktif/_tamam`) · `bag` = UAT↔task çifti (eski `eslesen`
+    satır sayısı — geriye uyum için durur; bir UAT 26 task'a, bir task birden çok UAT'a bağlanabildiği için task
+    sayısı DEĞİL) · `takip{}` (toplamı = uat_toplam) · `backlog_analiz{yapildi,kismi,yok}` (Backlog'daki tekil
+    eşleşen task'lar). **Epic modu:** yalnız epic altı sayılır; kapsam dışından Jira linkiyle gelen task UAT'ı
+    eşleştirir (iş takip ediliyor) ama `kapsam_disi_hedef` olarak AYRI sayılır, toplama girmez. **Tüm board
+    modunda** eşleşmeyen TRADE/OPS = "UAT dışı proje işi" (sönük, problem değil).
+  - **UI:** kartlar 3 bölüm — UAT takip hunisi (aşama kartları, denklemli başlık) · Backlog'daki eşleşen task'lar
+    (Analiz yapıldı/Kısmi/Yok) · Mutabakat (tekil task + bağ, iptal kırılımı, toplam denklemleri). Kart tıklaması
+    (`_bsKartFiltre` → `bsTakipFiltre`/`bsAnalizFiltre`) ilgili grubu gösterir VE tablo başlık seçicisini
+    ayarlar (Takip · Durum=Backlog + Analiz); tekrar tıklama sıfırlar. Tablolarda **Takip** (UAT) ve **Analiz**
+    (hedef; tooltip = dolu başlıklar) kolonları + filtreleri; gruplu satırda "x/y analizli". **Excel:** ilk sayfa
+    **Özet** (denklemler + huni + backlog analiz) + Takip/Analiz/Dolu Başlıklar kolonları.
+  Test: `tests/test_backlog_analiz.py` (Jira MOCK, 0 token).
 - **Endpoint'ler:** `POST /api/backlog/mutabakat` (config → kova JSON) · `POST /api/backlog/export`
   (sonuç body → `{dosya}`) · `GET /api/backlog/indir/<dosya>` (binary `send_file`). Dosyalar `backlog/`
   altında (gitignore). Bağımlılık: `openpyxl` (requirements.txt).

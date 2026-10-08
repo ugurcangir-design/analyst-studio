@@ -159,6 +159,116 @@ def _hedef_gorevleri_topla(mod: str, hedef_projeler: list[str],
     return _jql_ara(jql, cloud_id)
 
 
+# ─── Analiz durumu (task içinde bizim şablona göre analiz var mı?) — 0 token ────────
+# Jira açıklaması ADF→düz metne çevrildiğinde başlıklar kendi satırına düşer. Bizim şablon
+# başlıkları (süreç→teknik, Task analizi, FE/BE task şablonu, hata modu) aranır; altında anlamlı
+# içerik olan başlık "dolu" sayılır. Grup: amaç/kapsam tarafı · çözüm tarafı · doğrulama tarafı.
+_ANALIZ_BASLIKLARI: dict[str, str] = {
+    # amaç / gereksinim
+    "amaç": "amac", "amaç ve hedefler": "amac", "iş amacı ve hedefler": "amac", "kapsam": "amac",
+    "kapsam / kapsam dışı": "amac", "kapsam/kapsam dışı": "amac", "iş gereksinimleri": "amac",
+    "gereksinimler": "amac", "sorun": "amac", "mevcut durum": "amac",
+    "beklenen davranış / istenen geliştirme": "amac", "beklenen davranış": "amac", "istenen geliştirme": "amac",
+    # çözüm
+    "teknik gereksinimler": "cozum", "api tasarımı": "cozum", "veritabanı tasarımı": "cozum",
+    "frontend iş kırılımı": "cozum", "iş mantığı ve algoritma detayları": "cozum",
+    "etkilenen endpoint'ler": "cozum", "etkilenen endpoint'ler (api)": "cozum",
+    "ekran/bileşen kırılımı": "cozum", "ekran / bileşen kırılımı": "cozum",
+    "iş mantığı & kurallar": "cozum", "etkileşim & akış": "cozum", "veri/db değişiklikleri": "cozum",
+    "çözüm": "cozum", "teknik analiz": "cozum", "teknik tasarım önerisi": "cozum", "teknik tasarım notu": "cozum",
+    "teknik tasarım": "cozum",
+    # doğrulama
+    "kabul kriterleri": "dogrulama", "kabul kriteri": "dogrulama",
+    "hata yönetimi ve istisna tanımları": "dogrulama", "hata yönetimi & boş durumlar": "dogrulama",
+    # diğer
+    "role management": "diger", "rol/yetki": "diger", "rol / yetki": "diger",
+    "teknik borç ve riskler": "diger", "bağımlılıklar & riskler": "diger",
+    "bağımlılık ve arayüz (fe↔be)": "diger",
+    "referans / yaklaşım": "diger", "bağımlılıklar": "diger",
+}
+_ANALIZ_ETIKET = {"yapildi": "Analiz yapıldı", "kismi": "Kısmi analiz", "yok": "Analiz yok"}
+_DOLU_MIN_KRK = 60          # başlık altında bu kadar anlamlı metin varsa "dolu"
+_SERBEST_ANALIZ_KRK = 800   # şablon başlığı yok ama bu kadar uzun açıklama → kısmi (serbest metin)
+
+
+def _baslik_norm(satir: str) -> str:
+    """'## 3. Teknik Gereksinimler:' / '🤖 Teknik Analiz' → 'teknik gereksinimler' / 'teknik analiz'."""
+    t = re.sub(r"^[#\s\d.)\-–—•*]+", "", satir.strip())
+    t = re.sub(r"^[^\w(]+", "", t)                 # emoji/simge öneki
+    return t.rstrip(" :").replace("İ", "i").lower().strip()
+
+
+def analiz_durumu(aciklama: str) -> dict:
+    """Task açıklamasında bizim şablona göre analiz var mı?
+    Döner: {seviye: yapildi|kismi|yok, etiket, dolu: [başlık…]}.
+      yapildi — ≥3 dolu başlık + çözüm tarafı (teknik) · ≥4 dolu + amaç ve kabul kriteri tarafı
+                (işlevsel) · Çözüm + (Sorun ya da kabul kriteri) (hata modu)
+      kismi   — 1-2 dolu başlık · YA DA şablonsuz ama uzun (serbest metin) açıklama
+      yok     — boş/kısa açıklama, dolu şablon başlığı yok"""
+    metin = aciklama or ""
+    satirlar = metin.splitlines()
+    bolumler: list[tuple[str, str, list[str]]] = []   # (başlık, grup, içerik satırları)
+    for satir in satirlar:
+        n = _baslik_norm(satir)
+        if n in _ANALIZ_BASLIKLARI and len(satir.strip()) <= 70:
+            bolumler.append((n, _ANALIZ_BASLIKLARI[n], []))
+        elif bolumler:
+            bolumler[-1][2].append(satir)
+    dolu = [(b, g) for b, g, ic in bolumler
+            if len(re.sub(r"\s+", " ", " ".join(ic)).strip()) >= _DOLU_MIN_KRK]
+    adlar = list(dict.fromkeys(b for b, _ in dolu))
+    gruplar = {g for _, g in dolu}
+    if ((len(adlar) >= 3 and "cozum" in gruplar)                       # teknik analiz
+            or (len(adlar) >= 4 and {"amac", "dogrulama"} <= gruplar)   # işlevsel analiz (mevcut/beklenen + kriter)
+            or "çözüm" in adlar and ("sorun" in adlar or "dogrulama" in gruplar)):   # hata modu
+        seviye = "yapildi"
+    elif adlar or len(metin.strip()) >= _SERBEST_ANALIZ_KRK:
+        seviye = "kismi"
+    else:
+        seviye = "yok"
+    return {"seviye": seviye, "etiket": _ANALIZ_ETIKET[seviye], "dolu": adlar}
+
+
+# ─── Takip aşaması (UAT maddesi nerede?) ─────────────────────────────────────────
+# UAT maddesi product'tan gelen iştir; amaç: task açıldı mı → analiz edildi mi → geliştirmeye
+# atandı mı. Geliştirmeye atanmamış = hedef task durumu BACKLOG.
+GELISTIRME_ONCESI = ["Backlog"]
+TAMAM_DURUMLARI = ["Tamam", "Done", "Closed", "Kapandı", "Kapalı", "Resolved", "Çözüldü", "Tamamlandı"]
+TAKIP_ETIKET = {
+    "kapandi": "Kapandı (UAT)",
+    "acikta": "Açıkta — task yok",
+    "teyit": "Teyit bekliyor",
+    "analiz_bekliyor": "Analiz bekliyor",
+    "analiz_kismi": "Analiz kısmi",
+    "atamaya_hazir": "Atamaya hazır",
+    "gelistirmede": "Geliştirmede / sonrası",
+}
+TAKIP_SIRASI = ["acikta", "teyit", "analiz_bekliyor", "analiz_kismi", "atamaya_hazir", "gelistirmede", "kapandi"]
+
+
+def _durum_icinde(durum: str, liste: list[str]) -> bool:
+    return (durum or "").strip().casefold() in {d.casefold() for d in liste}
+
+
+def takip_asamasi(uat_durum: str, hedefler: list[dict], aday_var: bool) -> str:
+    """UAT maddesinin takip aşaması. `hedefler`: eşleşen (Kesin/Yüksek) hedef task'lar
+    ({durum, analiz_seviye}). Backlog'daki task'ların analizi aşamayı belirler; Backlog'da task
+    kalmadıysa iş geliştirmeye geçmiştir."""
+    if _durum_icinde(uat_durum, TAMAM_DURUMLARI):
+        return "kapandi"
+    if not hedefler:
+        return "teyit" if aday_var else "acikta"
+    backlog = [h for h in hedefler if _durum_icinde(h.get("durum", ""), GELISTIRME_ONCESI)]
+    if not backlog:
+        return "gelistirmede"
+    seviyeler = {h.get("analiz_seviye") for h in backlog}
+    if "yok" in seviyeler:
+        return "analiz_bekliyor"
+    if "kismi" in seviyeler:
+        return "analiz_kismi"
+    return "atamaya_hazir"
+
+
 # ─── Benzerlik ──────────────────────────────────────────────────────────────────
 def _jaccard(a: set[str], b: set[str]) -> float:
     if len(a) < _MIN_JETON or len(b) < _MIN_JETON:
@@ -310,6 +420,7 @@ def mutabakat(uat_proje: str = VARSAYILAN_UAT,
     hedef_gorevler = _hedef_gorevleri_topla(mod, hedef_projeler, hedef_keys, anahtar_kelime, cloud_id)
 
     # ── Kapsam dışı tipler: Epic/Story (kapsayıcı) elenir — yalnızca yaprak iş kalemleri karşılaştırılır.
+    _uat_kapsayici_haric = sum(1 for g in uat_gorevler if _kapsayici_tip_mi(g))
     uat_gorevler   = [g for g in uat_gorevler   if not _kapsayici_tip_mi(g)]
     hedef_gorevler = [g for g in hedef_gorevler if not _kapsayici_tip_mi(g)]
 
@@ -469,6 +580,49 @@ def mutabakat(uat_proje: str = VARSAYILAN_UAT,
     eslesmeyen_uat.sort(key=lambda r: r["sira"])
     eslesmeyen_hedef.sort(key=lambda r: r["sira"])
 
+    # ── 5. ANALİZ DURUMU + TAKİP AŞAMASI (0 token — açıklamalar zaten çekildi) ──
+    _analiz_cache: dict[str, dict] = {}
+
+    def _analiz(key: str) -> dict:
+        if key not in _analiz_cache:
+            g = _hedef_bul(key) or {}
+            _analiz_cache[key] = analiz_durumu(g.get("description", ""))
+        return _analiz_cache[key]
+
+    for r in eslesenler + adaylar:
+        a = _analiz(r["hedef_key"])
+        r["hedef_analiz"], r["hedef_analiz_seviye"] = a["etiket"], a["seviye"]
+        r["hedef_analiz_dolu"] = ", ".join(a["dolu"])
+        # Epic/keyword modunda taranan kapsamın DIŞINDAN (Jira linkiyle) gelen hedef → ayrı sayılır
+        r["hedef_kapsam_disi"] = r["hedef_key"] not in hedef_index
+    for r in eslesmeyen_hedef:
+        a = _analiz(r["key"])
+        r["analiz"], r["analiz_seviye"], r["analiz_dolu"] = a["etiket"], a["seviye"], ", ".join(a["dolu"])
+
+    uat_hedefleri: dict[str, list[dict]] = defaultdict(list)
+    for r in eslesenler:
+        uat_hedefleri[r["uat_key"]].append({"durum": r["hedef_durum"], "analiz_seviye": r["hedef_analiz_seviye"]})
+    takip_kod: dict[str, str] = {
+        u["key"]: takip_asamasi(u.get("status", ""), uat_hedefleri.get(u["key"], []), u["key"] in aday_uat)
+        for u in uat_gorevler
+    }
+    for r in eslesenler + adaylar:
+        k = takip_kod.get(r["uat_key"], "acikta")
+        r["takip_kod"], r["takip"] = k, TAKIP_ETIKET[k]
+        hs = uat_hedefleri.get(r["uat_key"], [])
+        r["uat_analizli"] = f"{sum(1 for h in hs if h['analiz_seviye'] == 'yapildi')}/{len(hs)}" if hs else ""
+    for r in eslesmeyen_uat:
+        k = takip_kod.get(r["key"], "acikta")
+        r["takip_kod"], r["takip"] = k, TAKIP_ETIKET[k]
+
+    # Backlog'daki (geliştirmeye atanmamış) EŞLEŞEN task'ların analiz durumu — tekil task bazında
+    backlog_hedef = {r["hedef_key"]: r["hedef_analiz_seviye"] for r in eslesenler
+                     if _durum_icinde(r["hedef_durum"], GELISTIRME_ONCESI)}
+    _tamam_mi = lambda d: _durum_icinde(d, TAMAM_DURUMLARI)   # noqa: E731
+    eslesen_hedef_set = {r["hedef_key"] for r in eslesenler if r["hedef_key"] in hedef_index}
+    aday_hedef_set = {r["hedef_key"] for r in adaylar if r["hedef_key"] in hedef_index} - eslesen_hedef_set
+    kapsam_disi_set = {r["hedef_key"] for r in eslesenler + adaylar if r["hedef_key"] not in hedef_index}
+
     logger.info("Mutabakat: UAT=%d hedef=%d → eşleşen=%d aday=%d eşleşmeyen_uat=%d eşleşmeyen_hedef=%d iptal=%d",
                 len(uat_gorevler), len(hedef_gorevler), len(eslesenler), len(adaylar),
                 len(eslesmeyen_uat), len(eslesmeyen_hedef), len(iptaller))
@@ -485,6 +639,7 @@ def mutabakat(uat_proje: str = VARSAYILAN_UAT,
         "eslesmeyen_hedef": eslesmeyen_hedef,
         "iptaller": iptaller,
         "sayimlar": {
+            # Geriye uyum (Excel/eski UI): eslesen/aday = SATIR (UAT↔task bağı) sayısı
             "uat_toplam": len(uat_gorevler),
             "hedef_toplam": len(hedef_gorevler),
             "eslesen": len(eslesenler),
@@ -492,7 +647,27 @@ def mutabakat(uat_proje: str = VARSAYILAN_UAT,
             "eslesmeyen_uat": len(eslesmeyen_uat),
             "eslesmeyen_hedef": len(eslesmeyen_hedef),
             "iptal": len(iptaller),
+            # Tekil TASK sayıları — toplamlar denklem olarak kapanır:
+            #   uat_toplam   = uat_eslesen + uat_aday + eslesmeyen_uat          (+ uat_iptal ayrı)
+            #   hedef_toplam = hedef_eslesen + hedef_aday + eslesmeyen_hedef    (+ hedef_iptal ayrı)
+            "uat_eslesen": len(eslesen_uat),
+            "uat_aday": len(aday_uat),
+            "uat_iptal": len(iptal_uat),
+            "uat_kapsayici_haric": _uat_kapsayici_haric,
+            "hedef_eslesen": len(eslesen_hedef_set),
+            "hedef_aday": len(aday_hedef_set),
+            "hedef_iptal": len(iptal_hedef),
+            "kapsam_disi_hedef": len(kapsam_disi_set),
+            "bag": len(eslesenler),
+            "eslesmeyen_hedef_tamam": sum(1 for r in eslesmeyen_hedef if _tamam_mi(r["durum"])),
+            "eslesmeyen_hedef_aktif": sum(1 for r in eslesmeyen_hedef if not _tamam_mi(r["durum"])),
+            # UAT takip hunisi (toplamı = uat_toplam) + Backlog'daki eşleşen task'ların analizi
+            "takip": {k: sum(1 for v in takip_kod.values() if v == k) for k in TAKIP_SIRASI},
+            "backlog_analiz": {sv: sum(1 for v in backlog_hedef.values() if v == sv)
+                               for sv in ("yapildi", "kismi", "yok")},
         },
+        "takip_etiket": TAKIP_ETIKET,
+        "takip_sirasi": TAKIP_SIRASI,
     }
 
 
@@ -524,36 +699,71 @@ def rapor_uret(sonuc: dict, cikti_dir: str | Path) -> Path:
 
     wb = Workbook()
 
-    ws1 = wb.active
-    ws1.title = "Eşleşenler"
-    esles_bas = ["Sıra", "UAT Key", "UAT Özet", "UAT Durum", "UAT Atanan", "UAT İş Adedi",
-                 "Hedef Key", "Hedef Özet", "Hedef Durum", "Hedef Atanan", "Hedef Story",
-                 "Eşleşme", "Gerekçe", "Skor"]
+    # Özet: toplamlar denklem olarak + UAT takip hunisi + Backlog analiz durumu
+    ws0 = wb.active
+    ws0.title = "Özet"
+    sy = sonuc.get("sayimlar", {}) or {}
+    etiket = sonuc.get("takip_etiket") or TAKIP_ETIKET
+    kapsam = "Epic/Story altı" if sonuc.get("mod") == "epic" else (
+        "Anahtar kelime" if sonuc.get("mod") == "keyword" else "Tüm board")
+    ozet = [
+        ["UAT board", sonuc.get("uat_proje", ""), ""],
+        ["Hedef board(lar)", ", ".join(sonuc.get("hedef_projeler", [])), f"Kapsam: {kapsam}"],
+        ["", "", ""],
+        ["UAT TOPLAM (iptal hariç)", sy.get("uat_toplam", ""), "= eşleşen + teyit bekleyen + açıkta"],
+        ["  Eşleşen UAT", sy.get("uat_eslesen", ""), ""],
+        ["  Teyit bekleyen UAT", sy.get("uat_aday", ""), ""],
+        ["  Açıkta (task yok)", sy.get("eslesmeyen_uat", ""), ""],
+        ["  İptal edilen UAT (ayrı)", sy.get("uat_iptal", ""), ""],
+        ["", "", ""],
+        ["HEDEF TOPLAM (iptal hariç, taranan kapsam)", sy.get("hedef_toplam", ""), "= eşleşen + teyit bekleyen + eşleşmeyen"],
+        ["  Eşleşen task", sy.get("hedef_eslesen", ""), f"{sy.get('bag', '')} UAT↔task bağı"],
+        ["  Teyit bekleyen task", sy.get("hedef_aday", ""), ""],
+        ["  Eşleşmeyen task", sy.get("eslesmeyen_hedef", ""),
+         f"aktif {sy.get('eslesmeyen_hedef_aktif', '')} · tamamlanmış {sy.get('eslesmeyen_hedef_tamam', '')}"],
+        ["  İptal edilen task (ayrı)", sy.get("hedef_iptal", ""), ""],
+        ["  Kapsam dışından bağlı task (ayrı)", sy.get("kapsam_disi_hedef", ""), "toplama dahil değil"],
+        ["", "", ""],
+        ["UAT TAKİP HUNİSİ", "", "UAT maddesi hangi aşamada (Backlog = geliştirmeye atanmamış)"],
+    ] + [[f"  {etiket.get(k, k)}", (sy.get("takip") or {}).get(k, 0), ""] for k in TAKIP_SIRASI] + [
+        ["", "", ""],
+        ["BACKLOG'DAKİ EŞLEŞEN TASK'LAR", sum((sy.get("backlog_analiz") or {}).values()), "geliştirmeye atanmamış"],
+        ["  Analiz yapıldı", (sy.get("backlog_analiz") or {}).get("yapildi", 0), ""],
+        ["  Kısmi analiz", (sy.get("backlog_analiz") or {}).get("kismi", 0), ""],
+        ["  Analiz yok", (sy.get("backlog_analiz") or {}).get("yok", 0), ""],
+    ]
+    _sayfa_yaz(ws0, ["Kalem", "Adet", "Not"], ozet, [44, 14, 60])
+
+    ws1 = wb.create_sheet("Eşleşenler")
+    esles_bas = ["Sıra", "UAT Key", "UAT Özet", "UAT Durum", "Takip", "UAT Atanan", "UAT İş Adedi",
+                 "Hedef Key", "Hedef Özet", "Hedef Durum", "Analiz", "Dolu Başlıklar", "Hedef Atanan",
+                 "Hedef Story", "Eşleşme", "Gerekçe", "Skor"]
     esles_kaynak = sorted(sonuc.get("eslesenler", []) + sonuc.get("adaylar", []),
                           key=lambda r: r.get("sira", 10**9))
     # Bir UAT taskı birden çok hedefe bağlanabilir → her UAT'ın toplam iş (hedef) adedi.
     uat_is_adedi: dict[str, int] = {}
     for r in esles_kaynak:
         uat_is_adedi[r["uat_key"]] = uat_is_adedi.get(r["uat_key"], 0) + 1
-    esles_satir = [[r.get("sira", ""), r["uat_key"], r["uat_ozet"], r["uat_durum"],
+    esles_satir = [[r.get("sira", ""), r["uat_key"], r["uat_ozet"], r["uat_durum"], r.get("takip", ""),
                     r.get("uat_atanan", ""), uat_is_adedi.get(r["uat_key"], 1), r["hedef_key"],
-                    r["hedef_ozet"], r["hedef_durum"], r.get("hedef_atanan", ""), r.get("hedef_story", ""),
+                    r["hedef_ozet"], r["hedef_durum"], r.get("hedef_analiz", ""), r.get("hedef_analiz_dolu", ""),
+                    r.get("hedef_atanan", ""), r.get("hedef_story", ""),
                     ("Aday" if r["guven"] == "Aday" else "Evet"), r["gerekce"], r["skor"]]
                    for r in esles_kaynak]
-    _sayfa_yaz(ws1, esles_bas, esles_satir, [6, 14, 44, 14, 18, 10, 14, 44, 14, 18, 16, 10, 26, 8])
+    _sayfa_yaz(ws1, esles_bas, esles_satir, [6, 14, 44, 14, 18, 18, 10, 14, 44, 14, 14, 30, 18, 16, 10, 26, 8])
 
     ws2 = wb.create_sheet("Eşleşmeyen UAT")
-    _sayfa_yaz(ws2, ["Sıra", "UAT Key", "Özet", "Durum", "Atanan", "Tür"],
-               [[r.get("sira", ""), r["key"], r["ozet"], r["durum"], r.get("atanan", ""), r["tur"]]
+    _sayfa_yaz(ws2, ["Sıra", "UAT Key", "Özet", "Durum", "Takip", "Atanan", "Tür"],
+               [[r.get("sira", ""), r["key"], r["ozet"], r["durum"], r.get("takip", ""), r.get("atanan", ""), r["tur"]]
                 for r in sonuc.get("eslesmeyen_uat", [])],
-               [6, 14, 52, 16, 18, 14])
+               [6, 14, 52, 16, 18, 18, 14])
 
     ws3 = wb.create_sheet("Eşleşmeyen TRADE-OPS")
-    _sayfa_yaz(ws3, ["Sıra", "Hedef Key", "Proje", "Özet", "Durum", "Atanan", "Story", "Tür"],
-               [[r.get("sira", ""), r["key"], r.get("proje", ""), r["ozet"], r["durum"],
+    _sayfa_yaz(ws3, ["Sıra", "Hedef Key", "Proje", "Özet", "Durum", "Analiz", "Atanan", "Story", "Tür"],
+               [[r.get("sira", ""), r["key"], r.get("proje", ""), r["ozet"], r["durum"], r.get("analiz", ""),
                  r.get("atanan", ""), r.get("story", ""), r["tur"]]
                 for r in sonuc.get("eslesmeyen_hedef", [])],
-               [6, 14, 12, 52, 16, 18, 16, 14])
+               [6, 14, 12, 52, 16, 14, 18, 16, 14])
 
     ws4 = wb.create_sheet("İptal Edilenler")
     _sayfa_yaz(ws4, ["Sıra", "Key", "Proje", "Özet", "Durum", "Atanan", "Tür"],

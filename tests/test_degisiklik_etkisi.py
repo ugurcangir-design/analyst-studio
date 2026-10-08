@@ -22,6 +22,8 @@ os.environ["AKIS_KAPATMA"] = "false"   # motor testleri AI MOCK — akış kapat
 
 from skills import degisiklik_etkisi as DE  # noqa: E402
 from skills import base  # noqa: E402
+from skills import ornek_havuzu as _OH  # noqa: E402
+_OH.ornek_bloklari = lambda *a, **k: []   # yalıtım: yerel few-shot havuzu (ekip örnekleri) prompt kontrollerini etkilemesin
 
 _hata = 0
 
