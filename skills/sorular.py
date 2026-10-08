@@ -78,6 +78,12 @@ def sorular_kaydet(data: dict) -> None:
 _SORU_BAS = re.compile(r"^###\s+(Q-T-\d+|Q-\d+|PO-\d+|Q-K-\d+)\s*:?\s*(.*?)\s*$", re.MULTILINE)
 
 
+def zorunlu_mu(deger: str) -> bool:
+    """'- Zorunlu: Evet' alan değeri → bool (Evet/E/Yes/True/✓; 'Evet (açıklama)' dahil)."""
+    d = (deger or "").strip().lower().lstrip("*").strip()
+    return d.startswith(("evet", "yes", "true", "✓", "✅")) or d in ("e", "x")
+
+
 def _alan_oku(blok: str, anahtar: str) -> str:
     """Bloktan '- Anahtar: değer' formatında satırı çeker."""
     desen = re.compile(rf"^[\s\*\-]*\*?\*?{re.escape(anahtar)}\*?\*?\s*:\s*(.+?)$", re.MULTILINE | re.IGNORECASE)
@@ -228,6 +234,7 @@ def parse_md_sorular(md_yol: Path) -> list[dict]:
             "beklenen_yanit": _alan_oku(blok, "Beklenen Yanıt"),
             "sorumlu": _alan_oku(blok, "Sorumlu"),
             "etki": _alan_oku(blok, "Etki"),
+            "zorunlu": zorunlu_mu(_alan_oku(blok, "Zorunlu")),
         })
         gorulen_idler.add(soru_id)
 
@@ -457,12 +464,15 @@ def istatistik_hesapla(sorular: list[dict]) -> dict:
     """Banner için özet sayılar."""
     sayilar = {d: 0 for d in DURUM_DEGERLERI}
     kritik_acik = 0
+    zorunlu_acik = 0
     uygulanmamis = 0
     for s in sorular:
         d = s.get("durum", "acik")
         sayilar[d] = sayilar.get(d, 0) + 1
         if d in ("acik", "bekleniyor") and (s.get("oncelik") or "").lower().startswith("kritik"):
             kritik_acik += 1
+        if d in ("acik", "bekleniyor") and s.get("zorunlu"):
+            zorunlu_acik += 1
         if d in ("cevaplandi", "varsayim") and not s.get("uygulandi_at"):
             uygulanmamis += 1
     return {
@@ -473,6 +483,7 @@ def istatistik_hesapla(sorular: list[dict]) -> dict:
         "atlandi": sayilar["atlandi"],
         "varsayim": sayilar["varsayim"],
         "kritik_acik": kritik_acik,
+        "zorunlu_acik": zorunlu_acik,
         "uygulanmamis": uygulanmamis,
     }
 

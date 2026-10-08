@@ -37,12 +37,14 @@ def _id(tip: str, icerik: str) -> str:
 
 
 def _temizle(md: str) -> str:
-    """[K:] kanıt etiketlerini çıkar (örnek stil referansı — etiket gürültüsü girmez)."""
+    """[K:] kanıt etiketlerini + Jira'ya eklenen 'Cevap Bekleyen Zorunlu Sorular' bölümünü çıkar
+    (örnek stil referansı — etiket/cevapsız-soru gürültüsü few-shot'a girmez)."""
+    md = re.sub(r"(?ms)^##\s*❗\s*Cevap Bekleyen Zorunlu Sorular.*?(?=^#{1,2}\s|\Z)", "", md or "")
     try:
         from .base import kanit_etiketlerini_temizle
-        return kanit_etiketlerini_temizle(md or "")
+        return kanit_etiketlerini_temizle(md)
     except Exception:
-        return md or ""
+        return md
 
 
 def _ayni_key_temizle(jira_key: str, yeni_id: str) -> None:

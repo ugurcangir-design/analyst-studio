@@ -301,6 +301,37 @@ _ORTAK_EK_KURALLAR = (
     "- Önceki aşamada tanımlı bir ID'nin bu çıktıda karşılığı yoksa Açık Sorular'a taşı"
 )
 
+# Testçi gözü + zorunlu açık soru — analiz/test ekibi soru sormadan test yazabilsin diye.
+# prompt_yukle() bu kuralları _TEST_GOZU_SKILL_IDS'e (prompts.json override'ı olsa da) ekler.
+_TEST_GOZU_KURALLARI = (
+    "\n\n## EK KURALLAR — Testçi Gözü (Kabul Kriteri Kapsamı)\n\n"
+    "Analiz, test ekibinin EK SORU SORMADAN test senaryosu yazabileceği netlikte olmalı. "
+    "Kabul kriterlerini yazarken eksik bırakma:\n"
+    "1. **Kapsam:** her iş kuralı (BR) için ≥1 kriter; her alternatif (AF) ve hata akışı (EF) için ≥1 "
+    "NEGATİF kriter — kriterde bağlı ID'yi yaz.\n"
+    "2. **Sınırlar:** kuralı olan her alan için geçerli + geçersiz değer davranışı "
+    "(boş/zorunlu, min-max, uzunluk, format, özel karakter).\n"
+    "3. **Roller:** rol/yetki etkisi varsa yetkili rolün sonucu + yetkisiz rolün davranışı "
+    "(buton gizli mi, hata mı).\n"
+    "4. **Mevcut veri:** veri değişikliği varsa değişiklik ÖNCESİ oluşmuş kayıtlarla davranış.\n"
+    "5. **Doğrulama noktası:** her kriterde sonucun NEREDE gözlemleneceği (ekran/alan, liste, rapor, "
+    "log/audit, endpoint yanıtı + status, DB). 'Başarılı olur / doğru çalışır' gibi gözlemlenemez sonuç YASAK.\n"
+    "6. **Ön koşul / test verisi:** kriterin koşulabilmesi için gereken veri durumu (hangi kayıt, hangi "
+    "statüde, hangi rolle).\n"
+    "7. **Kaynak:** beklenen değer (mesaj metni, status, alan) kaynakta yoksa UYDURMA → `[K: ❓ Belirsiz]` + açık soru.\n"
+    "Küçük/hata işlerinde yalnız ilgili 1-3 kriter yeterli — kurallar doldurmak için değil, eksik bırakmamak içindir.\n\n"
+    "## EK KURALLAR — Zorunlu Açık Soru\n\n"
+    "Bir açık soru cevapsız kalırsa geliştirme/test YANLIŞ davranış üretecekse (veri kaybı/bozulması, başka "
+    "ekran/rapor/entegrasyonun kırılması, iş kuralının belirsiz kalması, testin beklenen sonucunun "
+    "bilinmemesi) soru bloğuna `- Zorunlu: Evet` satırı ekle; bu sorular Öncelik: Kritik veya Yüksek olur. "
+    "Diğer sorulara bu satırı YAZMA."
+)
+_TEST_GOZU_SKILL_IDS = frozenset({
+    "surec_analizi",
+    "teknik_analiz_bolumler",
+    "gorev_teknik_analiz",
+})
+
 # Bu skill_id'lere prompt_yukle() otomatik olarak _ORTAK_EK_KURALLAR ekler
 _EK_KURAL_SKILL_IDS = frozenset({
     "surec_analizi",
@@ -535,6 +566,7 @@ Belirsiz TÜM konular buraya; ana metne SIZDIRMA. Her soru, önem sırasına gö
 ### Q-[N]: [Başlık]
 - Kategori: Çelişki / Eksik / Belirsiz / Kapsam / Bağımlılık
 - Öncelik: Kritik / Yüksek / Orta / Düşük
+- Zorunlu: Evet (YALNIZ cevapsız kalırsa veri kaybı/kırılma/yanlış test riski varsa — değilse bu satırı yazma)
 - Bağlı ID: PA-XXX / BR-XXX / AF-XXX / EF-XXX / EK-XXX (varsa)
 - Soru: [net, tek konuya odaklı soru]
 - Mevcut Durum: [kaynakta ne var / ne eksik]
@@ -779,6 +811,7 @@ Her soru aşağıdaki formatta:
 - Kategori: Teknik / İş Kuralı / Entegrasyon / Güvenlik / Veri / FE-UX / Performans
 - Katman: FE / BE / FE+BE / Genel
 - Öncelik: Kritik / Yüksek / Orta / Düşük
+- Zorunlu: Evet (YALNIZ cevapsız kalırsa veri kaybı/kırılma/yanlış test riski varsa — değilse bu satırı yazma)
 - Bağlı ID: BR-XXX / AC-XXX / EF-XXX / EK-XXX (varsa)
 - Soru: [net, tek bir konuya odaklı soru]
 - Mevcut Bilgi: [kaynaklarda olan kısım]
@@ -1483,15 +1516,20 @@ def prompt_yukle(skill_id: str) -> str:
         if PROMPTS_PATH.exists():
             data = json.loads(PROMPTS_PATH.read_text(encoding="utf-8"))
             if skill_id in data:
-                icerik = data[skill_id]
-                if skill_id in _EK_KURAL_SKILL_IDS:
-                    icerik = icerik + _ORTAK_EK_KURALLAR + _domain_kurallari_oku()
-                return icerik
+                return _prompt_ekleri(skill_id, data[skill_id])
     except Exception:
         pass
-    icerik = VARSAYILAN_PROMPTLAR[skill_id]["icerik"]
+    return _prompt_ekleri(skill_id, VARSAYILAN_PROMPTLAR[skill_id]["icerik"])
+
+
+def _prompt_ekleri(skill_id: str, icerik: str) -> str:
+    """Skill'e göre otomatik ortak blokları ekler (editörde görünmez, override'da da korunur)."""
     if skill_id in _EK_KURAL_SKILL_IDS:
-        icerik = icerik + _ORTAK_EK_KURALLAR + _domain_kurallari_oku()
+        icerik = icerik + _ORTAK_EK_KURALLAR
+    if skill_id in _TEST_GOZU_SKILL_IDS:
+        icerik = icerik + _TEST_GOZU_KURALLARI
+    if skill_id in _EK_KURAL_SKILL_IDS:
+        icerik = icerik + _domain_kurallari_oku()
     return icerik
 
 
@@ -1619,6 +1657,46 @@ def belirsizlik_denetimi(metin: str) -> str:
         "Her satır netleştirilmeli ya da bilinçliyse yok sayılabilir._\n\n"
         "| Satır | İfade | Neden sorunlu |\n|---|---|---|\n"
         + "\n".join(bulgular) + "\n"
+    )
+
+
+# ─── Test Kapsam Denetimi — deterministik, 0 token ───────────────────────────
+# Testçi gözü: TANIMLANAN her iş kuralı / alternatif / hata akışı (BR/AF/EF) Kabul Kriterleri
+# bölümünde en az bir kez referans ediliyor mu? Edilmeyen → testçinin "bunu nasıl test ederim?"
+# sorusu. Süreç analizi sonuna eklenir (belirsizlik denetimi gibi).
+_TEST_KAPSAM_TANIM = re.compile(r"(?:^\|\s*|\*\*)((?:BR|AF|EF)-\d{2,4})\b", re.MULTILINE)
+_TEST_KAPSAM_TUR = {"BR": "İş kuralı", "AF": "Alternatif akış", "EF": "Hata akışı"}
+
+
+def _kabul_kriterleri_bolumu(metin: str) -> str | None:
+    """'Kabul Kriter' başlıklı bölümün içeriği (aynı/üst seviye sonraki başlığa kadar); yoksa None."""
+    m = re.search(r"^(#{1,4})\s+[^\n]*Kabul Kriter[^\n]*$", metin, re.MULTILINE | re.IGNORECASE)
+    if not m:
+        return None
+    seviye = len(m.group(1))
+    son = re.search(rf"^#{{1,{seviye}}}\s", metin[m.end():], re.MULTILINE)
+    return metin[m.end(): m.end() + son.start()] if son else metin[m.end():]
+
+
+def test_kapsam_denetimi(metin: str) -> str:
+    """Kabul kriteri olmayan BR/AF/EF'leri raporlar; bulgu yoksa (ya da AC bölümü yoksa) ''."""
+    ac = _kabul_kriterleri_bolumu(metin or "")
+    if ac is None:
+        return ""
+    tanimli = list(dict.fromkeys(_TEST_KAPSAM_TANIM.findall(metin)))
+    if not tanimli:
+        return ""
+    ac_idler = set(re.findall(r"\b(?:BR|AF|EF)-\d{2,4}\b", ac))
+    eksik = [i for i in tanimli if i not in ac_idler]
+    if not eksik:
+        return ""
+    satirlar = [f"| {i} | {_TEST_KAPSAM_TUR[i.split('-')[0]]} | Kabul kriterinde referans yok |" for i in eksik]
+    return (
+        "\n\n---\n\n## 🧪 Test Kapsam Denetimi\n\n"
+        f"_Deterministik tarama (0 token) — {len(tanimli) - len(eksik)}/{len(tanimli)} kural/akış kabul "
+        "kriteriyle kapsanıyor. Aşağıdakiler için test ekibi 'bunu nasıl doğrularım?' diye soracak: "
+        "kriter ekleyin (Bu adımı düzelt) ya da bilinçliyse yok sayın._\n\n"
+        "| ID | Tür | Durum |\n|---|---|---|\n" + "\n".join(satirlar) + "\n"
     )
 
 

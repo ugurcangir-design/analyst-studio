@@ -2971,7 +2971,7 @@ def pano_ozet():
                      "tamamlandi": wf.get("tamamlandi")},
         "onay": onay_adimi,
         "sorular": {"acik": ist.get("acik", 0) + ist.get("bekleniyor", 0), "kritik": ist.get("kritik_acik", 0),
-                    "uygulanmamis": ist.get("uygulanmamis", 0)},
+                    "zorunlu": ist.get("zorunlu_acik", 0), "uygulanmamis": ist.get("uygulanmamis", 0)},
         "bekleyen_revizyon": bekleyen_rev,
     })
 

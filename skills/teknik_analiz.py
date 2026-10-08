@@ -78,7 +78,10 @@ def _acik_sorular_prompt_olustur() -> str:
         "- Teknik analizde `[K: ❓ Belirsiz]` veya `⚠ VARSAYIM` işaretli her konu bir soru olmalı\n"
         "- Süreç analizinden gelen Q-XXX'lar teknik bağlamda hâlâ açıksa dahil et\n"
         "- Her soru BAĞIMSIZ cevaplanabilir ve tek konuya odaklı olmalı\n"
-        "- Önem sırasına göre (Kritik → Yüksek → Orta → Düşük) sırala\n\n"
+        "- Önem sırasına göre (Kritik → Yüksek → Orta → Düşük) sırala\n"
+        "- Cevapsız kalırsa veri kaybı/bozulması, başka ekran/rapor/entegrasyonun kırılması ya da testin "
+        "beklenen sonucunun bilinmemesi sonucunu doğuracak sorulara `- Zorunlu: Evet` satırı ekle "
+        "(özellikle 'Değişiklik Etkisi ve Veri Yaşam Döngüsü' bölümünde belirsiz kalan satırlar); diğerlerine yazma\n\n"
         "Çıktıyı TEK bir XML bloğu halinde ver:\n\n"
         f"<acik_sorular>\n{sorular}\n</acik_sorular>"
     )
@@ -242,6 +245,15 @@ def teknik_analiz_yap(ozel_atla: bool = False) -> tuple[Path, Path]:
             "süreç ID'sini karşılamalı.\n\n"
         )
     icerik_parcalari.append({"type": "text", "text": surec_girdi_talimati + surec_metni})
+    # Değişiklik Etkisi (0 token): süreçteki veri değişiklikleri → DB/API/cache karşılığı + olası tüketiciler.
+    try:
+        from .degisiklik_etkisi import degisiklik_blogu
+        _de_blok = degisiklik_blogu(surec_metni, hedef="teknik")
+        if _de_blok:
+            print("  🔁 Değişiklik etkisi sinyali — veri yaşam döngüsü + olası tüketiciler dahil ediliyor...")
+            icerik_parcalari.append({"type": "text", "text": _de_blok})
+    except Exception as _e:
+        print(f"  ⚠ Değişiklik etkisi taraması atlandı: {_e}")
     icerik_parcalari.append({"type": "text", "text": "Teknik analiz raporunu üret (açık sorular HARİÇ — onlar ayrı adımda)."})
 
     # ── AŞAMA 1: Sadece teknik analiz ──

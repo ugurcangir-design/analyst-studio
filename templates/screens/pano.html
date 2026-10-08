@@ -111,7 +111,7 @@
           `<button class="btn btn-outline btn-xs" onclick="switchTab('surec')">İzle</button>`));
       }else if(d.onay){
         k.push(kart('turn','Sıra sende',_pnChip('onay bekliyor','warn'),'<b>'+_pnEsc(d.onay.etiket)+'</b>',
-          `${so.kritik?'⚠ '+so.kritik+' kritik açık soru · ':''}${so.acik} açık soru · hedefli düzeltme için "Bu adımı düzelt"`,
+          `${so.zorunlu?'❗ '+so.zorunlu+' ZORUNLU soru cevapsız · ':''}${so.kritik?'⚠ '+so.kritik+' kritik açık soru · ':''}${so.acik} açık soru · hedefli düzeltme için "Bu adımı düzelt"`,
           `<button class="btn btn-primary btn-xs" onclick="switchTab('surec')">Onay adımına git</button> <button class="btn btn-outline btn-xs" onclick="switchTab('output','${_pnEsc(d.onay.dosya)}')">Dosyayı incele</button>`));
       }else if(w.tamamlandi){
         k.push(kart('ok','İş akışı',_pnChip('tamamlandı','ok'),'<b>Tamamlandı</b>','Yeni doküman yükleyerek yeni oturum başlatabilirsin.',
@@ -120,7 +120,7 @@
         k.push(kart('','İş akışı',_pnChip('hazır','neu'),'<b>Bekleyen iş yok</b>','Doküman yükleyip analize başla.',
           `<button class="btn btn-primary btn-xs" onclick="switchTab('surec')">Analize başla</button>`));
       }
-      k.push(kart(so.kritik?'turn':(so.acik?'':'ok'),'Açık sorular',so.kritik?_pnChip(so.kritik+' kritik','bad'):_pnChip(so.acik?'cevap bekliyor':'temiz',so.acik?'warn':'ok'),
+      k.push(kart((so.zorunlu||so.kritik)?'turn':(so.acik?'':'ok'),'Açık sorular',so.zorunlu?_pnChip(so.zorunlu+' zorunlu','bad'):so.kritik?_pnChip(so.kritik+' kritik','bad'):_pnChip(so.acik?'cevap bekliyor':'temiz',so.acik?'warn':'ok'),
         '<b>'+so.acik+'</b>',so.uygulanmamis?`${so.uygulanmamis} cevap henüz analize işlenmedi`:'Cevaplanan sorular hedefli olarak analize işlenir.',
         so.acik||so.uygulanmamis?`<button class="btn btn-outline btn-xs" onclick="switchTab('output','__sorular__')">Sorulara git</button>`:''));
       if(rev.length){

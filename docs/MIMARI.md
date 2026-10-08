@@ -16,6 +16,38 @@ Yeni output dosyası → `app.py` `IZIN_VERILEN_CIKTILAR` set'ine ekle.
   muğlak Türkçe ifadeleri ("hızlı", "kolay", "vb.", "gerektiğinde"…) satır no + nedenle raporlar;
   kod blokları/HTML yorumları atlanır, max 20 bulgu. Süreç + teknik + delta çıktılarının sonuna
   "🔎 Belirsizlik Denetimi" bölümü olarak eklenir.
+- **Değişiklik Etkisi & Veri Yaşam Döngüsü** (`skills/degisiklik_etkisi.py` — 0 token, base.py import ETMEZ):
+  `sinyaller(metin)` girdide veri değiştiren işlem arar (zorunluluk kaldırma · silme · alan/öğe kaldırma ·
+  pasife alma · güncelleme · tip/isim değişimi; Türkçe-katlanmış regex). Varsa `degisen_adaylari` değişen
+  öğe adlarını çıkarır (tırnaklı ad, "X alanı", camelCase/snake) → `tuketici_tara` bunları **Swagger**
+  (`reference/services/*.json` — parametre + istek/yanıt alanları, `$ref` çözümlü, `taxNumber`≈`tax_number`≈
+  "Tax Number" normalize) · **Confluence** (`*.md`) · **Jira** export'unda arar → **Olası Tüketiciler**
+  (aday başına sırayla dağıtım, ≤25 satır; sayfaların %40'ından fazlasında geçen genel aday atlanır).
+  `degisiklik_blogu(metin, hedef)` talimat + kontrol soruları + tüketici tablosunu döner (sinyal yoksa '',
+  hata → ''). Hedef yerleşimi: `surec` → "İlişkili Ekranlar/Etki Analizi"nden sonra `### Değişiklik Etkisi ve
+  Veri Yaşam Döngüsü` tablosu · `teknik` → §3 alt başlık + DB (§4 NOT NULL/FK ON DELETE/soft-delete/migration),
+  API (§5 geri uyum), cache/event (§6), her satıra §11 kriteri · `gorev` → §3 alt başlık · `gorev_hata` →
+  tablo YOK, `## Çözüm` altında tek `Etki:` maddesi (kısa mod korunur). Enjeksiyon kullanıcı mesajında
+  (cache breakpoint'inden SONRA — sistem promptu sabit kalır): süreç (girdi metni), teknik (surec-analizi.md),
+  görev (özet+açıklama; Jira Köprüsü + İnteraktif Analiz otomatik miras). Belirlenemeyen etki → `Zorunlu: Evet` soru.
+- **Testçi Gözü kuralları** (`_TEST_GOZU_KURALLARI`, base.py): `prompt_yukle` → `_prompt_ekleri` ile
+  `_TEST_GOZU_SKILL_IDS` (surec_analizi · teknik_analiz_bolumler · gorev_teknik_analiz) promptuna HER ZAMAN
+  eklenir (`prompts.json` override'ında da). Kabul kriteri kapsamı: her BR ≥1, her AF/EF ≥1 negatif kriter ·
+  sınır değerler · yetkili/yetkisiz rol · mevcut (eski) kayıtlar · **doğrulama noktası** (sonuç NEREDE
+  gözlemlenir — "başarılı olur" YASAK) · ön koşul/test verisi · kaynaksız beklenen değer → açık soru.
+  + **Zorunlu Açık Soru** kuralı. Özel prompt (ekrandan) yolunda EKLENMEZ (analistin tercihi).
+- **Zorunlu açık soru** (`- Zorunlu: Evet`): süreç/teknik soru şablonları + teknik açık-soru adımı + görev
+  açık-soru adımı bu alanı üretir. `sorular.zorunlu_mu` → parse `zorunlu: bool`; `istatistik.zorunlu_acik`;
+  `/api/pano.sorular.zorunlu`. UI: kırmızı **ZORUNLU** rozeti (Sorular sekmesi, onay kapısı kartları, Task
+  soru kartları), onay bağlamı + Ana Sayfa sayacı. **YUMUŞAK ENGEL** (`_zorunluSoruKapisi`): süreç onayı
+  (`onayla`) ve teknik onay (`teknikOnaylaFeBe/JiraIle/SizJira`) öncesi cevapsız zorunlu soru varsa
+  `confirm` — "yine de devam" serbest (sert kilit yok; hata → engellemez). Task: `_jgZorunluKapi`
+  (`jgJiraGuncelle` · `jgFeBeOnayla` · `jgYeniTaskAc`) + devam edilirse sorular task gövdesine
+  `## ❗ Cevap Bekleyen Zorunlu Sorular` olarak eklenir (geliştirici/test görür); `ornek_havuzu._temizle` bu
+  bölümü few-shot örneğinden çıkarır.
+- **Test Kapsam Denetimi** (`test_kapsam_denetimi`, base.py — 0 token): süreç analizinde TANIMLANAN
+  (tablo ilk hücresi / `**ID:**`) BR/AF/EF'lerden Kabul Kriterleri bölümünde referansı OLMAYANLARI
+  "🧪 Test Kapsam Denetimi" bölümü olarak sona ekler (belirsizlik denetimi deseni). Test: `tests/test_degisiklik_etkisi.py`.
 - **İzlenebilirlik Matrisi / RTM** (`izlenebilirlik_matrisi_olustur`, base.py — 0 token):
   süreç ID'si ↔ teknik analizde geçtiği bölüm başlıkları tablosu → `izlenebilirlik-matrisi.md`.
   Süreç metninde ID yoksa (özel prompt çıktısı) üretilmez.

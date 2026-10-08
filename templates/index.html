@@ -1038,6 +1038,7 @@ html[data-theme="light"] .jira-modal { background: rgba(245,247,250,.85); }
 .soru-pill.be   { background: rgba(168,85,247,.18); color: #6b21a8; }
 .soru-pill.febe { background: rgba(234,179,8,.18); color: #854d0e; }
 .soru-pill.kritik { background: rgba(239,68,68,.18); color: var(--red); }
+.soru-pill.zorunlu, .jg-sk-onem.zorunlu { background: var(--red); color: #fff; border-color: var(--red); font-weight: 700; letter-spacing: .3px; }
 .soru-pill.yuksek { background: rgba(234,179,8,.18); color: #854d0e; }
 
 .soru-kart-soru { font-size: 12.5px; color: var(--text2); margin-bottom: 8px; line-height: 1.55; }
@@ -5720,9 +5721,27 @@ function _jgSorulariAyristir(md) {
       onem: al('Önem'), bagli: al('Bağlı bölüm') || al('Bağlı'),
       soru: al('Soru') || (m[2] || '').trim(),
       beklenen: al('Beklenen yanıt') || al('Beklenen'),
+      zorunlu: /^\**\s*(evet|yes|true|e\b)/i.test(al('Zorunlu')),
     });
   }
   return sorular;
+}
+// ZORUNLU açık sorular (Task) — yumuşak engel: Jira'ya yazmadan önce uyar; analist devam derse
+// sorular task gövdesine "Cevap Bekleyen Zorunlu Sorular" başlığıyla eklenir (test/geliştirici görsün).
+function _jgZorunluSorular(acikMd) { return _jgSorulariAyristir(acikMd).filter(s => s.zorunlu); }
+function _jgZorunluEk(acikMd) {
+  const z = _jgZorunluSorular(acikMd);
+  if (!z.length) return '';
+  return '\n\n## ❗ Cevap Bekleyen Zorunlu Sorular\n'
+    + z.map(s => `- **${s.id}${s.baslik ? ' — ' + s.baslik : ''}:** ${s.soru || ''}`).join('\n') + '\n';
+}
+function _jgZorunluKapi(acikMdList, eylem) {
+  const z = acikMdList.flatMap(_jgZorunluSorular);
+  if (!z.length) return true;
+  return confirm(`⚠ ${z.length} ZORUNLU açık soru cevapsız:\n\n`
+    + z.slice(0, 8).map(s => `• ${s.id}: ${s.baslik || s.soru}`).join('\n') + (z.length > 8 ? '\n…' : '')
+    + `\n\nBu sorular cevaplanmadan ${eylem}. Sorular task'a "Cevap Bekleyen Zorunlu Sorular" başlığıyla eklenecek `
+    + `(geliştirici/test ekibi görsün).\n\nYine de devam edilsin mi?`);
 }
 // DOM'daki açık soru cevaplarını {qid: cevap} haritasına topla (geçişte korumak için).
 // Tek-kutu yedek varsa __tek__ anahtarıyla saklanır.
@@ -5757,7 +5776,7 @@ function _jgSorulariRender(md, cevaplar) {
     const cv = cevaplar[s.id] || '';   // önceden girilmiş cevabı geri yükle (FE/BE geçişi)
     return `
     <div class="jg-soru-kart ${cv.trim() ? 'cevapli' : ''}" data-qid="${escHtml(s.id)}">
-      <div><span class="jg-sk-id">${escHtml(s.id)}</span>${s.onem ? `<span class="jg-sk-onem ${onemSinif(s.onem)}">${escHtml(s.onem)}</span>` : ''}</div>
+      <div><span class="jg-sk-id">${escHtml(s.id)}</span>${s.zorunlu ? '<span class="jg-sk-onem zorunlu">ZORUNLU</span>' : ''}${s.onem ? `<span class="jg-sk-onem ${onemSinif(s.onem)}">${escHtml(s.onem)}</span>` : ''}</div>
       <div class="jg-sk-soru">${escHtml(s.soru || s.baslik)}</div>
       ${(s.bagli || s.beklenen) ? `<div class="jg-sk-detay">${s.bagli ? 'Bağlı: ' + escHtml(s.bagli) : ''}${s.bagli && s.beklenen ? ' · ' : ''}${s.beklenen ? 'Beklenen: ' + escHtml(s.beklenen) : ''}</div>` : ''}
       <textarea class="jg-editor jg-sk-cevap" data-qid="${escHtml(s.id)}" placeholder="Bu soruya cevabınız (boş = atla)"
@@ -5840,8 +5859,11 @@ async function jgJiraGuncelle() {
   if (_jgMesgul()) { toast('İşlem sürüyor — bitince Jira güncellenebilir', 'info'); return; }   // op bitmeden Jira'ya YAZMA
   // FE+BE ayrı analiz akışı → tek task güncelleme yerine iki-task (BE orijinale, FE yeni) yolu
   if ((_jgAnalizSeti[_jgAktifAnalizKey] || {}).feBeKaynak) return jgFeBeOnayla();
-  const markdown = document.getElementById('jg-preview-editor').value.trim();
+  let markdown = document.getElementById('jg-preview-editor').value.trim();
   if (!markdown) { _jgMsg('jg-preview-msg', 'İçerik boş.', 'err'); return; }
+  const _acik = (_jgAnalizSeti[_jgAktifAnalizKey] || {}).acik_sorular || '';
+  if (!_jgZorunluKapi([_acik], 'analiz Jira\'ya yazılacak')) return;
+  markdown += _jgZorunluEk(_acik);
   if (!confirm(`${_jgCurrent.key} görevinin Jira açıklaması ÜZERİNE YAZILACAK. Devam edilsin mi?`)) return;
   const btn = document.getElementById('jg-approve-btn');
   btn.disabled = true;
@@ -5869,8 +5891,10 @@ async function jgFeBeOnayla() {
   _jgEditorKaydet(_jgAktifAnalizKey);
   const kaynak = (_jgAnalizSeti[_jgAktifAnalizKey] || {}).feBeKaynak;
   const be = _jgAnalizSeti[kaynak] || {}, fe = _jgAnalizSeti[kaynak + '::FE'] || {};
-  const be_md = (be.markdown || '').trim(), fe_md = (fe.markdown || '').trim();
+  let be_md = (be.markdown || '').trim(), fe_md = (fe.markdown || '').trim();
   if (!be_md || !fe_md) { _jgMsg('jg-preview-msg', 'BE ve FE analizleri dolu olmalı.', 'err'); return; }
+  if (!_jgZorunluKapi([be.acik_sorular || '', fe.acik_sorular || ''], 'BE/FE task\'ları yazılacak')) return;
+  be_md += _jgZorunluEk(be.acik_sorular || ''); fe_md += _jgZorunluEk(fe.acik_sorular || '');
   if (!confirm(`${kaynak}: BE analizi bu task'a yazılacak (başlık "BE - …"), FE analizi YENİ bir Task olarak açılacak (başlık "FE - …") ve BE→FE Blocks bağı kurulacak. Devam edilsin mi?`)) return;
   const btn = document.getElementById('jg-approve-btn'); btn.disabled = true;
   _jgMsg('jg-preview-msg', 'İki task işleniyor (BE güncelle + FE aç)…');
@@ -6271,11 +6295,15 @@ async function jgYeniTaskAc() {
   if (fb) {
     const be_md = (fb.be.markdown || '').trim(), fe_md = (fb.fe.markdown || '').trim();
     if (!be_md || !fe_md) { _jgMsg('jg-yt-msg', 'BE ve FE analizleri dolu olmalı.', 'err'); return; }
-    body = { proje, mode: 'fe-be', be_markdown: be_md, fe_markdown: fe_md, baslik, ust_key: ust, kaynak_key: fb.kaynak };
+    if (!_jgZorunluKapi([fb.be.acik_sorular || '', fb.fe.acik_sorular || ''], 'yeni task\'lar açılacak')) return;
+    body = { proje, mode: 'fe-be', be_markdown: be_md + _jgZorunluEk(fb.be.acik_sorular || ''),
+             fe_markdown: fe_md + _jgZorunluEk(fb.fe.acik_sorular || ''), baslik, ust_key: ust, kaynak_key: fb.kaynak };
   } else {
     const md = (ed ? ed.value : (_jgAnalizSeti[_jgAktifAnalizKey] || {}).markdown || '').trim();
     if (!md) { _jgMsg('jg-yt-msg', 'İçerik boş.', 'err'); return; }
-    body = { proje, mode: 'tek', markdown: md, baslik, ust_key: ust, kaynak_key: _jgCurrent.key };
+    const _acik = (_jgAnalizSeti[_jgAktifAnalizKey] || {}).acik_sorular || '';
+    if (!_jgZorunluKapi([_acik], 'yeni task açılacak')) return;
+    body = { proje, mode: 'tek', markdown: md + _jgZorunluEk(_acik), baslik, ust_key: ust, kaynak_key: _jgCurrent.key };
   }
   const ustTxt = ust ? ` ve ${ust.toUpperCase()}'a ilişkili` : '';
   const adet = fb ? '2 yeni Task (BE + FE)' : 'yeni bir Task';
@@ -7647,6 +7675,7 @@ async function surecleriSifirla() {
 
 // ─── Approval ────────────────────────────────────────────────────────────────
 async function onayla() {
+  if (!await _zorunluSoruKapisi(['surec-analizi.md'], 'süreç analizi onaylanıp teknik analize geçilecek')) return;
   // Onay → teknik analiz otomatik başlar; analist süreç analizi beklerken
   // özel promptu/filtreyi değiştirmiş olabilir — ekrandaki son hali kaydet
   // (aksi halde teknik analiz eski değerle, örn. boş özel promptla çalışır).
@@ -7719,6 +7748,7 @@ async function _onayBaglamYukle(adim) {
     if (!d.ok) return;
     const so = d.sorular || {}, rev = d.bekleyen_revizyon || [];
     const parca = [];
+    if (so.zorunlu) parca.push(`<span style="color:var(--red);font-weight:700">❗ ${so.zorunlu} ZORUNLU soru cevapsız</span>`);
     if (so.kritik) parca.push(`<span style="color:var(--red)">⚠ ${so.kritik} kritik açık soru</span>`);
     parca.push(`${so.acik} açık soru`);
     if (so.uygulanmamis) parca.push(`<span style="color:var(--yellow)">${so.uygulanmamis} cevap analize işlenmedi</span>`);
@@ -7757,7 +7787,7 @@ function _onaySoruKart(s) {
   const onem = (typeof _oncelikRozet === 'function') ? _oncelikRozet(s.oncelik) : '';
   const mevcut = (s.durum === 'cevaplandi' && s.cevap) ? s.cevap : (s.durum === 'varsayim' && s.varsayim) ? s.varsayim : '';
   return `<div class="jg-soru-kart" data-qid="${escHtml(s.id)}">
-      <div><span class="jg-sk-id">${escHtml(s.id)}</span>${onem}${s.durum === 'bekleniyor' ? '<span class="jg-sk-onem">beklet</span>' : ''}</div>
+      <div><span class="jg-sk-id">${escHtml(s.id)}</span>${_zorunluRozet(s.zorunlu)}${onem}${s.durum === 'bekleniyor' ? '<span class="jg-sk-onem">beklet</span>' : ''}</div>
       <div class="jg-sk-soru">${escHtml(s.soru || s.baslik || s.id)}</div>
       ${s.bagli_id ? `<div class="jg-sk-detay">Bağlı: ${escHtml(s.bagli_id)}</div>` : ''}
       <textarea class="jg-editor jg-sk-cevap" data-id="${escHtml(s.id)}" data-kaynak="${escHtml(s.kaynak_dosya)}"
@@ -8352,7 +8382,10 @@ let _febeAktifJob = null;   // çalışan önizleme işinin id'si (iptal/yeniden
 // Süreç ekranı "Evet — FE/BE Task'larını Öner": önce PROMPT ekranı açılır.
 // Analist bölmeyi tarif eder → "Task'lara Böl" → önizleme. Beğenmezse prompt'a döner.
 // Workflow, task'lar GERÇEKTEN açıldıktan sonra bitirilir (febeOnayla içinde).
-function teknikOnaylaFeBe() { febeModalAc('teknik-analiz.md'); }
+async function teknikOnaylaFeBe() {
+  if (!await _zorunluSoruKapisi(_ZORUNLU_TEKNIK_DOSYALAR, "teknik analiz onaylanıp Jira task'ları açılacak")) return;
+  febeModalAc('teknik-analiz.md');
+}
 
 // İki durum: 'prompt' (bölme talimatı gir) / 'preview' (oluşan task'lar)
 function _febeView(view) {
@@ -8743,6 +8776,25 @@ function _katmanRozet(k) {
   return `<span class="soru-pill ${cls}">${lbl}</span>`;
 }
 
+// Zorunlu açık soru rozeti — cevapsız kalırsa geliştirme/test yanlış davranış üretir.
+function _zorunluRozet(z) { return z ? `<span class="soru-pill zorunlu" title="Cevapsız kalırsa veri kaybı/kırılma/yanlış test riski">ZORUNLU</span>` : ''; }
+
+// YUMUŞAK ENGEL: verilen analiz dosyalarında cevapsız ZORUNLU soru varsa onay öncesi uyarır;
+// analist "yine de devam" diyebilir (sert kilit yok). Hata/erişilemezse akışı ENGELLEMEZ.
+async function _zorunluSoruKapisi(dosyalar, eylem) {
+  try {
+    const d = await (await fetch('/api/sorular')).json();
+    const z = (d.sorular || []).filter(s => s.zorunlu && ['acik', 'bekleniyor'].includes(s.durum || 'acik')
+                                         && (!dosyalar || dosyalar.includes(s.kaynak_dosya)));
+    if (!z.length) return true;
+    return confirm(`⚠ ${z.length} ZORUNLU açık soru cevapsız:\n\n`
+      + z.slice(0, 8).map(s => `• ${s.id}: ${s.baslik || s.soru || ''}`).join('\n') + (z.length > 8 ? '\n…' : '')
+      + `\n\nBu sorular cevaplanmadan ${eylem} — geliştirme/test eksik bilgiyle ilerleyebilir `
+      + `(veri kaybı, başka ekranın kırılması, yanlış test beklentisi).\n\nYine de devam edilsin mi?`);
+  } catch (e) { return true; }
+}
+const _ZORUNLU_TEKNIK_DOSYALAR = ['surec-analizi.md', 'teknik-analiz.md', 'acik-sorular.md'];
+
 function _oncelikRozet(o) {
   if (!o) return '';
   const O = String(o).toLowerCase();
@@ -8820,6 +8872,7 @@ function _soruKart(s) {
   return `<div class="soru-kart ${dur}" data-id="${escHtml(s.id)}" data-kaynak="${escHtml(s.kaynak_dosya)}">
     <div class="soru-kart-baslik">
       <span class="soru-id">${escHtml(s.id)}</span>
+      ${_zorunluRozet(s.zorunlu)}
       ${_oncelikRozet(s.oncelik)}
       ${_katmanRozet(s.katman)}
       <span class="soru-baslik-txt">${escHtml(s.baslik || s.soru || '')}</span>
@@ -9852,6 +9905,7 @@ function teknikOnayGeri() {
 }
 
 async function teknikOnaylaJiraIle() {
+  if (!await _zorunluSoruKapisi(_ZORUNLU_TEKNIK_DOSYALAR, "teknik analiz onaylanıp Jira task'ı açılacak")) return;
   const r = await fetch('/api/approve-teknik', {method:'POST'});
   const d = await r.json();
   if (!r.ok) { toast(d.error, 'error'); return; }
@@ -9860,6 +9914,7 @@ async function teknikOnaylaJiraIle() {
 }
 
 async function teknikOnaylaSizJira() {
+  if (!await _zorunluSoruKapisi(_ZORUNLU_TEKNIK_DOSYALAR, 'teknik analiz tamamlanacak')) return;
   const r = await fetch('/api/approve-teknik-no-jira', {method:'POST'});
   const d = await r.json();
   if (!r.ok) { toast(d.error, 'error'); return; }

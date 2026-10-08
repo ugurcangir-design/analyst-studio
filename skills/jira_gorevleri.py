@@ -958,6 +958,17 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
             "- Hedef: geliştirici 20 saniyede okuyup ne yapacağını anlasın. Doğruluk/kaynak-etiketi kuralları "
             "yine geçerli ama KISA."
         )})
+    # Değişiklik Etkisi (0 token): görev zorunluluk kaldırma/silme/güncelleme… içeriyorsa veri yaşam
+    # döngüsü talimatı + referanslardaki OLASI TÜKETİCİLER. Hata modunda tek 'Etki:' maddesi (kısa kalır).
+    try:
+        from .degisiklik_etkisi import degisiklik_blogu
+        _de_blok = degisiklik_blogu(f"{gorev.get('summary', '')}\n{gorev.get('description', '') or ''}",
+                                    hedef="gorev_hata" if _hata_gorev_mi(gorev) else "gorev")
+        if _de_blok:
+            print("  🔁 Değişiklik etkisi sinyali — veri yaşam döngüsü + olası tüketiciler dahil ediliyor...")
+            icerik.append({"type": "text", "text": _de_blok})
+    except Exception as _e:
+        print(f"  ⚠ Değişiklik etkisi taraması atlandı: {_e}")
     # Few-shot: onaylı EKİP örneklerinden stil/derinlik referansı (Task analizi de havuzdan öğrenir).
     try:
         from .ornek_havuzu import ornek_bloklari
@@ -1232,12 +1243,16 @@ def _gorev_acik_sorular_uret(teknik_metni: str, gorev: dict,
         "- Yalnız `[K: ❓ Belirsiz]`/`⚠ VARSAYIM` işaretli VE geliştirmeyi BLOKLAYAN konular soru olur; "
         "tercihe bağlı/kozmetik/küçük konu için SORU ÜRETME.\n"
         "- Önem: Kritik/Yüksek öncelikli; Orta/Düşük ancak gerçekten gerekiyorsa. **EN FAZLA 6 soru.**\n"
+        "- Cevapsız kalırsa veri kaybı/bozulması, başka ekran/rapor/entegrasyonun kırılması ya da testin beklenen "
+        "sonucunun bilinmemesi doğacaksa (özellikle 'Değişiklik Etkisi' belirsizlikleri) soruya `- Zorunlu: Evet` "
+        "satırı ekle; diğerlerine yazma. Zorunlu sorular yakınsamada da cevaplanana kadar KORUNUR.\n"
         "- Soru bağımsız cevaplanabilir, tek konuya odaklı olmalı.\n"
         "- Hiç bloklayan belirsizlik yoksa SADECE şu satırı dön: 'Açık soru tespit edilmedi.'\n\n"
         "Çıktı Türkçe Markdown, XML bloğu içinde:\n\n"
         "<acik_sorular>\n"
         "### Q-T-001: [Başlık]\n"
         "- Önem: Kritik / Yüksek / Orta / Düşük\n"
+        "- Zorunlu: Evet (yalnız zorunluysa)\n"
         "- Bağlı bölüm: [§5 API / §4 DB / vb.]\n"
         "- Soru: [tek cümle]\n"
         "- Beklenen yanıt: [alan tipi / değer kümesi / karar]\n"

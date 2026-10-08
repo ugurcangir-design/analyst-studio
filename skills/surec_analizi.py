@@ -4,7 +4,7 @@ from pathlib import Path
 from .base import (
     _api_cagri, _kaydet, input_hazirla, prompt_yukle, ozel_prompt_oku,
     _domain_kurallari_oku,
-    OZEL_PROMPT_DOGRULUK_EKI, belirsizlik_denetimi, ai_ara_sozleri_temizle,
+    OZEL_PROMPT_DOGRULUK_EKI, belirsizlik_denetimi, test_kapsam_denetimi, ai_ara_sozleri_temizle,
     referans_dosyalari_hazirla, _ref_bloklari_olustur,
     canli_uygulama_baglami_hazirla,
     yonetici_ozeti_olustur,
@@ -84,6 +84,18 @@ def surec_analizi_yap(icerik_override: list | None = None,
         icerik_parcalari[-1]["cache_control"] = {"type": "ephemeral"}
 
     icerik_parcalari.extend(icerik)
+    # Değişiklik Etkisi (0 token): girdide zorunluluk kaldırma/silme/güncelleme… varsa veri yaşam
+    # döngüsü talimatı + referanslardaki OLASI TÜKETİCİLER (Swagger/Confluence/Jira) eklenir.
+    try:
+        from .degisiklik_etkisi import degisiklik_blogu
+        _girdi = (" ".join(p.get("text", "") for p in icerik if isinstance(p, dict) and p.get("type") == "text")
+                  if isinstance(icerik, list) else str(icerik))
+        _de_blok = degisiklik_blogu(_girdi, hedef="surec")
+        if _de_blok:
+            print("  🔁 Değişiklik etkisi sinyali — veri yaşam döngüsü + olası tüketiciler dahil ediliyor...")
+            icerik_parcalari.append({"type": "text", "text": _de_blok})
+    except Exception as _e:
+        print(f"  ⚠ Değişiklik etkisi taraması atlandı: {_e}")
     icerik_parcalari.append({
         "type": "text",
         "text": "Yukarıdaki ana dokümanı (varsa referanslarla birlikte) analiz et ve süreç analizi raporunu üret.",
@@ -109,5 +121,10 @@ def surec_analizi_yap(icerik_override: list | None = None,
 
     # Yönetici Özeti (TL;DR) — analist hızlı tarayıp onaylasın. Süreç analizi Jira'ya
     # gitmez ama tutarlılık için aynı format (açık sorular doküman içinde, tablo formatı).
+    # Test Kapsam Denetimi — deterministik, 0 token: kabul kriteri olmayan BR/AF/EF'ler.
+    test_kapsam = test_kapsam_denetimi(yanit)
+    if test_kapsam:
+        print("  🧪 Test kapsam denetimi: kabul kriterinde karşılığı olmayan kural/akışlar — rapora eklendi.")
+
     ozet = yonetici_ozeti_olustur(yanit)
-    return _kaydet("surec-analizi.md", ozet + yanit + belirsizlik)
+    return _kaydet("surec-analizi.md", ozet + yanit + belirsizlik + test_kapsam)
