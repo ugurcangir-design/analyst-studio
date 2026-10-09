@@ -412,14 +412,22 @@ takip-Excel senkron akışı — upload + cerrahi lxml yazımı — bu sürümde
     eslesmeyen_hedef` (+`hedef_iptal`, `eslesmeyen_hedef_aktif/_tamam`) · `bag` = UAT↔task çifti (eski `eslesen`
     satır sayısı — geriye uyum için durur; bir UAT 26 task'a, bir task birden çok UAT'a bağlanabildiği için task
     sayısı DEĞİL) · `takip{}` (toplamı = uat_toplam) · `backlog_analiz{yapildi,kismi,yok}` (Backlog'daki tekil
-    eşleşen task'lar). **Epic modu:** yalnız epic altı sayılır; kapsam dışından Jira linkiyle gelen task UAT'ı
+    eşleşen task'lar). **Story/Hikaye analiz EDİLMEZ** (kapsayıcı — hiçbir zaman hedef satırı olmaz); analiz
+    durumu Story'nin alt/bağlı task'larından hesaplanır. **Story genişletme:** UAT bir Story'ye bağlı ama Story'nin
+    task'ları taranan kapsamda yoksa (ör. epic modunda Story başka epic'te) `alt_gorevleri_cek(story)` ile alt
+    task'lar çekilir (hedef board, kapsayıcı/iptal hariç) → Story köprüsüyle eşleşir, `hedef_kapsam_disi` (toplama
+    girmez) → UAT "açıkta/analiz yok" sanılmaz. **Epic modu:** yalnız epic altı sayılır; kapsam dışından Jira linkiyle gelen task UAT'ı
     eşleştirir (iş takip ediliyor) ama `kapsam_disi_hedef` olarak AYRI sayılır, toplama girmez. **Tüm board
     modunda** eşleşmeyen TRADE/OPS = "UAT dışı proje işi" (sönük, problem değil).
-  - **UI:** kartlar 3 bölüm — UAT takip hunisi (aşama kartları, denklemli başlık) · Backlog'daki eşleşen task'lar
-    (Analiz yapıldı/Kısmi/Yok) · Mutabakat (tekil task + bağ, iptal kırılımı, toplam denklemleri). Kart tıklaması
-    (`_bsKartFiltre` → `bsTakipFiltre`/`bsAnalizFiltre`) ilgili grubu gösterir VE tablo başlık seçicisini
-    ayarlar (Takip · Durum=Backlog + Analiz); tekrar tıklama sıfırlar. Tablolarda **Takip** (UAT) ve **Analiz**
-    (hedef; tooltip = dolu başlıklar) kolonları + filtreleri; gruplu satırda "x/y analizli". **Excel:** ilk sayfa
+  - **UI (kompakt):** iki panel yan yana (`.bs-pano`: **UAT takibi** aşama sayaçları · **Backlog'daki task'lar**
+    Analizli/Kısmi/Analizsiz; `.bs-adim`) + altta **mutabakat satırları** (`.bs-msatir`: UAT ve TRADE/OPS toplam =
+    eşleşen + teyit + eşleşmeyen tıklanabilir `.bs-pil`, iptal satırı). Tüm tıklanabilirler `.bs-tik` + `data-grup`
+    (aktif vurgusu). Kart → `_bsKartFiltre` (`bsTakipFiltre`/`bsAnalizFiltre`): grubu gösterir + filtre ayarlar;
+    satırı olmayan grup gizlenir; tekrar tıklama sıfırlar. **UAT Takip KOLONU YOK** — aşama filtresi gizli
+    (`_bsGizliFiltre[tid]`, satırda `data-ftakip`). **Tablolar yatay kaydırmasız:** `table-layout: fixed` + yüzde
+    `colgroup`, key+özet tek hücre (`_bsKeyOzet`, özet 2 satır), Story hedef hücresinde, gerekçe eşleşme
+    rozetinin ipucunda (`_bsEslesmeKisa`); başlıklar tek biçim (alta hizalı, büyük harf). Hedef **Analiz** kolonu
+    (ipucu = dolu başlıklar) + filtresi; gruplu satırda "x/y analizli". **Excel:** ilk sayfa
     **Özet** (denklemler + huni + backlog analiz) + Takip/Analiz/Dolu Başlıklar kolonları.
   Test: `tests/test_backlog_analiz.py` (Jira MOCK, 0 token).
 - **Endpoint'ler:** `POST /api/backlog/mutabakat` (config → kova JSON) · `POST /api/backlog/export`

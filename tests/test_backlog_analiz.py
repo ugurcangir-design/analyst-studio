@@ -120,6 +120,36 @@ chk("UAT-9 eşleşti (iş takip ediliyor) ama task 'kapsam dışı'", r99 and r9
 chk("kapsam dışı ayrı sayıldı, hedef denklemi yine kapanır", s["kapsam_disi_hedef"] == 1
     and s["hedef_toplam"] == s["hedef_eslesen"] + s["hedef_aday"] + s["eslesmeyen_hedef"], s)
 
+print("4b) Story genişletme — Story analiz edilmez, alt task'ları sayılır")
+# UAT-10 kapsam DIŞINDAKİ bir Story'ye (TR-S1, Hikaye) bağlı; Story'nin alt task'ları kapsamda yok.
+_u10 = g("UAT-10")
+_u10["baglantililar"] = [{"key": "TR-S1", "iliski": "relates to", "type": "Hikaye"}]
+UAT.append(_u10)
+B._jql_ara = lambda jql, c: [dict(x) for x in UAT] if "UAT" in jql else []
+_cagri = []
+
+
+def _alt(key):
+    _cagri.append(key)
+    return [g("TR-S1a", desc=TEKNIK), g("TR-S1b", desc=TEKNIK, status="Devam Ediyor"),
+            g("TR-S1x", tip="Hikaye"), g("UAT-999"), g("TR-S1c", status="İptal Edildi")]
+
+
+B.alt_gorevleri_cek = _alt
+B._keyleri_cek = lambda keys, c: [g(k, desc=TEKNIK, tip="Hikaye" if k == "TR-S1" else "Görev") for k in keys]
+d = B.mutabakat("UAT", ["TR"], "epic", hedef_keys=["TR-500"])
+s = d["sayimlar"]
+r10 = [r for r in d["eslesenler"] if r["uat_key"] == "UAT-10"]
+chk("Story alt task'ları çekildi (kapsam dışı Story için)", "TR-S1" in _cagri, _cagri)
+chk("UAT-10 → yalnız gerçek alt task'lar (Story/iptal/UAT/başka proje hariç)",
+    sorted(r["hedef_key"] for r in r10) == ["TR-S1a", "TR-S1b"], [r["hedef_key"] for r in r10])
+chk("Story köprüsü gerekçesi + kapsam dışı işareti", r10 and all("Story köprüsü" in r["gerekce"] and r["hedef_kapsam_disi"] for r in r10))
+chk("UAT-10 'açıkta/analiz yok' DEĞİL → alt task analizine göre atamaya hazır",
+    r10 and r10[0]["takip_kod"] == "atamaya_hazir", r10[0]["takip_kod"] if r10 else None)
+chk("Story'nin kendisi hiçbir yerde hedef değil", all(r["hedef_key"] != "TR-S1" for r in d["eslesenler"] + d["adaylar"]))
+chk("denklemler yine kapanır", s["uat_toplam"] == s["uat_eslesen"] + s["uat_aday"] + s["eslesmeyen_uat"]
+    and s["hedef_toplam"] == s["hedef_eslesen"] + s["hedef_aday"] + s["eslesmeyen_hedef"], s)
+
 print("5) Excel")
 from openpyxl import load_workbook  # noqa: E402
 yol = B.rapor_uret(d, tempfile.mkdtemp())

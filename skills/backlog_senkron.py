@@ -521,6 +521,30 @@ def mutabakat(uat_proje: str = VARSAYILAN_UAT,
     for h in hedef_gorevler:
         for skey in _hedef_story_baglari(h):
             hedef_koprusu[skey].add(h["key"])
+    # 1b'. STORY GENİŞLETME: Story'ler analiz EDİLMEZ — iş, altındaki/bağlı task'larda yapılır. UAT bir
+    # Story'ye bağlı ama o Story'nin task'ları taranan kapsamda YOKSA (ör. epic modunda Story başka epic'te)
+    # alt task'ları Jira'dan çekilir ve kapsam dışı olarak eşleşmeye eklenir → UAT "açıkta/analiz yok"
+    # sanılmaz; analiz durumu alt task'lardan hesaplanır. Toplamlara girmez (kapsam_disi_hedef).
+    for skey in sorted(uat_koprusu):
+        if hedef_koprusu.get(skey):
+            continue
+        try:
+            cocuklar = alt_gorevleri_cek(skey)
+        except Exception:
+            logger.warning("Story alt task'ları çekilemedi (atlanıyor): %s", skey)
+            continue
+        for c in cocuklar:
+            ck = c.get("key", "")
+            if (not ck or ck.split("-", 1)[0] not in _kopru_proje_set or _kapsayici_tip_mi(c)
+                    or _iptal_statusu_mu(c.get("status", ""))):
+                continue
+            if ck not in hedef_index:
+                c.setdefault("_story", skey)
+                link_hedef_index.setdefault(ck, c)
+            hedef_koprusu[skey].add(ck)
+    if any(k not in hedef_index for ks in hedef_koprusu.values() for k in ks):
+        logger.info("Story genişletme: kapsam dışı Story alt task'ları eşleştirmeye eklendi.")
+
     kopru_sayisi = 0
     for skey, us in uat_koprusu.items():
         hs = hedef_koprusu.get(skey)
