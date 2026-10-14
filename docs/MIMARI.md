@@ -434,6 +434,31 @@ takip-Excel senkron akışı — upload + cerrahi lxml yazımı — bu sürümde
   (sonuç body → `{dosya}`) · `GET /api/backlog/indir/<dosya>` (binary `send_file`). Dosyalar `backlog/`
   altında (gitignore). Bağımlılık: `openpyxl` (requirements.txt).
 
+### UAT Durum Senkronu (`skills/uat_durum_senkron.py` + UAT Mutabakat ekranındaki `#us-panel`)
+TRADE/OPS task'ı geliştirmeye alınınca ilişkili UAT task'ını Jira'da **'Devam Ediyor'a TAŞIR** (analist elle güncellemez).
+- **Kural (owner kararı):** UAT task'ı **Backlog / Yapılacaklar**'da (`uat_kaynak_durumlar`; Hold/Tamam/İptal'e DOKUNULMAZ,
+  geri yön YOK, UAT tarafındaki Epic/Story kalem sayılmaz) + **DOĞRUDAN Jira linkiyle** bağlı (Story köprüsü KULLANILMAZ,
+  Epic/Story tipli link sayılmaz) TRADE/OPS task'ı **Devam Ediyor ve sonrası** (`tetik_durumlar`: Devam Ediyor, Test,
+  READY FOR TEST, TEST BLOCKED, UAT, Tamam…; iptal hariç) → `hedef_durum` ('Devam Ediyor'). Bağlı task'ın durumu
+  issue-link verisinde gelir (`_issuelink_ayikla.durum`) → tek JQL (`project=UAT AND status IN (Backlog, Yapılacaklar)`),
+  ek okuma yok. `plan_hesapla` deterministik (Jira'ya yazmaz).
+- **Taşıma (`tasi`):** `GET /issue/{key}/transitions` → hedef duruma giden geçiş (`to.name`, yoksa geçiş adı) →
+  `POST .../transitions` (204) + `jira_kopru.jira_yorum_ekle` ile "🤖 Analyst Studio — otomatik durum güncellemesi:
+  …" yorumu. Geçiş yoksa net hata (mümkün geçişler listelenir), yazma yok. İdempotent: yalnız hâlâ Backlog/Yapılacaklar
+  olan UAT taşınır → birden çok makinede açık olsa da çift işlem olmaz.
+- **Güvenli devreye alma:** varsayılan **KAPALI** + **rapor modu** (`mod:'rapor'` — "şunları taşıyacaktım" listesi,
+  Jira'ya YAZMAZ); analist "Otomatiğe geç" (onaylı) → `mod:'otomatik'`. Ayar `reference/uat_senkron.json`
+  (makine-yerel, **gitignore**); durum/plan/sonuç/geçmiş (son 300) `output/uat-senkron/durum.json`.
+- **Zamanlama (app.py):** `_uat_senkron_dongusu` boot'ta HER ZAMAN başlar, ayarı dakikada bir okur (ekrandan aç/kapa
+  restart istemez); `sira_geldi_mi` (aktif + `aralik_sn` vars. 7200 = 2 saat, alt sınır 600) dolunca `tur()`. Hata →
+  `hata_kaydet` (tur zamanını DEĞİŞTİRMEZ) + 10 dk sonra tekrar. `_uat_senkron_lock` tek tur. Taşınan varsa yerel
+  bildirim. **Yalnız uygulama açıkken çalışır** (Jira Köprüsü gibi). 0 token.
+- **Uçlar** (kimlik-gate `/api/uat-senkron`): `GET /api/uat-senkron/durum` · `POST /api/uat-senkron/ayar {aktif?, mod?,
+  aralik_sn?}` · `POST /api/uat-senkron/calistir {uygula: true|false|null}` (arka plan; null = ayardaki mod; 409 sürüyorsa).
+- **UI:** durum satırı (Kapalı/Rapor/Otomatik · son/sonraki kontrol · son hata) + Aç/Kapat · "Şimdi kontrol et (rapor)" ·
+  "Otomatiğe geç" / "Rapor moduna dön" · rapor listesi varken "Bu listeyi şimdi uygula" (onaylı) · son tur sonuç tablosu ·
+  Geçmiş. Test: `tests/test_uat_senkron.py` (Jira MOCK — rapor modunda yazma YOK doğrulanır).
+
 ## Jira Görevleri Özelliği (`skills/jira_gorevleri.py` + UI `page-jira-gorevler`)
 Doküman yüklemeden, **mevcut** Jira Epic/Story altındaki görevleri çekip triyaj eder.
 - **Çekme — İKİ AŞAMALI (keşif + taze okuma):**

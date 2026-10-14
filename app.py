@@ -263,7 +263,7 @@ _KIMLIK_GEREKLI_ONEKLER = (
     "/api/mockup/generate", "/api/jira/gorev", "/api/jira/fe-be",
     "/api/jira/hierarchy", "/api/approve-teknik", "/api/jira-kopru",
     "/api/sorular/uygula", "/api/adim/duzelt", "/api/geri-don",
-    "/api/sohbet", "/api/ornekler",
+    "/api/sohbet", "/api/ornekler", "/api/uat-senkron",
 )
 
 
@@ -2842,6 +2842,110 @@ def _analiz_bildirim_baslat() -> None:
         return
     threading.Thread(target=_analiz_bildirim_dongusu, daemon=True, name="analiz-bildirim").start()
     logger.info("Analiz yaşam döngüsü bildirimleri açık (yerel masaüstü).")
+
+
+# ─── UAT Durum Senkronu (skills/uat_durum_senkron.py) ────────────────────────
+# TRADE/OPS task'ı geliştirmeye alınınca doğrudan linkli UAT task'ını 'Devam Ediyor'a taşır. Döngü HER ZAMAN
+# başlar ama ayarı her dakika okur → ekrandan açıp kapatmak restart gerektirmez. Aralık (vars. 2 saat) dolunca
+# tur atar; hata olursa 10 dk sonra yeniden dener. Yalnız Jira REST (0 token) — analiz işini beklemez.
+_uat_senkron_lock = threading.Lock()
+
+
+def _uat_senkron_calistir(uygula: bool | None = None) -> dict | None:
+    from skills import uat_durum_senkron as us
+    if not _uat_senkron_lock.acquire(blocking=False):
+        return None   # tur zaten sürüyor
+    try:
+        d = us.tur(uygula=uygula)
+        if d.get("tasinan"):
+            try:
+                from skills import bildirim
+                bildirim.gonder("UAT durum senkronu",
+                                f"{d['tasinan']} UAT task'ı 'Devam Ediyor'a alındı (geliştirmeye alınan task'lar).")
+            except Exception:
+                pass
+        return d
+    except Exception as e:
+        logger.warning("UAT senkron turu hatası: %s", e)
+        us.hata_kaydet(str(e))
+        raise
+    finally:
+        _uat_senkron_lock.release()
+
+
+def _uat_senkron_dongusu() -> None:
+    from skills import uat_durum_senkron as us
+    time.sleep(150)   # boot + güncelleme + diğer döngüler önce otursun
+    while True:
+        bekle = 60
+        try:
+            if us.sira_geldi_mi():
+                _uat_senkron_calistir()
+        except Exception:
+            bekle = 600   # bağlantı/OAuth hatası → 10 dk sonra tekrar dene (aralığın tamamını bekleme)
+        time.sleep(bekle)
+
+
+def _uat_senkron_baslat() -> None:
+    threading.Thread(target=_uat_senkron_dongusu, daemon=True, name="uat-senkron").start()
+    try:
+        from skills import uat_durum_senkron as us
+        a = us.ayarlar()
+        logger.info("UAT Durum Senkronu döngüsü başladı (%s, mod=%s, aralık %ss).",
+                    "AÇIK" if a["aktif"] else "kapalı", a["mod"], a["aralik_sn"])
+    except Exception:
+        pass
+
+
+@app.route("/api/uat-senkron/durum", methods=["GET"])
+def uat_senkron_durum():
+    from skills import uat_durum_senkron as us
+    d = us.durum_oku()
+    a = us.ayarlar()
+    son = d.get("son_tur_ts") or 0
+    return jsonify({"ok": True, "ayar": a, "calisiyor": _uat_senkron_lock.locked(),
+                     "son_tur_ts": son or None, "sonraki_ts": (son + a["aralik_sn"]) if (a["aktif"] and son) else None,
+                     "son_mod": d.get("son_mod"), "taranan": d.get("taranan"), "plan": d.get("plan") or [],
+                     "sonuclar": d.get("sonuclar") or [], "tasinan": d.get("tasinan", 0), "hatali": d.get("hatali", 0),
+                     "son_hata": d.get("son_hata"), "son_hata_ts": d.get("son_hata_ts"),
+                     "gecmis": list(reversed((d.get("gecmis") or [])[-50:]))})
+
+
+@app.route("/api/uat-senkron/ayar", methods=["POST"])
+def uat_senkron_ayar():
+    from skills import uat_durum_senkron as us
+    data = request.get_json(silent=True) or {}
+    degisim = {k: data[k] for k in ("aktif", "mod", "aralik_sn") if k in data}
+    if not degisim:
+        return jsonify({"ok": False, "error": "Değiştirilecek alan yok (aktif / mod / aralik_sn)."}), 400
+    try:
+        a = us.ayar_kaydet(degisim)
+    except (ValueError, TypeError) as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    logger.info("UAT senkron ayarı: aktif=%s mod=%s aralık=%ss", a["aktif"], a["mod"], a["aralik_sn"])
+    return jsonify({"ok": True, "ayar": a})
+
+
+@app.route("/api/uat-senkron/calistir", methods=["POST"])
+def uat_senkron_calistir():
+    """Şimdi kontrol et. Body: {uygula: true|false|null} — null = ayardaki mod. Arka planda çalışır."""
+    data = request.get_json(silent=True) or {}
+    uygula = data.get("uygula")
+    if uygula is not None and not isinstance(uygula, bool):
+        return jsonify({"ok": False, "error": "uygula true/false/null olmalı"}), 400
+    hata = _jira_baglanti_eksik()
+    if hata:
+        return jsonify({"ok": False, "error": hata}), 400
+    if _uat_senkron_lock.locked():
+        return jsonify({"ok": False, "error": "Kontrol zaten sürüyor."}), 409
+
+    def _is():
+        try:
+            _uat_senkron_calistir(uygula)
+        except Exception:
+            pass
+    threading.Thread(target=_is, daemon=True, name="uat-senkron-elle").start()
+    return jsonify({"ok": True, "calisiyor": True})
 
 
 def _jira_kopru_baslat() -> None:
@@ -6363,5 +6467,6 @@ if __name__ == "__main__":
     _servis_varsayilanlari_birlestir()  # Owner'ın yayınladığı BFF servislerini yerel sources'a merge et (analist tek tek girmez)
     _referans_oto_sync_baslat()  # Referans kaynaklarını günde bir (agent ilk aktifken) çek (AUTO_REF_SYNC=false ile kapatılır)
     _jira_kopru_baslat()       # Jira Köprüsü — komutlu yorum polling (JIRA_KOPRU=false ile KAPALI, vars.)
+    _uat_senkron_baslat()      # UAT Durum Senkronu — TRADE/OPS geliştirmeye alınınca UAT 'Devam Ediyor' (vars. KAPALI)
     _analiz_bildirim_baslat()  # Analiz bitti/hata → yerel masaüstü bildirimi (BILDIRIM=false ile kapatılır)
     app.run(host=host, port=port, debug=False)

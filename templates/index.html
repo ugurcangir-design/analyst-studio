@@ -1718,6 +1718,15 @@ html[data-theme="light"] .suspend-overlay { background: rgba(245,247,250,.92); }
 .jg-msg.ok { color: var(--green); }
 /* UAT Mutabakat sonuç kartları */
 .bs-ozet { display: block; }
+/* UAT Durum Senkronu paneli */
+.us-durum { font-size: 12.5px; color: var(--text2); display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 10px; }
+.us-durum b { color: var(--text); }
+.us-durum .us-hata { color: var(--red, #dc2626); }
+.us-eylemler { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+#us-panel .us-tbl { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+#us-panel .us-tbl th, #us-panel .us-tbl td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; overflow-wrap: anywhere; }
+#us-panel .us-tbl th { font-size: 10px; text-transform: uppercase; letter-spacing: .4px; color: var(--text3); background: var(--surface2); }
+#us-panel .us-ok { color: #16a34a; font-weight: 600; } #us-panel .us-err { color: #dc2626; }
 /* UAT Mutabakat — kompakt pano: iki panel (takip + backlog) + mutabakat satırları */
 .bs-pano { display: grid; grid-template-columns: minmax(0, 2.4fr) minmax(0, 1fr); gap: 12px; }
 @media (max-width: 1100px) { .bs-pano { grid-template-columns: minmax(0, 1fr); } }
@@ -3151,6 +3160,19 @@ function temaDegistir() {
         </div>
       </div>
 
+      <div class="panel" id="us-panel" style="margin-bottom:14px">
+        <div class="panel-head">
+          <span class="panel-title">UAT Durum Senkronu</span>
+          <span class="panel-tag" id="us-rozet">KAPALI</span>
+        </div>
+        <div class="panel-body">
+          <div class="field-sub" style="margin:0 0 8px">TRADE/OPS task'ı geliştirmeye alındığında (Devam Ediyor ve sonrası), ona <b>doğrudan Jira linkiyle</b> bağlı UAT task'ı Backlog / Yapılacaklar'daysa otomatik <b>Devam Ediyor</b>'a alınır ve task'a "🤖 geliştirmeye alındı" yorumu düşülür. Hold / Tamam / İptal'e dokunulmaz. Uygulama açıkken periyodik çalışır.</div>
+          <div class="us-durum" id="us-durum">Yükleniyor…</div>
+          <div class="us-eylemler" id="us-eylemler"></div>
+          <div id="us-icerik"></div>
+        </div>
+      </div>
+
       <div class="panel" style="margin-bottom:14px">
         <div class="panel-head">
           <span class="panel-title">Kaynak &amp; Kapsam</span>
@@ -4143,7 +4165,7 @@ function switchTab(tab, hedefDosya) {
   if (tab === 'output')        { sorularDefteriYenile(); outputTabHazirla(hedefDosya); }
   if (tab === 'settings')      { settingsYukle(); analistYukle(); }
   if (tab === 'jira-settings') jiraConfigYukle();
-  if (tab === 'backlog-senkron') _bsJiraSiteYukle();   // key link'leri için site adresini hazırla
+  if (tab === 'backlog-senkron') { _bsJiraSiteYukle(); usYukle(); }   // key link'leri + UAT durum senkronu
   if (tab === 'prompts')       promptlariYukle();
   if (tab === 'update')        versiyonYukle();
   if (tab === 'referanslar')   { loadSources(); loadRefDocs(); onboardGoster('referanslar', 'page-referanslar'); }
@@ -6902,6 +6924,80 @@ async function bsMutabakat() {
   } finally {
     btn.disabled = false;
   }
+}
+
+// ─── UAT Durum Senkronu ────────────────────────────────────────────────────────
+let _usPoll = null;
+function _usSaat(ts) { return ts ? new Date(ts * 1000).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'; }
+function _usTetik(it) {
+  return (it.tetikleyenler || []).map(t => `${_bsKeyLink(t.key)} <span class="bs-m-ek">${_bsEsc(t.durum)}</span>`).join('<br>');
+}
+async function usYukle() {
+  let d;
+  try { d = await (await fetch('/api/uat-senkron/durum')).json(); } catch (e) { return; }
+  if (!d.ok) return;
+  const a = d.ayar || {}, oto = a.mod === 'otomatik';
+  const rozet = document.getElementById('us-rozet');
+  rozet.textContent = !a.aktif ? 'KAPALI' : (oto ? 'OTOMATİK' : 'RAPOR MODU');
+  document.getElementById('us-durum').innerHTML =
+      `<span>Durum: <b>${!a.aktif ? 'Kapalı' : (oto ? 'Açık · otomatik taşıyor' : 'Açık · yalnız rapor (değiştirmiyor)')}</b></span>`
+    + `<span>Aralık: <b>${Math.round((a.aralik_sn || 7200) / 60)} dk</b></span>`
+    + `<span>Son kontrol: <b>${_usSaat(d.son_tur_ts)}</b>${d.son_mod ? ` (${d.son_mod === 'uygula' ? 'uygulandı' : 'rapor'})` : ''}</span>`
+    + (d.sonraki_ts ? `<span>Sonraki: <b>${_usSaat(d.sonraki_ts)}</b></span>` : '')
+    + (d.calisiyor ? '<span><b>⏳ Kontrol sürüyor…</b></span>' : '')
+    + (d.son_hata && (d.son_hata_ts || 0) >= (d.son_tur_ts || 0) ? `<span class="us-hata">⚠ Son hata (${_usSaat(d.son_hata_ts)}): ${_bsEsc(d.son_hata)}</span>` : '');
+  const b = (txt, fn, cls) => `<button class="btn ${cls || 'btn-outline'} btn-sm" onclick="${fn}" ${d.calisiyor ? 'disabled' : ''}>${txt}</button>`;
+  let eylem = b(a.aktif ? 'Kapat' : 'Aç (rapor modunda)', `usAyar({aktif:${!a.aktif}})`, a.aktif ? 'btn-outline' : 'btn-primary')
+            + b('Şimdi kontrol et (rapor)', 'usCalistir(false)');
+  if (a.aktif && !oto) eylem += b('Otomatiğe geç', "usAyar({mod:'otomatik'}, true)", 'btn-primary');
+  if (a.aktif && oto) eylem += b('Rapor moduna dön', "usAyar({mod:'rapor'})");
+  if ((d.plan || []).length && d.son_mod !== 'uygula') eylem += b(`Bu listeyi şimdi uygula (${d.plan.length})`, 'usCalistir(true)', 'btn-success');
+  document.getElementById('us-eylemler').innerHTML = eylem;
+
+  let ic = '';
+  if (d.son_tur_ts) {
+    if (d.son_mod === 'uygula' && (d.sonuclar || []).length) {
+      ic += `<div class="bs-grup-bas">Son turda işlenenler <span class="bs-say">(${d.tasinan || 0} taşındı${d.hatali ? ` · ${d.hatali} hata` : ''})</span></div>`
+        + `<table class="us-tbl"><colgroup><col style="width:34%"><col style="width:16%"><col style="width:30%"><col style="width:20%"></colgroup>`
+        + `<thead><tr><th>UAT</th><th>Önceki durum</th><th>Geliştirmeye alınan</th><th>Sonuç</th></tr></thead><tbody>`
+        + d.sonuclar.map(s => `<tr><td>${_bsKeyLink(s.uat_key)}<div class="bs-ko-ozet">${_bsEsc(s.uat_ozet)}</div></td><td>${_bsEsc(s.uat_durum)}</td><td>${_usTetik(s)}</td>`
+          + `<td>${s.ok ? `<span class="us-ok">✓ Devam Ediyor</span>${s.yorum === false ? ' <span class="bs-m-ek">(yorum eklenemedi)</span>' : ''}` : `<span class="us-err">✕ ${_bsEsc(s.hata || '')}</span>`}</td></tr>`).join('')
+        + '</tbody></table>';
+    } else if ((d.plan || []).length) {
+      ic += `<div class="bs-grup-bas">Taşınacak UAT task'ları — rapor <span class="bs-say">(${d.plan.length} · ${d.taranan ?? '?'} Backlog/Yapılacaklar UAT tarandı · Jira'da değişiklik YAPILMADI)</span></div>`
+        + `<table class="us-tbl"><colgroup><col style="width:40%"><col style="width:16%"><col style="width:44%"></colgroup>`
+        + `<thead><tr><th>UAT</th><th>Şu anki durum</th><th>Geliştirmeye alınan ilişkili task</th></tr></thead><tbody>`
+        + d.plan.map(it => `<tr><td>${_bsKeyLink(it.uat_key)}<div class="bs-ko-ozet">${_bsEsc(it.uat_ozet)}</div></td><td>${_bsEsc(it.uat_durum)} → <b>Devam Ediyor</b></td><td>${_usTetik(it)}</td></tr>`).join('')
+        + '</tbody></table>';
+    } else {
+      ic += `<div class="bs-bos">Son kontrolde taşınacak UAT task'ı yok (${d.taranan ?? 0} Backlog/Yapılacaklar UAT tarandı). 🎉</div>`;
+    }
+  }
+  if ((d.gecmis || []).length) {
+    ic += `<details style="margin-top:10px"><summary class="bs-m-ek" style="cursor:pointer">Geçmiş — otomatik taşınanlar (${d.gecmis.length})</summary>`
+      + `<table class="us-tbl" style="margin-top:6px"><colgroup><col style="width:16%"><col style="width:44%"><col style="width:40%"></colgroup><tbody>`
+      + d.gecmis.map(g => `<tr><td>${_usSaat(g.ts)}</td><td>${_bsKeyLink(g.uat_key)} <span class="bs-m-ek">${_bsEsc(g.eski)} → Devam Ediyor</span><div class="bs-ko-ozet">${_bsEsc(g.uat_ozet)}</div></td><td>${_usTetik(g)}</td></tr>`).join('')
+      + '</tbody></table></details>';
+  }
+  document.getElementById('us-icerik').innerHTML = ic;
+  clearTimeout(_usPoll);
+  if (d.calisiyor) _usPoll = setTimeout(usYukle, 3000);
+}
+async function usAyar(degisim, onayla) {
+  if (onayla && !confirm("Otomatik moda geçilsin mi?\n\nBundan sonra her kontrolde, geliştirmeye alınmış TRADE/OPS task'ına doğrudan bağlı ve Backlog/Yapılacaklar'daki UAT task'ları Jira'da 'Devam Ediyor'a TAŞINACAK ve yorum eklenecek.")) return;
+  const r = await fetch('/api/uat-senkron/ayar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(degisim) });
+  const d = await r.json();
+  if (!d.ok) { toast(d.error || 'Kaydedilemedi', 'error'); return; }
+  toast('UAT durum senkronu ayarı kaydedildi', 'success');
+  usYukle();
+}
+async function usCalistir(uygula) {
+  if (uygula && !confirm("Listelenen UAT task'ları Jira'da şimdi 'Devam Ediyor'a taşınacak ve her birine yorum eklenecek. Devam edilsin mi?")) return;
+  const r = await fetch('/api/uat-senkron/calistir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uygula }) });
+  const d = await r.json();
+  if (!d.ok) { toast(d.error || 'Başlatılamadı', 'error'); return; }
+  toast(uygula ? 'UAT task\'ları taşınıyor…' : 'Kontrol başladı (rapor — değişiklik yapılmaz)…', 'info');
+  setTimeout(usYukle, 800);
 }
 
 async function bsExport() {

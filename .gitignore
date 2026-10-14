@@ -91,6 +91,7 @@ reference/ornekler/
 # Owner konsol kilidi (Kullanım Raporu + Yetki ekranları) — SADECE owner makinesinde true;
 # git'e gitmez, .env'e konmaz (kopyalanan .env sızmasın), .example'dan false seed edilir.
 reference/owner_konsol.json
+reference/uat_senkron.json
 
 # create_app.sh tarafından üretilen makineye-özel başlatıcı (yol+port içerir)
 _start.sh
