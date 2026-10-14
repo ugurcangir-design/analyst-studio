@@ -419,16 +419,11 @@ takip-Excel senkron akışı — upload + cerrahi lxml yazımı — bu sürümde
     girmez) → UAT "açıkta/analiz yok" sanılmaz. **Epic modu:** yalnız epic altı sayılır; kapsam dışından Jira linkiyle gelen task UAT'ı
     eşleştirir (iş takip ediliyor) ama `kapsam_disi_hedef` olarak AYRI sayılır, toplama girmez. **Tüm board
     modunda** eşleşmeyen TRADE/OPS = "UAT dışı proje işi" (sönük, problem değil).
-  - **UI (kompakt):** iki panel yan yana (`.bs-pano`: **UAT takibi** aşama sayaçları · **Backlog'daki task'lar**
-    Analizli/Kısmi/Analizsiz; `.bs-adim`) + altta **mutabakat satırları** (`.bs-msatir`: UAT ve TRADE/OPS toplam =
-    eşleşen + teyit + eşleşmeyen tıklanabilir `.bs-pil`, iptal satırı). Tüm tıklanabilirler `.bs-tik` + `data-grup`
-    (aktif vurgusu). Kart → `_bsKartFiltre` (`bsTakipFiltre`/`bsAnalizFiltre`): grubu gösterir + filtre ayarlar;
-    satırı olmayan grup gizlenir; tekrar tıklama sıfırlar. **UAT Takip KOLONU YOK** — aşama filtresi gizli
-    (`_bsGizliFiltre[tid]`, satırda `data-ftakip`). **Tablolar yatay kaydırmasız:** `table-layout: fixed` + yüzde
-    `colgroup`, key+özet tek hücre (`_bsKeyOzet`, özet 2 satır), Story hedef hücresinde, gerekçe eşleşme
-    rozetinin ipucunda (`_bsEslesmeKisa`); başlıklar tek biçim (alta hizalı, büyük harf). Hedef **Analiz** kolonu
-    (ipucu = dolu başlıklar) + filtresi; gruplu satırda "x/y analizli". **Excel:** ilk sayfa
-    **Özet** (denklemler + huni + backlog analiz) + Takip/Analiz/Dolu Başlıklar kolonları.
+  - **UI: ORİJİNAL ekran korunur (owner kararı — kompakt pano/huni/analiz kartları kullanışsız bulundu, geri
+    alındı).** Ekran yalnız eşleşen/aday/eşleşmeyen/iptal kartları + tabloları gösterir; takip aşaması ve analiz
+    durumu alanları backend'de hesaplanmaya devam eder (satırlarda + `sayimlar`) ve **Excel raporunda** görünür
+    (Özet sayfası + Takip/Analiz/Dolu Başlıklar kolonları). Ekrana yeniden taşınacaksa önceki denemeler git
+    geçmişinde: `4c0ca14` (büyük kartlar) · `2966a58` (kompakt pano). Ekranın üstünde **UAT Durum Senkronu** paneli.
   Test: `tests/test_backlog_analiz.py` (Jira MOCK, 0 token).
 - **Endpoint'ler:** `POST /api/backlog/mutabakat` (config → kova JSON) · `POST /api/backlog/export`
   (sonuç body → `{dosya}`) · `GET /api/backlog/indir/<dosya>` (binary `send_file`). Dosyalar `backlog/`
