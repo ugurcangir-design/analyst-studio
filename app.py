@@ -5749,13 +5749,14 @@ _sohbet_is_lock = threading.Lock()
 
 def _sohbet_ozet(oturum: dict) -> dict:
     """UI'ya dönen oturum özeti (+ üretilmiş çıktı var mı)."""
-    from skills.sohbet_analiz import surec_var_mi
+    from skills.sohbet_analiz import surec_var_mi, teknik_var_mi
     return {
         "oturum_id": oturum.get("oturum_id", ""),
         "baslik": oturum.get("baslik", ""),
         "mesajlar": oturum.get("mesajlar", []),
-        "surec_var": surec_var_mi(),
-        "teknik_var": (OUTPUT_DIR / "teknik-analiz.md").exists(),
+        # YALNIZ bu oturumda üretilen çıktı "var" sayılır (bayat dosya sohbetin ürünü gibi gösterilmez)
+        "surec_var": surec_var_mi(oturum),
+        "teknik_var": teknik_var_mi(oturum),
     }
 
 

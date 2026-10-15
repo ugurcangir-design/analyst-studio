@@ -16,7 +16,10 @@ promptu** (hep varsayılan — `ozel_atla=True` özel promptu yok sayar) · manu
 **canlı uygulama gözlemi** (miras `live_app` config; hedef sohbetten türetilir). Sohbet turu canlı gözlem YAPMAZ (hızlı Q&A);
 gözlem yalnız üretim adımlarında. **Global süreç workflow'una DOKUNMAZ** (kendi içinde inline — iki ekran tek state çakışmaz).
 Oturum `output/sohbet/oturum.json` (gitignore). Endpoint: `/api/sohbet/{oturum,mesaj,sifirla,uret,uret/durum}` (kimlik-gate,
-üretim arka plan iş). UI: `screens/sohbet.html` (nav "İnteraktif Analiz", Analiz grubu; chat thread + `sh-*`). Test: `smoke_test`
+üretim arka plan iş). **Tazelik:** `surec_var_mi/teknik_var_mi(oturum)` çıktıyı YALNIZ mtime ≥ oturumun ilk mesajı (yoksa
+`created`) ise "var" sayar → önceki doküman/sohbet akışının bayat çıktısı sohbetin ürünü gibi GÖSTERİLMEZ (hata: 12 Eylül
+çıktısı 15 Ekim sohbetinde göründü). `base._onsoz_kirp` 2 katlı: baştaki düz ön-söz + meta-yorum/ayraç SONRASI, ilk
+başlık/tablodan önceki İngilizce iç-konuşma paragrafı (`_ONSOZ_IC_KONUSMA`; gövde paragrafı/JSON dokunulmaz). Test: `tests/test_sohbet_tazelik.py`. UI: `screens/sohbet.html` (nav "İnteraktif Analiz", Analiz grubu; chat thread + `sh-*`). Test: `smoke_test`
 (oturum + doğrulama uçları). **NOT — motor refactor'u:** `surec_analizi_yap(icerik_override, dosya_adi_override, ozel_atla)` +
 `teknik_analiz_yap(ozel_atla)` opsiyonel parametre aldı — override YOKKEN davranış AYNEN korunur (doküman akışı etkilenmez).
 
@@ -368,6 +371,7 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   `test_baglam_jira.py` (bağlam filtresi Jira key'leri yerel export'ta yoksa uzaktan bulkfetch — yalnız eksik, hata yutulur; ağ MOCK/0-token),
   `test_soru_hedefli.py` (soru cevabı hedefli düzeltme yönlendirmesi — süreç/teknik kendine, bölüm bulunamazsa tam üretim; AI MOCK/0-token),
   `test_roller.py` (kullanıcı-bazlı ekran yetkisi — hash/PII'siz, etkin rol/görünürlük, owner sınırı, CRUD; offline/0-token),
+  `test_sohbet_tazelik.py` (İnteraktif Analiz bayat çıktı tazeliği + ön-söz/iç-konuşma kırpma; offline/0-token),
   `test_kabul_kontrolu.py` (Kabul Kontrolü — liste normalize, karar mantığı [eksik→geri, bildirilmeyen→doğrulanamadı], canlı hedef yok, rapor, köprü komutu; AI enjekte/0-token),
   `test_uat_senkron.py` (UAT Durum Senkronu — plan kuralları, geçiş bulma, rapor modunda Jira'ya yazma YOK, otomatik taşıma + geçmiş, uçlar; Jira MOCK/0-token),
   `test_backlog_analiz.py` (UAT Mutabakat — analiz durumu/takip hunisi/toplam denklemleri/epic kapsam dışı/Excel Özet; Jira MOCK/0-token),

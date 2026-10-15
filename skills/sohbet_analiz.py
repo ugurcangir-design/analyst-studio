@@ -161,5 +161,25 @@ def teknik_uret() -> tuple[Path, Path]:
     return teknik_analiz_yap(ozel_atla=True)
 
 
-def surec_var_mi() -> bool:
-    return (OUTPUT_DIR / "surec-analizi.md").exists()
+def _oturuma_ait_mi(dosya: str, oturum: dict | None = None) -> bool:
+    """Çıktı BU sohbet oturumunda mı üretildi? Dosya mtime'ı oturumun İLK mesajından (yoksa oluşturulma
+    zamanından) önceyse → önceki doküman/sohbet akışının BAYAT çıktısıdır; sohbetin ürünü gibi gösterilmez.
+    (Hata: 12 Eylül'de üretilmiş süreç analizi 15 Ekim'deki yeni sohbetin sonucu sanıldı.)"""
+    yol = OUTPUT_DIR / dosya
+    if not yol.exists():
+        return False
+    o = oturum if oturum is not None else oturum_oku()
+    mesajlar = o.get("mesajlar") or []
+    esik = min((m.get("ts") or 0) for m in mesajlar) if mesajlar else (o.get("created") or 0)
+    try:
+        return yol.stat().st_mtime >= float(esik or 0)
+    except (OSError, TypeError, ValueError):
+        return False
+
+
+def surec_var_mi(oturum: dict | None = None) -> bool:
+    return _oturuma_ait_mi("surec-analizi.md", oturum)
+
+
+def teknik_var_mi(oturum: dict | None = None) -> bool:
+    return _oturuma_ait_mi("teknik-analiz.md", oturum)

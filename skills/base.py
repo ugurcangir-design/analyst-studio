@@ -3398,7 +3398,18 @@ def gozlem_durum_oku() -> dict | None:
 _YAPISAL_ONEK = ("#", "|", "---", "<!--", ">", "```")
 
 
+# Ajanın rapor ÖNCESİ sızdırdığı iç konuşma: İngilizce birinci-tekil-şahıs süreç cümleleri. Yalnız ön-söz
+# bloğunda (ilk gerçek başlıktan ÖNCE) aranır; gövde içindeki normal İngilizce paragraflar DOKUNULMAZ.
+_ONSOZ_IC_KONUSMA = re.compile(
+    r"^(?:I |I'|I’|Let me |Now I|Now let|Next,? I|First,? I|The core observation|Let's |We now have|I've |I'll )",
+    re.IGNORECASE,
+)
+
+
 def _onsoz_kirp(metin: str) -> str:
+    """Rapor öncesi ön-söz/iç konuşmayı kırpar. İki kat: (1) dosyanın en başındaki kısa düz-metin
+    (ilk yapısal satırdan önce); (2) `---`/HTML-yorum gibi ayraçlardan SONRA, ilk GERÇEK başlık/tablodan
+    önce gelen İngilizce iç-konuşma paragrafı ("I have sufficient observation… Now I'll produce…")."""
     satirlar = metin.split("\n")
     ilk_yapisal = None
     for i, s in enumerate(satirlar):
@@ -3409,13 +3420,32 @@ def _onsoz_kirp(metin: str) -> str:
             ilk_yapisal = i
             break
         # düz-metin satırı (ön-söz adayı) — taramaya devam
-    if not ilk_yapisal:            # None (hiç yapısal yok) veya 0 (baştan yapısal) → dokunma
-        return metin
-    onsoz = "\n".join(satirlar[:ilk_yapisal]).strip()
-    # Güvenlik: ön-söz kısa, düz prozа olmalı; JSON/veri gövdesi ({ } ile) ASLA kırpılmaz.
-    if not onsoz or "{" in onsoz or len(onsoz) > 600:
-        return metin
-    return "\n".join(satirlar[ilk_yapisal:]).lstrip("\n")
+    if ilk_yapisal:               # 0 (baştan yapısal) veya None → bu kat atlanır
+        onsoz = "\n".join(satirlar[:ilk_yapisal]).strip()
+        # Güvenlik: ön-söz kısa, düz prozа olmalı; JSON/veri gövdesi ({ } ile) ASLA kırpılmaz.
+        if onsoz and "{" not in onsoz and len(onsoz) <= 600:
+            satirlar = satirlar[ilk_yapisal:]
+    # Kat 2: ilk başlık/tablodan ÖNCEKİ bölgede iç-konuşma paragrafı (ayraç/yorum satırları arasında)
+    sinir = len(satirlar)
+    for i, s in enumerate(satirlar):
+        st = s.strip()
+        if st.startswith(("#", "|")):
+            sinir = i
+            break
+    i = 0
+    while i < sinir:
+        st = satirlar[i].strip()
+        if st and not st.startswith(_YAPISAL_ONEK) and _ONSOZ_IC_KONUSMA.match(st):
+            j = i
+            while j < sinir and satirlar[j].strip() and not satirlar[j].strip().startswith(_YAPISAL_ONEK):
+                j += 1
+            paragraf = "\n".join(satirlar[i:j])
+            if "{" not in paragraf and len(paragraf) <= 600:
+                del satirlar[i:j]
+                sinir -= (j - i)
+                continue
+        i += 1
+    return "\n".join(satirlar).lstrip("\n")
 
 
 def _canli_app_sifre_redakte(metin: str) -> str:
