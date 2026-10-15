@@ -2812,6 +2812,7 @@ function temaDegistir() {
           </div>
           <div class="ctx-field-sub" style="margin-top:8px">Gözlem kapsamı (opsiyonel) — doluysa tüm ekran taranmaz, yalnızca bu akış incelenir</div>
           <textarea class="ctx-input" id="jg-live-scope" rows="2" placeholder="örn: Güncelle butonu akışını uçtan uca uygula ve servis istek/yanıtını yakala" onchange="jgLiveAppKaydet(false)"></textarea>
+          <label class="jg-sub" style="display:flex;align-items:center;gap:7px;margin-top:8px;cursor:pointer"><input type="checkbox" id="jg-bff-otomatik" checked onchange="jgLiveAppKaydet(false)"> <b>BFF keşfi otomatik</b> — analiz öncesi agent ekranda kendisi oluştur/güncelle/sil yapıp servis sözleşmesini çıkarır (AI-TEST kayıtları kalır; rapor 7 gün önbellekte, "BFF Keşfi" butonu yeniden gözler)</label>
           <div class="la-durum" id="jg-la-durum">
             <div class="la-satir">
               <span class="la-nokta" id="jg-la-nokta"></span>
@@ -3091,6 +3092,9 @@ function temaDegistir() {
           </div>
           <span class="jg-warn">⚠ Onayla'ya basınca Jira görevinin açıklaması ÜZERİNE YAZILIR (geri alınamaz). Açık Sorular Jira'ya YAZILMAZ.</span>
           <button class="btn btn-outline btn-sm" onclick="jgPreviewKapat()">İptal</button>
+          <button class="btn btn-outline btn-sm" id="jg-bff-btn" onclick="jgBffKesif()" title="Agent hedef ekranda KENDİSİ oluştur/güncelle/sil yapar (AI-TEST kayıtları), BFF istek/yanıtlarını yakalayıp sözleşme raporu çıkarır. Rapor 7 gün bu ekranın analizlerine otomatik girer.">
+            <svg class="ico"><use href="#i-server"/></svg> BFF Keşfi (CRUD)
+          </button>
           <button class="btn btn-outline btn-sm" id="jg-kabul-btn" onclick="jgKabulKontrol()" title="Geliştirmesi biten (ANALIZ CHECK) task'ı test ortamında testçi gibi fiilen dener: alanlar, butonlar, başarılı/başarısız mesajlar, servis çağrıları. ✅/❌ rapor üretir; Jira durumu değişmez — teste iletme kararı sizindir.">
             <svg class="ico"><use href="#i-check"/></svg> Kabul Kontrolü
           </button>
@@ -5094,6 +5098,8 @@ async function jgCtxBilgiYukle() {
     if (liveInput) liveInput.value = ctx.live_app_gorev?.target_url || '';
     const scopeInput = document.getElementById('jg-live-scope');
     if (scopeInput) scopeInput.value = ctx.live_app_gorev?.gozlem_kapsami || '';
+    const bffInput = document.getElementById('jg-bff-otomatik');
+    if (bffInput) bffInput.checked = ctx.live_app_gorev?.bff_otomatik !== false;
     const notInput = document.getElementById('jg-analist-notu');
     if (notInput) { notInput.value = ctx.gorev_analist_notu || ''; jgAnalistNotuGorunum(); }
     jgLiveAppDurumYenile();
@@ -5147,7 +5153,7 @@ async function jgLiveAppKaydet(showToastMsg) {
       jira_keys: mevcut.jira_keys || [],
       confluence_pages: mevcut.confluence_pages || [],
       live_app: mevcut.live_app || {target_url:'', extra_urls:[], use_as_sample:false},
-      live_app_gorev: { target_url: url, gozlem_kapsami: kapsam },
+      live_app_gorev: { target_url: url, gozlem_kapsami: kapsam, bff_otomatik: !!(document.getElementById('jg-bff-otomatik') || {checked: true}).checked },
     };
     await fetch('/api/context-filter', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(govde)});
     if (showToastMsg) toast('Canlı uygulama URL kaydedildi', 'info');
@@ -5499,6 +5505,7 @@ function _jgSonucGoster(key) {
   _jgMsg('jg-preview-msg', s.hata ? ('Hata: ' + s.hata) : '', s.hata ? 'err' : '');
   if (!s.hata && s.akis_rapor) _jgAkisRaporGoster(key, s.akis_rapor);
   if (!s.hata && s.kabul) _jgKabulGoster(key, s.kabul);
+  if (!s.hata && s.bff) _jgBffGoster(key, s.bff);
   // İçerik bellekte yoksa (güncelleme/yenileme sonrası) → Jira'dan geri yükleme sun
   if (!s.hata && !((s.markdown || '').trim()) && !_jgMesgul() && /^[A-Z][A-Z0-9]+-\d+$/.test(key)) {
     const m = document.getElementById('jg-preview-msg');
@@ -5588,6 +5595,28 @@ function jgAkisGeriAl(key) {
   _jgAktifAnalizKey = null;   // editördeki (kapatılmış) içerik geri yüklenen içeriği EZMESİN
   _jgSonucGoster(key);
   _jgMsg('jg-preview-msg', '↶ Akış kapatma geri alındı — önceki analiz yüklendi.', 'ok');
+}
+
+// BFF Keşfi (CRUD) — agent hedef ekranda kendisi CRUD yapıp servis sözleşmesini çıkarır (iş modu bff-kesif).
+function jgBffKesif() {
+  if (!_jgAktifAnalizKey) return;
+  if (_jgMesgul()) { toast('İşlem sürüyor', 'info'); return; }
+  const key = _jgAktifAnalizKey;
+  _jgEditorKaydet(key);
+  const s = _jgAnalizSeti[key] || {};
+  const g = _jgGorevCoz(key) || {};
+  if (!confirm(`${_jgGercekKey(key)} için BFF Keşfi başlatılsın mı?\n\nAgent TEST ortamındaki hedef ekranda AI-TEST önekli kayıt OLUŞTURUR, GÜNCELLER ve ayrı bir kaydı SİLER; isteklerin method/path/payload/yanıtını yakalayıp sözleşme raporu çıkarır (5-10 dk). Oluşturulan kayıtlar kalır. Bağlam Filtresi'ndeki Task canlı uygulama hedefi test/UAT olmalı.`)) return;
+  _jgIsBaslat([{ key: key, mode: 'bff-kesif', markdown: s.markdown || '', acik_sorular: s.acik_sorular || '',
+                 katman: s.katman || '', gorev: g, canli_hedef: g.canli_hedef || '' }],
+             'BFF keşfi — ekranda CRUD gözlemi', key, false);
+}
+function _jgBffGoster(key, b) {
+  const m = document.getElementById('jg-preview-msg');
+  m.className = 'jg-msg ' + (b.ok ? 'ok' : 'err');
+  const yas = (b.yas_gun != null) ? (b.yas_gun < 0.05 ? 'şimdi' : `${b.yas_gun} gün önce`) : '';
+  m.innerHTML = (b.ok ? `🔌 BFF sözleşme raporu hazır${yas ? ' (' + yas + ')' : ''} — bu ekranın analizlerine 7 gün otomatik girer.`
+                      : `🔌 BFF keşfi tamamlanamadı: ${escHtml(b.neden || '')}`)
+    + (b.md ? `<details style="margin-top:4px"><summary>Raporu gör</summary><div class="md-body" style="max-height:360px;overflow:auto;margin-top:6px">${typeof marked !== 'undefined' ? marked.parse(b.md) : escHtml(b.md)}</div></details>` : '');
 }
 
 // Kabul Kontrolü — ANALIZ CHECK task'ını canlı ortamda testçi gibi doğrula (iş modu kabul-kontrol).
@@ -5710,13 +5739,13 @@ async function _jgPollDurum() {
                            feBeKaynak: eski.feBeKaynak, feBeYeni: eski.feBeYeni,
                            // Akış kapatma: rapor + Geri Al yedeği (yalnız bu sonuç akış kapatmaysa)
                            akis_rapor: rs.akis_rapor, akis_onceki: rs.akis_rapor ? eski.akis_onceki : undefined,
-                           kabul: rs.kabul || eski.kabul };
+                           kabul: rs.kabul || eski.kabul, bff: rs.bff || eski.bff };
     }
   }
   if (d.durum === 'calisiyor') {
     const cok = (d.toplam || 1) > 1;
     document.getElementById('jg-proc-title').textContent =
-      (cok ? `Analiz ${(d.aktif_index || 0) + 1}/${d.toplam}: ` : '') + (d.aktif_key || '') + ' üretiliyor';
+      (cok ? `Analiz ${(d.aktif_index || 0) + 1}/${d.toplam}: ` : '') + (d.aktif_key || '') + (d.aktif_not ? ' — ' + d.aktif_not : ' üretiliyor');
     _jgSurenChipGuncelle(true, `Analiz sürüyor · ${d.aktif_key || ''}${cok ? ` (${(d.aktif_index || 0) + 1}/${d.toplam})` : ''}`);
     // SERVER-side geçen süre → yenilemeye dayanıklı; eşik aşılınca takılma/erişim uyarısı
     const sn = d.adim_gecen_sn || d.gecen_sn || 0;

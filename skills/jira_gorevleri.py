@@ -805,7 +805,8 @@ _KATMAN_ETIKET = {"fe": "Frontend (FE)", "be": "Backend (BE)", "belirsiz": ""}
 
 def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = None,
                     katman: str = "", onceki_sorular: str = "", ekran_baglami: bool = True,
-                    rag_ctx: dict | None = None, canli_baglam_override: str | None = None) -> dict:
+                    rag_ctx: dict | None = None, canli_baglam_override: str | None = None,
+                    bff_rapor: str | None = None) -> dict:
     """Görevi YALIN teknik analize çevirir (gorev_teknik_analiz promptu — tek
     görev için, yalnızca ilgili bölümler, tüm şablonu doldurmaz → token/süre
     tasarrufu, kaliteden ödün yok). İki aşama: (1) Sonnet ile analiz (RAG dahil),
@@ -863,6 +864,10 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
     # Süreç/Teknik Analiz ekranının URL'inden bağımsızdır; iki akış birbirini ezmez.
     # Köprü, base-URL + task-güdümlü hedef ile kendi canlı-gözlem bağlamını verir
     # (canli_baglam_override); ekran akışı kendi live_app_gorev hedefini kullanır.
+    # BFF sözleşme raporu (skills/bff_kesif — agent'ın kendi CRUD gözlemi) → gerçek endpoint/alan/mesajlar
+    if bff_rapor:
+        print("  🔌 BFF sözleşme raporu (canlı CRUD gözlemi) dahil ediliyor...")
+        stable_bloklar.append({"type": "text", "text": bff_rapor})
     canli_baglam = canli_baglam_override if canli_baglam_override is not None \
         else canli_uygulama_baglami_hazirla(gorev=True)
     if canli_baglam:
@@ -1011,7 +1016,7 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
 
 def gorev_fe_be_analiz(gorev: dict, cevaplar: str = "", onceki_sorular: str = "",
                        ekran_baglami: bool = True, rag_ctx: dict | None = None,
-                       canli_baglam_override: str | None = None) -> dict:
+                       canli_baglam_override: str | None = None, bff_rapor: str | None = None) -> dict:
     """Tek bir görevi HEM BE HEM FE olarak İKİ AYRI katman-özel analize böler (görev hem
     sunucu hem istemci işi içeriyorsa). Önce **BE** analizi (veri modeli/endpoint/iş kuralı +
     'Bağımlılık ve Arayüz' başlığında BE'nin SUNDUĞU sözleşme), sonra **FE** analizi — BE
@@ -1020,14 +1025,14 @@ def gorev_fe_be_analiz(gorev: dict, cevaplar: str = "", onceki_sorular: str = ""
     Dönen: {"be": {markdown, acik_sorular}, "fe": {markdown, acik_sorular}}."""
     be = gorev_analiz_et(gorev, cevaplar=cevaplar, katman="be", onceki_sorular=onceki_sorular,
                          ekran_baglami=ekran_baglami, rag_ctx=rag_ctx,
-                         canli_baglam_override=canli_baglam_override)
+                         canli_baglam_override=canli_baglam_override, bff_rapor=bff_rapor)
     # FE, BE'nin ürettiği FE↔BE sözleşmesini bağlam alsın (aynı görevin karşı katmanı).
     be_baglam = {"key": gorev.get("key", ""),
                  "summary": (gorev.get("summary", "") + " — BE tarafı (sözleşme)"),
                  "description": be.get("markdown", ""), "katman": "be"}
     fe = gorev_analiz_et(gorev, cevaplar=cevaplar, katman="fe", iliskili=[be_baglam],
                          onceki_sorular=onceki_sorular, ekran_baglami=ekran_baglami,
-                         rag_ctx=rag_ctx, canli_baglam_override=canli_baglam_override)
+                         rag_ctx=rag_ctx, canli_baglam_override=canli_baglam_override, bff_rapor=bff_rapor)
     return {"be": {"markdown": be.get("markdown", ""), "acik_sorular": be.get("acik_sorular", "")},
             "fe": {"markdown": fe.get("markdown", ""), "acik_sorular": fe.get("acik_sorular", "")}}
 

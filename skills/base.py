@@ -2535,6 +2535,7 @@ def _context_filter_normalize(ctx: dict | None) -> dict:
         "live_app_gorev": {
             "target_url": gorev_urls[0] if gorev_urls else "",
             "gozlem_kapsami": str(live_app_gorev.get("gozlem_kapsami", "")).strip(),
+            "bff_otomatik": live_app_gorev.get("bff_otomatik", True) is not False,   # BFF keşfi analiz öncesi otomatik
         },
         "live_app_auth": {
             "username": str(live_app_auth.get("username", "")).strip(),

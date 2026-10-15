@@ -1621,7 +1621,7 @@ def _ornek_yakala_md(tip: str, md: str, ozet: str = "", proje: str = "", jira_ke
 def _gorev_egitim_topla(key: str, summary: str, katman: str, mode: str, sonuc: dict) -> None:
     """Task analizi tamamlanınca: (C) sunucu deposuna yaz (kalıcı, 30g) + (A) few-shot havuzuna
     yakala — Jira'ya YAZILMASA da üretilen analiz toplansın. BEST-EFFORT, arka plan."""
-    if mode == "formatla" or key.upper().startswith("EKRAN-"):
+    if mode in ("formatla", "bff-kesif") or key.upper().startswith("EKRAN-"):
         return  # salt biçimlendirme / sentetik ekran kaydı (Jira'da yok) — eğitim değeri yok
     try:
         from skills.gorev_deposu import kaydet as _gd_kaydet
@@ -4762,6 +4762,7 @@ def context_filter_kaydet():
         "live_app_gorev": {
             "target_url": gorev_urls[0] if gorev_urls else "",
             "gozlem_kapsami": str(live_app_gorev.get("gozlem_kapsami", "")).strip(),
+            "bff_otomatik": live_app_gorev.get("bff_otomatik", True) is not False,
         },
         "live_app_auth": {
             "username": str(live_app_auth.get("username", "")).strip(),
@@ -5228,15 +5229,48 @@ def _gorev_is_calistir(job_id: str) -> None:
             mode = adim.get("mode", "analiz")
             # Ekran bazlı iş: miras canlı uygulama ANA adresi + bu ekranın hedefiyle gözlem (live_app_gorev yerine)
             _canli_ek = {}
-            if adim.get("canli_hedef"):
+            _ch = adim.get("canli_hedef") or (adim.get("gorev") or {}).get("canli_hedef") or ""
+            if _ch:
                 try:
                     from skills.sohbet_analiz import _canli_tabanli_baglam
-                    _co = _canli_tabanli_baglam(adim["canli_hedef"])
+                    _co = _canli_tabanli_baglam(_ch)
                     if _co:
                         _canli_ek = {"canli_baglam_override": _co}
                 except Exception as _e:
                     logger.warning("Ekran canlı hedefi hazırlanamadı (%s): %s", key, _e)
-            if mode == "formatla":
+            # BFF KEŞFİ (CRUD gözlemi): analizden ÖNCE ekranın gerçek servis sözleşmesi. Rapor 7 gün önbellekte
+            # (ekran başına 1 keşif); yoksa/eskiyse ve otomatik açıksa agent kendisi oluştur/güncelle/sil yapar.
+            # 'bff-kesif' modu: yalnız keşif (buton — her zaman yeniden gözler).
+            _bff_blok, _bff_sonuc = None, None
+            if mode in ("analiz", "fe-be-ayir", "bff-kesif"):
+                try:
+                    from skills import bff_kesif
+                    from skills.base import gorev_live_app_urls, live_app_urls
+                    _tarif = adim.get("canli_hedef") or (adim.get("gorev") or {}).get("canli_hedef") or ""
+                    _ekran_bazli = bool(_tarif)
+                    _urls = live_app_urls() if _ekran_bazli else gorev_live_app_urls()
+                    _hedef_url = _urls[0] if _urls else ""
+                    if _hedef_url:
+                        _r = bff_kesif.rapor_oku(_hedef_url, _tarif)
+                        if mode == "bff-kesif" or ((not bff_kesif.taze_mi(_r)) and bff_kesif.otomatik_acik()):
+                            with _gorev_is_lock:
+                                job["aktif_not"] = "BFF keşfi — ekranda CRUD gözlemi (AI-TEST kayıtlarıyla)"
+                            _r = bff_kesif.kesfet(_hedef_url, _tarif, ekran_bazli=_ekran_bazli)
+                            with _gorev_is_lock:
+                                job["aktif_not"] = ""
+                        if _r and _r.get("md"):
+                            _bff_blok = bff_kesif.rapor_blogu(_r)
+                        _bff_sonuc = {k: _r.get(k) for k in ("ok", "md", "ts", "yas_gun", "anahtar", "neden", "yol")} if _r else None
+                    elif mode == "bff-kesif":
+                        _bff_sonuc = {"ok": False, "neden": "Canlı uygulama hedefi tanımlı değil (Bağlam Filtresi → Task canlı uygulama hedefi)."}
+                except Exception as _e:
+                    logger.warning("BFF keşfi atlandı (%s): %s", key, _e)
+                    if mode == "bff-kesif":
+                        raise
+            if mode == "bff-kesif":
+                sonuc = {"markdown": adim.get("markdown", ""), "acik_sorular": adim.get("acik_sorular", ""),
+                         "bff": _bff_sonuc or {"ok": False, "neden": "rapor üretilemedi"}}
+            elif mode == "formatla":
                 md = gorev_standart_formatla(gorev)
                 sonuc = {"markdown": md, "acik_sorular": ""}
             elif mode == "duzelt":
@@ -5256,7 +5290,7 @@ def _gorev_is_calistir(job_id: str) -> None:
             elif mode == "fe-be-ayir":
                 # Tek görevi FE ve BE olarak İKİ AYRI katman-özel analize böl (Option A).
                 r = gorev_fe_be_analiz(gorev, cevaplar=adim.get("cevaplar", ""),
-                                       onceki_sorular=adim.get("onceki_sorular", ""), **_canli_ek)
+                                       onceki_sorular=adim.get("onceki_sorular", ""), bff_rapor=_bff_blok, **_canli_ek)
                 sonuc = {"fe_be": r}
             else:
                 iliskili = []
@@ -5267,7 +5301,7 @@ def _gorev_is_calistir(job_id: str) -> None:
                             iliskili.append(g)
                 r = gorev_analiz_et(gorev, cevaplar=adim.get("cevaplar", ""),
                                     iliskili=iliskili, katman=adim.get("katman", ""),
-                                    onceki_sorular=adim.get("onceki_sorular", ""), **_canli_ek)
+                                    onceki_sorular=adim.get("onceki_sorular", ""), bff_rapor=_bff_blok, **_canli_ek)
                 sonuc = {"markdown": r.get("markdown", ""), "acik_sorular": r.get("acik_sorular", "")}
             with _gorev_is_lock:
                 job["sonuclar"][key] = {**sonuc, "summary": gorev.get("summary", ""),
@@ -5375,6 +5409,7 @@ def jira_gorev_is_durum():
                     # SERVER-side geçen süre → UI yenilemeye dayanıklı "X dk sürüyor" + stall uyarısı
                     "gecen_sn": int(_simdi - job.get("olusturuldu", _simdi)),
                     "adim_gecen_sn": int(_simdi - job["aktif_bas"]) if job.get("aktif_bas") else 0,
+                    "aktif_not": job.get("aktif_not", ""),
                     "sonuclar": job["sonuclar"]})
 
 

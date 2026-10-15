@@ -353,7 +353,7 @@
           const d = await (await fetch('/api/sohbet/ekran-gorevleri', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secilen }) })).json();
           if (!d.ok) { toast(d.error || 'Hazırlanamadı', 'error'); return; }
           // Sentetik görevleri Task Analizi'nin görev haritasına koy (cevap/düzelt turları açıklamayı bulsun)
-          (d.adimlar || []).forEach(a => { if (a.gorev) _jgGorevler[a.gorev.key] = a.gorev; });
+          (d.adimlar || []).forEach(a => { if (a.gorev) { a.gorev.canli_hedef = a.canli_hedef || ''; _jgGorevler[a.gorev.key] = a.gorev; } });
           await _jgIsBaslat(d.adimlar, 'Ekran analizleri (FE+BE)', d.adimlar[0].key, true);
           switchTab('jira-gorevler');
           toast(`${d.adimlar.length} ekran için FE+BE analiz başlatıldı — Task Analizi ekranında izleyin`, 'success');

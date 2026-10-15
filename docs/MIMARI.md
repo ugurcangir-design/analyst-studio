@@ -501,6 +501,32 @@ isteri adım adım oluştursun, agent soru sorsun, açık soruları sırayla sor
    sentetik `EKRAN-` eğitim havuzu/depoya girmez; `gorev_yeni_task_olustur` geçersiz kaynak anahtarına bağ kurmaz; UI
    sentetik kayıtta 'Onayla ve Jira'da Güncelle' kapalı (Jira'da task yok). Test: `tests/test_sohbet_ekran.py`.
 
+### BFF Keşfi (`skills/bff_kesif.py`) — agent'ın KENDİ CRUD gözlemiyle ekran servis sözleşmesi
+Owner isteri: Task Analizi'nde ekrandaki BFF'leri canlı gözlemlemek için analist elle create/update/delete yapmak
+zorunda kalıyordu → agent bunu kendisi yapar. Kararlar: otomatik + buton; AI-TEST kayıtları KALIR (silme ayrı ikinci
+kayıtta denenir); rapor 7 gün önbellek.
+- **Plan (`_kesif_plani`, odaklı gözlem kapsamı olarak `canli_uygulama_baglami_hazirla(hedef_tarif=plan)` — mevcut
+  CRUD/verimlilik/maskeleme kuralları dahil):** 1 liste+lookup (filtre/sayfalama 1 kez) · 2 OLUŞTUR `AI-TEST-<MMDD-HHMM>`
+  (POST payload+yanıt, kayıt KALIR) · 3 DOĞRULAMA (zorunlu alan boş, 1 kez) · 4 GÜNCELLE (PUT/PATCH, kalır) · 5 SİL
+  (`AI-TEST-…-SIL` ayrı kayıt → DELETE) · 6 diğer aksiyonlar yalnız kendi kaydında, geri alınamaz olanlar HARİÇ ·
+  yapılamayan → "Gezilemeyen". Çıktı `<bff_rapor>` sabit bölümler (Ekran · Açılış/liste servisleri · Form alanları ·
+  CREATE · DOĞRULAMA · UPDATE · DELETE · Diğer aksiyonlar · Bırakılan AI-TEST kayıtları · Gezilemeyen).
+- **Hedef:** `ekran_bazli=True` (İnteraktif Analiz ekran işi, `canli_hedef`) → miras `live_app` ANA adresi + ekran
+  tarifi, `canli_uygulama_kapsami='surec'`; değilse `live_app_gorev` hedefi, `'gorev'`. Hedef yoksa AI çağrılmaz.
+- **Depo/önbellek:** `reference/live-app/bff/<sha1(url|ekran)[:12]>.md` (+`.json` {ts, ok, hedef_url, ekran}).
+  `rapor_oku` · `taze_mi` (ok ∧ yaş < 7 gün) · `rapor_blogu` (prompt bloğu: "GERÇEK gözlem; burada olmayan endpoint
+  UYDURMA"). Blok yoksa kaydedilmez; CREATE/servis bölümü yoksa `ok=False` (kaydedilir ama taze sayılmaz).
+  `reference/live-app` RAG corpus'unda (`rglob`) → raporlar tüm analizlere referans olarak da girer.
+- **Entegrasyon (app `_adim_isle`):** mod `analiz`/`fe-be-ayir`/`bff-kesif` → hedef URL + tarif → `rapor_oku`; `bff-kesif`
+  ya da (taze değil ∧ `otomatik_acik()`) → `job.aktif_not` = "BFF keşfi — ekranda CRUD gözlemi" → `kesfet` → `rapor_blogu`
+  → `gorev_analiz_et(bff_rapor=…)` / `gorev_fe_be_analiz(bff_rapor=…)` (stable blok, canlı görevden önce). `bff-kesif`
+  sonucu `sonuc.bff{ok,md,ts,yas_gun,anahtar,neden,yol}` (analiz içeriğine dokunmaz, eğitim havuzuna girmez).
+  `/api/jira/gorev/is/durum.aktif_not` → UI işlem başlığı. Ayar `live_app_gorev.bff_otomatik` (vars. true; Task ekranı
+  "BFF keşfi otomatik" kutusu; `_context_filter_normalize` + `/api/context-filter` korur). UI: "BFF Keşfi (CRUD)" butonu
+  (`jgBffKesif`, onaylı) + `_jgBffGoster` (durum + "Raporu gör"); ekran-bazlı sentetik görevlerde `canli_hedef` görev
+  dict'inde de taşınır (`_adim_isle` her ikisini okur). Maliyet: ekran başına 1 canlı CLI çağrısı (5-10 dk), 7 günde bir.
+  Test: `tests/test_bff_kesif.py`.
+
 ## Jira Görevleri Özelliği (`skills/jira_gorevleri.py` + UI `page-jira-gorevler`)
 Doküman yüklemeden, **mevcut** Jira Epic/Story altındaki görevleri çekip triyaj eder.
 - **Çekme — İKİ AŞAMALI (keşif + taze okuma):**
