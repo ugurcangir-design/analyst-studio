@@ -21,7 +21,12 @@ Oturum `output/sohbet/oturum.json` (gitignore). Endpoint: `/api/sohbet/{oturum,m
 çıktısı 15 Ekim sohbetinde göründü). **Arka plan + görünürlük:** üretim daemon thread'de sürer (ekran değişimi/yenileme KESMEZ; restart/kapanma koruması
 `_arka_plan_isleri_calisiyor`). `_sohbet_aktif_is()` → `/api/sohbet/oturum.aktif_is` (ekran açılınca sürmekte olan işe YENİDEN
 BAĞLANIR, `_shPoll`) + `/api/workflow-state.sohbet_is` (üst-bar işlem çipi + HUD her ekranda "İnteraktif süreç/teknik
-analizi üretiliyor · süre"; global workflow'a DOKUNMAZ). `uret/durum` `gecen_sn` döner (180 sn üstü takılma uyarısı). `base._onsoz_kirp` 2 katlı: baştaki düz ön-söz + meta-yorum/ayraç SONRASI, ilk
+analizi üretiliyor · süre"; global workflow'a DOKUNMAZ). `uret/durum` `gecen_sn` döner (180 sn üstü takılma uyarısı). **Durdur / Devam Ettir / İptal:** `POST /api/sohbet/uret/durdur {job, iptal?}` → `_sohbet_is_kes`: iş
+`durduruldu|iptal`, o an süren claude CLI `cli_proc_durdur(worker_tid)` ile process-grubuyla ÖLDÜRÜLÜR (token yakma anında
+kesilir; `DurdurulduError` hata sayılmaz). `POST /api/sohbet/uret/devam {job}` yalnız `durduruldu` işte → AYNI hedefle yeni iş
+(eski kayıt `devam_etti`); tamamlanan analiz aşamaları `_api_cagri` önbelleğinden gelir, yalnız kesilen aşama yeniden çalışır
+(gerçek 'kaldığı yerden' — model çıktısı dondurulamaz). `oturum.durdurulmus_is` → ekran yenilense de Devam Ettir/İptal sunulur;
+HUD'da sohbet işi için ⏸ Durdur. `base._onsoz_kirp` 2 katlı: baştaki düz ön-söz + meta-yorum/ayraç SONRASI, ilk
 başlık/tablodan önceki İngilizce iç-konuşma paragrafı (`_ONSOZ_IC_KONUSMA`; gövde paragrafı/JSON dokunulmaz). Test: `tests/test_sohbet_tazelik.py`. UI: `screens/sohbet.html` (nav "İnteraktif Analiz", Analiz grubu; chat thread + `sh-*`). Test: `smoke_test`
 (oturum + doğrulama uçları). **NOT — motor refactor'u:** `surec_analizi_yap(icerik_override, dosya_adi_override, ozel_atla)` +
 `teknik_analiz_yap(ozel_atla)` opsiyonel parametre aldı — override YOKKEN davranış AYNEN korunur (doküman akışı etkilenmez).

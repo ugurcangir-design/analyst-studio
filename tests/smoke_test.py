@@ -252,6 +252,11 @@ _so = json_al(istemci.get("/api/sohbet/oturum"))
 kontrol("sohbet/oturum ok", _so.get("ok") and isinstance(_so.get("oturum"), dict))
 kontrol("sohbet/mesaj boş metin → 400",
         istemci.post("/api/sohbet/mesaj", json={"metin": ""}, headers=ORIGIN).status_code == 400)
+kontrol("sohbet/uret/durdur bilinmeyen iş → 404",
+        istemci.post("/api/sohbet/uret/durdur", json={"job": "yok"}, headers=ORIGIN).status_code == 404)
+kontrol("sohbet/uret/devam bilinmeyen iş → 404",
+        istemci.post("/api/sohbet/uret/devam", json={"job": "yok"}, headers=ORIGIN).status_code == 404)
+kontrol("sohbet/oturum durdurulmus_is alanı", "durdurulmus_is" in (_so.get("oturum") or {}))
 kontrol("sohbet/uret geçersiz hedef → 400",
         istemci.post("/api/sohbet/uret", json={"hedef": "xyz"}, headers=ORIGIN).status_code == 400)
 kontrol("sohbet/uret/durum bilinmeyen iş → 404",

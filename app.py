@@ -5762,6 +5762,7 @@ def _sohbet_ozet(oturum: dict) -> dict:
         "teknik_var": teknik_var_mi(oturum),
         # Sürmekte olan üretim (varsa) → ekran değiştirip dönünce / yenileyince yeniden bağlanma
         "aktif_is": _sohbet_aktif_is(),
+        "durdurulmus_is": _sohbet_durdurulmus_is(),
     }
 
 
@@ -5772,6 +5773,18 @@ def _sohbet_aktif_is() -> dict | None:
             if j.get("durum") == "calisiyor":
                 bas = j.get("bas_ts") or time.time()
                 return {"job": jid, "hedef": j.get("hedef"), "bas_ts": bas, "gecen_sn": int(time.time() - bas)}
+    return None
+
+
+def _sohbet_durdurulmus_is() -> dict | None:
+    """Son DURDURULMUŞ üretim (Devam Ettir için; çalışan iş yoksa)."""
+    with _sohbet_is_lock:
+        for jid in reversed(list(_sohbet_isler)):
+            j = _sohbet_isler[jid]
+            if j.get("durum") == "calisiyor":
+                return None
+            if j.get("durum") == "durduruldu":
+                return {"job": jid, "hedef": j.get("hedef")}
     return None
 
 
@@ -5813,11 +5826,14 @@ def sohbet_sifirla():
 
 
 def _sohbet_uret_calistir(job_id: str, hedef: str) -> None:
-    from skills.base import USE_CLAUDE_CLI, aktif_cli_model, MODEL_ANALIZ
+    from skills.base import USE_CLAUDE_CLI, aktif_cli_model, MODEL_ANALIZ, DurdurulduError
     _model = aktif_cli_model() if USE_CLAUDE_CLI else MODEL_ANALIZ
     _ai_modu = "cli" if USE_CLAUDE_CLI else "api"
     _bas = time.time()
     _tbas = _token_bas()
+    with _sohbet_is_lock:
+        # Durdur: o an süren claude CLI'ı bu thread kimliğiyle killpg edebilsin (_CLI_PROC_REG)
+        _sohbet_isler[job_id]["worker_tid"] = threading.get_ident()
     try:
         from skills.sohbet_analiz import surec_uret, teknik_uret
         if hedef == "teknik":
@@ -5827,14 +5843,44 @@ def _sohbet_uret_calistir(job_id: str, hedef: str) -> None:
             surec_uret()
             sonuc = {"dosya": "surec-analizi.md"}
         with _sohbet_is_lock:
-            _sohbet_isler[job_id].update({"durum": "bitti", "sonuc": sonuc})
+            if _sohbet_isler[job_id].get("durum") == "calisiyor":
+                _sohbet_isler[job_id].update({"durum": "bitti", "sonuc": sonuc})
         _telemetri_olay("sohbet_uret", "ok", int((time.time() - _bas) * 1000),
                         model=_model, ai_modu=_ai_modu,
                         baglam={"proje": "interaktif", "dokuman": hedef}, token_bas=_tbas)
-    except Exception as e:
-        logger.error(f"İnteraktif analiz üretim hatası ({hedef}): {e}")
+    except DurdurulduError:
+        # Analist Durdur/İptal → hata değil; durum zaten durduruldu/iptal olarak işaretlendi
+        logger.info("İnteraktif analiz üretimi analist tarafından durduruldu (%s).", hedef)
         with _sohbet_is_lock:
+            if _sohbet_isler[job_id].get("durum") == "calisiyor":
+                _sohbet_isler[job_id]["durum"] = "durduruldu"
+    except Exception as e:
+        with _sohbet_is_lock:
+            if _sohbet_isler[job_id].get("durum") in ("durduruldu", "iptal"):
+                return   # öldürülen alt sürecin yan hatası — analistin kararı korunur
             _sohbet_isler[job_id].update({"durum": "hata", "hata": str(e)})
+        logger.error(f"İnteraktif analiz üretim hatası ({hedef}): {e}")
+
+
+def _sohbet_is_kes(job_id: str, yeni_durum: str) -> dict | None:
+    """Sohbet üretimini keser: o an süren claude CLI process-grubuyla öldürülür (token yakma anında
+    durur; API modunda çağrı kesilemez ama sonuç yazılmaz). yeni_durum: 'durduruldu' (Devam Ettir
+    ile yeniden başlatılabilir — tamamlanan aşamalar önbellekten gelir) | 'iptal'."""
+    with _sohbet_is_lock:
+        job = _sohbet_isler.get(job_id)
+        if not job:
+            return None
+        if job.get("durum") == "calisiyor":
+            job["durum"] = yeni_durum
+            job["kesildi_ts"] = time.time()
+        tid = job.get("worker_tid")
+        hedef = job.get("hedef")
+    try:
+        from skills.base import cli_proc_durdur
+        oldurdu = cli_proc_durdur(tid)
+    except Exception:
+        oldurdu = False
+    return {"hedef": hedef, "cli_oldurdu": oldurdu}
 
 
 @app.route("/api/sohbet/uret", methods=["POST"])
@@ -5863,6 +5909,37 @@ def sohbet_uret():
                 _sohbet_isler.pop(k, None)
     threading.Thread(target=_sohbet_uret_calistir, args=(job_id, hedef), daemon=True).start()
     return jsonify({"ok": True, "job": job_id})
+
+
+@app.route("/api/sohbet/uret/durdur", methods=["POST"])
+def sohbet_uret_durdur():
+    """Üretimi DURDUR (devam ettirilebilir) ya da İPTAL et. Body: {job, iptal?: bool}."""
+    data = request.get_json(silent=True) or {}
+    r = _sohbet_is_kes((data.get("job") or "").strip(), "iptal" if data.get("iptal") else "durduruldu")
+    if r is None:
+        return jsonify({"ok": False, "error": "İş bulunamadı"}), 404
+    return jsonify({"ok": True, **r})
+
+
+@app.route("/api/sohbet/uret/devam", methods=["POST"])
+def sohbet_uret_devam():
+    """Durdurulan üretimi aynı hedefle yeniden başlatır. Tamamlanmış analiz aşamaları önbellekten gelir
+    (aynı girdi → aynı anahtar), yalnız kesilen aşama yeniden çalışır. Body: {job}."""
+    data = request.get_json(silent=True) or {}
+    with _sohbet_is_lock:
+        job = _sohbet_isler.get((data.get("job") or "").strip())
+        if not job:
+            return jsonify({"ok": False, "error": "İş bulunamadı"}), 404
+        if job.get("durum") != "durduruldu":
+            return jsonify({"ok": False, "error": "Yalnız durdurulmuş bir üretim devam ettirilebilir."}), 409
+        if any(j.get("durum") == "calisiyor" for j in _sohbet_isler.values()):
+            return jsonify({"ok": False, "error": "Başka bir üretim sürüyor."}), 409
+        hedef = job.get("hedef") or "surec"
+        job["durum"] = "devam_etti"   # eski kayıt artık 'durdurulmuş' sayılmaz (çift devam / bayat Devam Ettir önlenir)
+        job_id = f"sohbet-uret-{int(time.time() * 1000)}"
+        _sohbet_isler[job_id] = {"durum": "calisiyor", "hedef": hedef, "bas_ts": time.time(), "devam": True}
+    threading.Thread(target=_sohbet_uret_calistir, args=(job_id, hedef), daemon=True).start()
+    return jsonify({"ok": True, "job": job_id, "hedef": hedef})
 
 
 @app.route("/api/sohbet/uret/durum", methods=["GET"])

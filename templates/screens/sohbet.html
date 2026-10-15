@@ -28,6 +28,7 @@
         #page-sohbet .sh-uret-durum { font-size:12.5px; color:var(--text2); }
         #page-sohbet .sh-uret-durum.err { color:var(--run); }
         #page-sohbet .sh-uret-durum.ok { color:var(--green); }
+        #page-sohbet .sh-uret-kontrol { display:inline-flex; gap:6px; }
         #page-sohbet .sh-cikti { margin-top:14px; border:1px solid var(--accent); background:var(--accent-soft); border-radius:10px; overflow:hidden; }
         #page-sohbet .sh-cikti-head { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
         #page-sohbet .sh-cikti-title { font-size:13px; font-weight:600; color:var(--text); }
@@ -78,6 +79,7 @@
           <svg class="ico"><use href="#i-layers"/></svg> Teknik Analiz Üret
         </button>
         <span class="sh-uret-durum" id="sh-uret-durum"></span>
+        <span class="sh-uret-kontrol" id="sh-uret-kontrol"></span>
       </div>
 
       <div class="sh-cikti" id="sh-cikti" style="display:none">
@@ -127,8 +129,16 @@
           _shAktifJob = ai.job;
           const et = ai.hedef === 'teknik' ? 'Teknik Analiz' : 'Süreç Analizi';
           _shDurum('⏳ ' + et + ' üretiliyor… (arka planda sürüyor' + (ai.gecen_sn != null ? ' · ' + Math.floor(ai.gecen_sn / 60) + ' dk' : '') + ')', '');
+          _shKontrol('calisiyor', ai.job);
           _shPoll(et, ai.hedef);
         }
+        // DURDURULMUŞ üretim varsa (ekran değişse/yenilense de) Devam Ettir / İptal sunulur
+        const du = o && o.durdurulmus_is;
+        if (!ai && du && du.job && !_shAktifJob) {
+          _shDurdurulmusJob = du.job;
+          _shDurum('⏸ ' + (du.hedef === 'teknik' ? 'Teknik Analiz' : 'Süreç Analizi') + ' üretimi durduruldu.', '');
+          _shKontrol('durduruldu', du.job);
+        } else if (!ai && !du) { _shDurdurulmusJob = null; if (!_shAktifJob) _shKontrol(''); }
         // Kilometre taşı buton durumları
         const varMesaj = mesajlar.length > 0;
         document.getElementById('sh-surec-btn').disabled = !varMesaj || !!_shAktifJob;
@@ -191,6 +201,7 @@
           const d = await r.json();
           if (!d.ok) { _shDurum('⚠ ' + (d.error || 'Başlatılamadı'), 'err'); shYukle(); return; }
           _shAktifJob = d.job;
+          _shKontrol('calisiyor', d.job);
           _shPoll(etiket, hedef);
         } catch (e) { _shDurum('⚠ Bağlantı hatası: ' + e, 'err'); shYukle(); }
       }
@@ -211,7 +222,13 @@
             }
             return;
           }
-          clearInterval(_shPollTimer); _shPollTimer = null; _shAktifJob = null;
+          clearInterval(_shPollTimer); _shPollTimer = null; const bitenJob = _shAktifJob; _shAktifJob = null;
+          if (d.durum === 'durduruldu') {
+            _shDurdurulmusJob = bitenJob; _shDurum('⏸ ' + etiket + ' üretimi durduruldu — Devam Ettir ile sürdürebilirsiniz.', '');
+            _shKontrol('durduruldu', bitenJob); shYukle(); return;
+          }
+          if (d.durum === 'iptal') { _shDurum('✕ ' + etiket + ' üretimi iptal edildi.', ''); _shKontrol(''); shYukle(); return; }
+          _shKontrol('');
           if (d.durum === 'bitti') {
             _shDurum('✓ ' + etiket + ' üretildi.', 'ok');
             toast(etiket + ' üretildi', 'success');
@@ -246,6 +263,47 @@
         } catch (e) { _shMsg('URL okunamadı: ' + e, 'err'); }
       }
 
+      // Üretim kontrolleri: çalışırken Durdur / İptal · durdurulmuşken Devam Ettir / İptal
+      let _shDurdurulmusJob = null;
+      function _shKontrol(mod, job) {
+        const el = document.getElementById('sh-uret-kontrol'); if (!el) return;
+        if (mod === 'calisiyor') {
+          el.innerHTML = `<button class="btn btn-outline btn-sm" onclick="shUretDurdur(false)" title="Üretimi durdur — Devam Ettir ile kaldığı aşamadan sürdürülebilir (tamamlanan aşamalar yeniden hesaplanmaz)">⏸ Durdur</button>`
+            + `<button class="btn btn-outline btn-sm" onclick="shUretDurdur(true)" title="Üretimi iptal et">✕ İptal</button>`;
+        } else if (mod === 'durduruldu') {
+          el.innerHTML = `<button class="btn btn-primary btn-sm" onclick="shUretDevam()" title="Durdurulan üretimi sürdür — tamamlanan aşamalar önbellekten gelir">▶ Devam Ettir</button>`
+            + `<button class="btn btn-outline btn-sm" onclick="shUretIptal()">✕ İptal</button>`;
+        } else el.innerHTML = '';
+      }
+      async function shUretDurdur(iptal) {
+        if (!_shAktifJob) return;
+        if (!confirm(iptal ? 'Üretim iptal edilsin mi? (Sonuç yazılmaz)' : 'Üretim durdurulsun mu? Devam Ettir ile sürdürebilirsiniz; tamamlanan aşamalar yeniden hesaplanmaz.')) return;
+        const job = _shAktifJob;
+        try {
+          const d = await (await fetch('/api/sohbet/uret/durdur', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ job, iptal: !!iptal }) })).json();
+          if (!d.ok) { toast(d.error || 'Durdurulamadı', 'error'); return; }
+          toast(iptal ? 'Üretim iptal edildi' : 'Üretim durduruldu', 'info');
+        } catch (e) { toast('Hata: ' + e, 'error'); }
+      }
+      async function shUretDevam() {
+        if (!_shDurdurulmusJob || _shAktifJob) return;
+        try {
+          const d = await (await fetch('/api/sohbet/uret/devam', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ job: _shDurdurulmusJob }) })).json();
+          if (!d.ok) { toast(d.error || 'Devam ettirilemedi', 'error'); return; }
+          _shDurdurulmusJob = null; _shAktifJob = d.job;
+          const et = d.hedef === 'teknik' ? 'Teknik Analiz' : 'Süreç Analizi';
+          _shDurum('⏳ ' + et + ' sürdürülüyor… (tamamlanan aşamalar önbellekten)', '');
+          _shKontrol('calisiyor', d.job);
+          document.getElementById('sh-surec-btn').disabled = true; document.getElementById('sh-teknik-btn').disabled = true;
+          _shPoll(et, d.hedef);
+        } catch (e) { toast('Hata: ' + e, 'error'); }
+      }
+      async function shUretIptal() {
+        if (!_shDurdurulmusJob) return;
+        if (!confirm('Durdurulan üretim iptal edilsin mi?')) return;
+        try { await fetch('/api/sohbet/uret/durdur', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ job: _shDurdurulmusJob, iptal: true }) }); } catch (e) {}
+        _shDurdurulmusJob = null; _shKontrol(''); _shDurum('', ''); shYukle();
+      }
       function _shDurum(html, tip) {
         const el = document.getElementById('sh-uret-durum');
         el.className = 'sh-uret-durum' + (tip ? ' ' + tip : '');

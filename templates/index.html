@@ -2270,6 +2270,7 @@ function temaDegistir() {
         <div class="im-note">Analiz arka planda sürüyor — bu ekranı kapatıp başka işe geçebilirsiniz, işlem kesilmez.</div>
         <div class="im-actions">
           <button class="btn btn-outline btn-sm" onclick="islemModuKapat()">Kapat — arka planda sürsün</button>
+          <button class="btn btn-outline btn-sm" id="im-sohbet-durdur" style="display:none" onclick="_imSohbetDurdur()" title="İnteraktif analiz üretimini durdur (Devam Ettir sohbet ekranında)">⏸ Durdur</button>
         </div>
       </div>
     </div>
@@ -7135,6 +7136,7 @@ function _updateRunChip(s){
       const bas = _stepStart[s.durum];
       _setTxt('im-sure', bas ? _fmtSure(Date.now() - bas) : '00:00');
     } else if (sh) {
+      const sd = document.getElementById('im-sohbet-durdur'); if (sd) sd.style.display = '';
       _setTxt('im-title', 'İnteraktif Analiz — ' + (sh.hedef === 'teknik' ? 'Teknik Analiz' : 'Süreç Analizi') + ' üretiliyor');
       _setTxt('im-step', sh.hedef === 'teknik' ? '2/2' : '1/2');
       _setTxt('im-sub', 'ADIM · canlı gözlem dahil');
@@ -7154,7 +7156,17 @@ function islemModuAc(){
   _islemModuAcik = true; el.classList.add('show');
   if (_lastState) _updateRunChip(_lastState);
 }
+async function _imSohbetDurdur(){
+  const sh = (_lastState || {}).sohbet_is; if (!sh) return;
+  if (!confirm('İnteraktif analiz üretimi durdurulsun mu? Sohbet ekranından Devam Ettir ile sürdürebilirsiniz.')) return;
+  try {
+    const d = await (await fetch('/api/sohbet/uret/durdur', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ job: sh.job }) })).json();
+    toast(d.ok ? 'Üretim durduruldu' : (d.error || 'Durdurulamadı'), d.ok ? 'info' : 'error');
+  } catch (e) { toast('Hata: ' + e, 'error'); }
+  islemModuKapat();
+}
 function islemModuKapat(){
+  const sd = document.getElementById('im-sohbet-durdur'); if (sd) sd.style.display = 'none';
   const el = document.getElementById('islem-modu'); if (el) el.classList.remove('show');
   _islemModuAcik = false;
   _hudManuelKapatildi = true;   // aynı koşuda otomatik tekrar açma (yeni koşuda sıfırlanır)
