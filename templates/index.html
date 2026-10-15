@@ -3090,6 +3090,9 @@ function temaDegistir() {
           </div>
           <span class="jg-warn">⚠ Onayla'ya basınca Jira görevinin açıklaması ÜZERİNE YAZILIR (geri alınamaz). Açık Sorular Jira'ya YAZILMAZ.</span>
           <button class="btn btn-outline btn-sm" onclick="jgPreviewKapat()">İptal</button>
+          <button class="btn btn-outline btn-sm" id="jg-kabul-btn" onclick="jgKabulKontrol()" title="Geliştirmesi biten (ANALIZ CHECK) task'ı test ortamında testçi gibi fiilen dener: alanlar, butonlar, başarılı/başarısız mesajlar, servis çağrıları. ✅/❌ rapor üretir; Jira durumu değişmez — teste iletme kararı sizindir.">
+            <svg class="ico"><use href="#i-check"/></svg> Kabul Kontrolü
+          </button>
           <button class="btn btn-outline btn-sm" id="jg-akis-btn" onclick="jgAkisKapat()" title="Analizi uçtan uca yürütür: süreç/ekran işleyişindeki boşlukları bulur, bilgi varsa ilgili yeri minimal düzeltir, yoksa açık soru ekler (analizi büyütmez). Geri alınabilir.">
             <svg class="ico"><use href="#i-check"/></svg> Akışı Kapat
           </button>
@@ -5491,6 +5494,7 @@ function _jgSonucGoster(key) {
   document.getElementById('jg-duzelt-row').style.display = s.hata ? 'none' : '';
   _jgMsg('jg-preview-msg', s.hata ? ('Hata: ' + s.hata) : '', s.hata ? 'err' : '');
   if (!s.hata && s.akis_rapor) _jgAkisRaporGoster(key, s.akis_rapor);
+  if (!s.hata && s.kabul) _jgKabulGoster(key, s.kabul);
   // İçerik bellekte yoksa (güncelleme/yenileme sonrası) → Jira'dan geri yükleme sun
   if (!s.hata && !((s.markdown || '').trim()) && !_jgMesgul() && /^[A-Z][A-Z0-9]+-\d+$/.test(key)) {
     const m = document.getElementById('jg-preview-msg');
@@ -5582,6 +5586,46 @@ function jgAkisGeriAl(key) {
   _jgMsg('jg-preview-msg', '↶ Akış kapatma geri alındı — önceki analiz yüklendi.', 'ok');
 }
 
+// Kabul Kontrolü — ANALIZ CHECK task'ını canlı ortamda testçi gibi doğrula (iş modu kabul-kontrol).
+// Analiz içeriğine DOKUNMAZ; rapor ayrı tutulur (s.kabul) ve isteğe bağlı Jira yorumuna yazılır.
+function jgKabulKontrol() {
+  if (!_jgAktifAnalizKey) return;
+  if (_jgMesgul()) { toast('İşlem sürüyor', 'info'); return; }
+  const key = _jgAktifAnalizKey;
+  _jgEditorKaydet(key);
+  const s = _jgAnalizSeti[key] || {};
+  if (!confirm(`${_jgGercekKey(key)} için Kabul Kontrolü başlatılsın mı?\n\nAgent TEST ortamında uygulamaya girip task'taki maddeleri fiilen dener; kaydet/güncelle/sil işlemleri AI-TEST öneki ile gerçekten yapılır. Bağlam Filtresi'ndeki Task canlı uygulama hedefi test/UAT ortamı olmalı. Jira durumu değişmez.`)) return;
+  _jgIsBaslat([{ key: key, mode: 'kabul-kontrol', markdown: s.markdown || '', acik_sorular: s.acik_sorular || '',
+                 katman: s.katman || '', gorev: _jgGorevCoz(key) }],
+             'Kabul kontrolü — canlı doğrulama', key, false);
+}
+const _JG_KABUL_ETIKET = { teste_hazir: ['✅ TESTE HAZIR', 'ok'], teste_hazir_kismi: ['✅ TESTE HAZIR (kısmi — doğrulanamayan var)', 'ok'],
+                           geri: ['❌ GELİŞTİRMEYE GERİ', 'err'], dogrulanamadi: ['⚠ DOĞRULANAMADI', ''] };
+const _JG_KABUL_IKON = { dogrulandi: '✅', eksik: '❌', dogrulanamadi: '⚠', ekran_disi: '◻' };
+function _jgKabulGoster(key, k) {
+  const m = document.getElementById('jg-preview-msg');
+  const [et, cls] = _JG_KABUL_ETIKET[k.sonuc] || ['⚠ DOĞRULANAMADI', ''];
+  const sy = k.sayim || {};
+  const satir = (k.maddeler || []).map(x => `<li>${_JG_KABUL_IKON[x.durum] || '•'} <b>${escHtml(x.id)}</b> ${escHtml(x.madde)}`
+    + (x.gozlem || x.neden ? ` <i style="color:var(--text2)">— ${escHtml(x.gozlem || x.neden)}</i>` : '') + `</li>`).join('');
+  m.className = 'jg-msg ' + cls;
+  m.innerHTML = `🧪 Kabul kontrolü: <b>${et}</b> · ✅ ${sy.dogrulandi || 0} · ❌ ${sy.eksik || 0} · ⚠ ${sy.dogrulanamadi || 0} · ◻ ${sy.ekran_disi || 0} ekran dışı`
+    + ` <button class="btn btn-outline btn-xs" style="margin-left:6px" onclick="jgKabulYorumYaz('${escHtml(key)}')">Raporu Jira'ya yorum olarak yaz</button>`
+    + (satir ? `<details style="margin-top:4px" open><summary>Maddeler</summary><ul style="margin:4px 0 0 16px">${satir}</ul></details>` : '');
+}
+async function jgKabulYorumYaz(key) {
+  const k = (_jgAnalizSeti[key] || {}).kabul;
+  if (!k || !k.markdown) { toast('Kabul raporu yok', 'info'); return; }
+  const gercek = _jgGercekKey(key);
+  if (!confirm(`Kabul kontrolü raporu ${gercek} task'ına YORUM olarak eklenecek (durum değişmez). Devam edilsin mi?`)) return;
+  try {
+    const r = await fetch('/api/jira/gorev/kabul-yorum', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: gercek, markdown: k.markdown }) });
+    const d = await r.json();
+    toast(d.ok ? `${d.key} task'ına kabul raporu eklendi` : (d.error || 'Yazılamadı'), d.ok ? 'success' : 'error');
+  } catch (e) { toast('Hata: ' + e, 'error'); }
+}
+
 // (B) "Eğitime Ekle" — editördeki güncel analizi ortak havuza + sunucu deposuna yazar (Jira'sız).
 async function jgEgitimeEkle() {
   const key = _jgCurrent && _jgCurrent.key;
@@ -5661,7 +5705,8 @@ async function _jgPollDurum() {
                            // FE/BE ayrı setin kimliği korunur (düzelt/akış kapat sonrası Jira yönlendirmesi bozulmasın)
                            feBeKaynak: eski.feBeKaynak, feBeYeni: eski.feBeYeni,
                            // Akış kapatma: rapor + Geri Al yedeği (yalnız bu sonuç akış kapatmaysa)
-                           akis_rapor: rs.akis_rapor, akis_onceki: rs.akis_rapor ? eski.akis_onceki : undefined };
+                           akis_rapor: rs.akis_rapor, akis_onceki: rs.akis_rapor ? eski.akis_onceki : undefined,
+                           kabul: rs.kabul || eski.kabul };
     }
   }
   if (d.durum === 'calisiyor') {

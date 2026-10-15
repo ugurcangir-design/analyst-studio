@@ -454,6 +454,29 @@ TRADE/OPS task'ı geliştirmeye alınınca ilişkili UAT task'ını Jira'da **'D
   "Otomatiğe geç" / "Rapor moduna dön" · rapor listesi varken "Bu listeyi şimdi uygula" (onaylı) · son tur sonuç tablosu ·
   Geçmiş. Test: `tests/test_uat_senkron.py` (Jira MOCK — rapor modunda yazma YOK doğrulanır).
 
+### Kabul Kontrolü (`skills/kabul_kontrolu.py`) — ANALIZ CHECK task'ını testçi gibi CANLI doğrula
+Geliştirmesi biten task'ı analist agent'a verir; agent test ortamında uygulamaya girip task'taki isterleri
+FİİLEN dener; eksik varsa iş geliştirmeye döner, tamsa analist test ekibine iletir (karar ANALİSTİN — owner kararı).
+- **Akış (3 adım):** (1) `kabul_listesi_cikar` — 1 AI çağrısı (`_LISTE_SISTEM`): açıklamadaki analizden
+  DENENEBİLİR kabul maddeleri `<kabul_listesi>` JSON (tür: alan · buton · validasyon · mesaj · servis · veri · rol ·
+  bos_durum; `nasil`/`beklenen`/`ref`; ≤25; ekrandan doğrulanamayan → `denenebilir:false` = "ekran dışı", denenmez).
+  (2) `canli_dogrula` — mevcut canlı-gözlem altyapısı (`canli_uygulama_baglami_hazirla(base_url_override,
+  hedef_tarif)`; hedef `live_app_gorev`, yoksa `live_app` base; `live_app_auth` login) + `_kontrol_talimati`
+  (gözlem DEĞİL doğrulama görevi: her maddeyi dene, boş/geçersiz değeri gerçekten gönder, isteği
+  `browser_network_request` ile yakala, yazma işlemleri GERÇEK + `AI-TEST` öneki, tahmin YASAK) →
+  `_api_cagri(onbellek=False, canli_uygulama_kapsami="gorev")` → `<kabul_sonuc>` JSON. (3) `_sonuc_normalize`:
+  madde başına `dogrulandi|eksik|dogrulanamadi` (geçersiz/bildirilmemiş → `dogrulanamadi`, tahmin yok) →
+  **sonuç:** ≥1 eksik → `geri` · hepsi doğrulandı → `teste_hazir` · doğrulandı + doğrulanamayan → `teste_hazir_kismi`
+  · hiç doğrulanan yok → `dogrulanamadi`. Canlı hedef yoksa AI çağrılmaz, net neden. `rapor_md` → yorum metni
+  (sonuç etiketi, madde tablosu + kanıt `[K: Canlı UI/Network]`, "Geliştirmeye dönecek maddeler", yazma
+  işlemleri, gezilemeyen, "_Durum değiştirilmedi_").
+- **Kanallar:** Task Analizi önizleme → **"Kabul Kontrolü"** (`jgKabulKontrol`, onaylı; iş modu `kabul-kontrol`
+  → `sonuc.kabul{markdown,sonuc,sayim,maddeler}`; analiz içeriğine DOKUNMAZ, eğitim havuzuna GİRMEZ) → `_jgKabulGoster`
+  (özet + madde listesi) + **"Raporu Jira'ya yorum olarak yaz"** (`POST /api/jira/gorev/kabul-yorum {key, markdown}` →
+  `jira_yorum_ekle`). Jira Köprüsü: `/analyst_agent kontrol` (eş anlam: kabul · doğrula · verify · check) →
+  `_kontrol_islet` → rapor yorum. **Jira durumu HİÇBİR kanalda değişmez.** Maliyet: task başına 2 AI çağrısı
+  (liste + canlı doğrulama; canlı doğrulama CLI/Playwright, `LIVE_APP_CLI_TIMEOUT`). Test: `tests/test_kabul_kontrolu.py`.
+
 ## Jira Görevleri Özelliği (`skills/jira_gorevleri.py` + UI `page-jira-gorevler`)
 Doküman yüklemeden, **mevcut** Jira Epic/Story altındaki görevleri çekip triyaj eder.
 - **Çekme — İKİ AŞAMALI (keşif + taze okuma):**

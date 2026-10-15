@@ -2897,6 +2897,25 @@ def _uat_senkron_baslat() -> None:
         pass
 
 
+@app.route("/api/jira/gorev/kabul-yorum", methods=["POST"])
+def jira_gorev_kabul_yorum():
+    """Kabul kontrolü raporunu task'a YORUM olarak ekler (durum değişmez). Body: {key, markdown}."""
+    data = request.get_json(silent=True) or {}
+    key = (data.get("key") or "").strip().upper()
+    md = (data.get("markdown") or "").strip()
+    if not key or not md:
+        return jsonify({"ok": False, "error": "key ve markdown gerekli"}), 400
+    hata = _jira_baglanti_eksik()
+    if hata:
+        return jsonify({"ok": False, "error": hata}), 400
+    try:
+        from skills.jira_kopru import jira_yorum_ekle
+        jira_yorum_ekle(key, md)
+        return jsonify({"ok": True, "key": key})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)[:300]}), 500
+
+
 @app.route("/api/uat-senkron/durum", methods=["GET"])
 def uat_senkron_durum():
     from skills import uat_durum_senkron as us
@@ -5210,6 +5229,13 @@ def _gorev_is_calistir(job_id: str) -> None:
             elif mode == "duzelt":
                 md = gorev_analiz_duzelt(gorev, adim.get("markdown", ""), adim.get("talimat", ""))
                 sonuc = {"markdown": md, "acik_sorular": adim.get("acik_sorular", "")}
+            elif mode == "kabul-kontrol":
+                # Kabul Kontrolü: ANALIZ CHECK task'ını canlı ortamda testçi gibi doğrula (Jira durumu DEĞİŞMEZ).
+                from skills.kabul_kontrolu import kabul_kontrolu
+                r = kabul_kontrolu(gorev)
+                sonuc = {"markdown": adim.get("markdown", ""), "acik_sorular": adim.get("acik_sorular", ""),
+                         "kabul": {"markdown": r["markdown"], "sonuc": r["sonuc"], "sayim": r.get("sayim", {}),
+                                   "maddeler": r.get("maddeler", [])}}
             elif mode == "akis-kapat":
                 # Akış Kapatma (Faz 3): boşlukları bul → minimal düzelt / açık soru (Q-T). Geri Al UI'da.
                 from skills.akis_kapatma import gorev_akis_kapat
@@ -5234,7 +5260,8 @@ def _gorev_is_calistir(job_id: str) -> None:
                 job["sonuclar"][key] = {**sonuc, "summary": gorev.get("summary", ""),
                                         "katman": adim.get("katman", "")}
             # (C) sunucu deposu + (A) few-shot yakalama — Jira'ya yazılmasa da toplansın (arka plan)
-            _gorev_egitim_topla(key, gorev.get("summary", ""), adim.get("katman", ""), mode, sonuc)
+            if mode != "kabul-kontrol":   # kabul raporu eğitim örneği değil
+                _gorev_egitim_topla(key, gorev.get("summary", ""), adim.get("katman", ""), mode, sonuc)
             _telemetri_olay("gorev_analiz", "ok", int((time.time() - _bas) * 1000),
                             model=_model, ai_modu=_ai_modu, baglam={"gorev": key, "islem": adim.get("mode", "analiz")},
                             token_bas=_tbas)

@@ -234,6 +234,8 @@ def _komut_coz(metin: str, prefix: str) -> tuple[str, str] | None:
         "cevapla": "cevap", "cevaplar": "cevap", "answer": "cevap", "yanit": "cevap", "yanıt": "cevap",
         "düzelt": "duzelt", "duzeltme": "duzelt", "fix": "duzelt", "revize": "duzelt",
         "onayla": "onayla", "approve": "onayla",
+        "kabul": "kontrol", "kabul-kontrol": "kontrol", "kabul-kontrolü": "kontrol", "dogrula": "kontrol",
+        "doğrula": "kontrol", "verify": "kontrol", "check": "kontrol",
     }
     return (esanlam.get(komut, komut), arg)
 
@@ -288,6 +290,8 @@ def _yardim_metni(prefix: str) -> str:
         f"- `{prefix} güncelle` — son analizi task açıklamasına yeniden yazar (taze analiz varsa 0-token).\n"
         f"- `{prefix} ilişkili-aç` — analizden ilişkili yeni task'lar **önerir** (taslak) → `{prefix} onayla` açar + Relates bağlar.\n"
         f"- `{prefix} onayla` / `{prefix} iptal` — bekleyen ilişkili-task taslağını uygular / vazgeçer.\n"
+        f"- `{prefix} kontrol` — **Kabul Kontrolü**: geliştirmesi biten task'ı test ortamında testçi gibi fiilen dener "
+        f"(alanlar, butonlar, mesajlar, servisler) → ✅/❌ rapor yorum olarak; durum değişmez.\n"
         f"- `{prefix} yardım` — bu liste.\n\n"
         f"_Güvenlik: yorum bir komuttur; YENİ task açma yalnız açık onaydan sonra yapılır._"
     )
@@ -372,6 +376,16 @@ def _analiz_bolumu_ayikla(desc: str) -> str:
     önbellek boşsa gövdeden mevcut analizi alır. Yoksa ''. """
     parcalar = re.split(r"\n*(?:#{1,6}\s*)?🤖\s*Teknik Analiz[^\n]*\n", desc or "", maxsplit=1)
     return parcalar[1].strip() if len(parcalar) > 1 else ""
+
+
+def _kontrol_islet(key: str) -> str:
+    """`kontrol` — Kabul Kontrolü: task'ı canlı ortamda doğrula, raporu yorum olarak döndür (durum değişmez)."""
+    from .kabul_kontrolu import kabul_kontrolu
+    gorev = gorev_getir(key)
+    if not gorev:
+        return f"{ROBOT_IMZA}\n\n❌ Görev okunamadı: {key}"
+    r = kabul_kontrolu(gorev)
+    return f"{ROBOT_IMZA}\n\n" + r["markdown"]
 
 
 def _bridge_uret(gorev: dict, arg: str, onceki_sorular: str = "") -> dict:
@@ -645,6 +659,8 @@ def _komut_uygula(komut: str, arg: str, key: str, prefix: str, durum: dict) -> s
         return _iliskili_taslak(key, arg, durum, prefix)
     if komut == "onayla":
         return _onayla_uygula(key, durum, prefix)
+    if komut == "kontrol":
+        return _kontrol_islet(key)
     if komut == "iptal":
         vardi = durum.get("taslaklar", {}).pop(key, None) is not None
         return (f"{ROBOT_IMZA}\n\n{'Taslak iptal edildi.' if vardi else 'İptal edilecek bekleyen taslak yok.'}")
