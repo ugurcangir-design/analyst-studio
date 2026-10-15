@@ -8298,7 +8298,7 @@ async function _gozlemRozetiGoster(root, dosya) {
     r.textContent = g.yapildi ? `🌐 Canlı gözlem yapıldı · ${g.num_turns} tur`
                               : '⚠ Canlı gözlem YAPILAMADI — URL iddiaları doğrulanmadı';
     r.title = g.yapildi ? 'MCP/Chrome ile gerçek uygulama gezildi (araç kullanımı doğrulandı)'
-                        : 'MCP/Chrome erişilemedi veya tarayıcı aracı reddedildi (num_turns=' + g.num_turns + ')';
+                        : 'Canlı gözlem yapılamadı (num_turns=' + g.num_turns + ')' + (g.neden ? ' · ' + g.neden : '');
     ozet.appendChild(document.createElement('span')).className = 'sep';
     ozet.appendChild(r);
   } catch (e) {}

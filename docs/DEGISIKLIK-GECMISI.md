@@ -6,7 +6,15 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
-## Jira görev açma yenileme + Yetki tamamlama (SON) ✅
+## Canlı gözlem: model araç çağırmama → zorunlu ilk-eylem + otomatik tekrar ✅
+- **Teşhis:** 2026-10-15 21:20'den itibaren tüm canlı gözlemler `num_turns=1`. CLI MCP logları sunucunun
+  bağlandığını (hasTools) gösterdi → altyapı değil, model büyük promptta tarayıcı talimatını atlıyordu.
+- **Düzeltme:** prompt SONUNA `_LIVE_APP_ZORUNLU_ILK_ADIM`; `num_turns<=1` → sertleştirilmiş uyarıyla 1 tekrar
+  (`LIVE_APP_TEKRAR`); `.gozlem-durum.json` `neden` + rozet tooltip; `live_app_kilidi_temizle` pgrep yedeği;
+  BFF keşfinde etiketsiz rapor kabul + ham yanıt kaydı. Test `tests/test_canli_tekrar.py`. Ayrıntı: MIMARI.md
+  "Model araç çağırmama".
+
+## Jira görev açma yenileme + Yetki tamamlama ✅
 - **[K: kaynak] kanıt etiketleri Jira'ya gitmez** (`765f49d`): agent'ın `[K: BRD §3]` /
   `[K: Canlı UI:/route]` / `[K: Analist cevabı]` gibi izlenebilirlik etiketleri analiz dosyalarında +
   UI çiplerinde DURUR, Jira'ya yazılan task'ta YER ALMAZ (`base.kanit_etiketlerini_temizle`; iki yazım

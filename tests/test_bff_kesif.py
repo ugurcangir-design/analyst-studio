@@ -80,7 +80,10 @@ r4 = BK.kesfet("https://uat.ornek/app/x", _ai=sahte_ai("<bff_rapor>\n## Gezileme
 chk("eksik rapor → ok=False ama kaydedilir (neden açıklanır)", not r4["ok"] and "yarım" in r4["neden"] and Path(r4["yol"]).exists())
 chk("eksik rapor taze sayılmaz → otomatik tekrar dener", not BK.taze_mi(BK.rapor_oku("https://uat.ornek/app/x")))
 r5 = BK.kesfet("https://uat.ornek/app/x", _ai=lambda *a: "rapor bloğu yok")
-chk("blok yok → ok=False, neden", not r5["ok"] and "üretilemedi" in r5["neden"])
+chk("blok yok → ok=False, neden + ham yanıt dosyası", not r5["ok"] and "üretilemedi" in r5["neden"]
+    and (BK.BFF_DIR / f"{r5['anahtar']}.ham.txt").read_text(encoding="utf-8") == "rapor bloğu yok", r5)
+r6 = BK.kesfet("https://uat.ornek/app/y", _ai=sahte_ai("## Ekran\n- /y\n\n## CREATE\n- İstek: `POST /bff/y` · 201"))
+chk("etiketsiz ama rapor gövdeli yanıt KAYBEDİLMEZ (ok=True)", r6["ok"] and "POST /bff/y" in r6["md"] and Path(r6["yol"]).exists(), r6)
 
 print("3) ayar + blok")
 BK.load_context_filter = lambda: {"live_app_gorev": {"bff_otomatik": False}}

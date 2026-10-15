@@ -153,6 +153,17 @@ def _canli_gorev(hedef_url: str, ekran_tarif: str, ekran_bazli: bool) -> tuple[s
     return canli_uygulama_baglami_hazirla(gorev=True, hedef_tarif=plan), "gorev"
 
 
+def _ham_kaydet(anahtar: str, yanit: str) -> str:
+    """Rapor bloğu üretilmeyen yanıtı `<anahtar>.ham.txt`'ye yazar (teşhis; gitignore'lu dizin)."""
+    try:
+        BFF_DIR.mkdir(parents=True, exist_ok=True)
+        yol = BFF_DIR / f"{anahtar}.ham.txt"
+        yol.write_text((yanit or "")[:200_000], encoding="utf-8")
+        return str(yol)
+    except Exception:
+        return ""
+
+
 def kesfet(hedef_url: str = "", ekran_tarif: str = "", ekran_bazli: bool = False, *, _ai=None) -> dict:
     """Keşfi çalıştırır, raporu kaydeder, {ok, anahtar, md, ts, yas_gun, yol, neden} döner. Hata → ok False (fırlatmaz)."""
     if not hedef_url:
@@ -172,10 +183,17 @@ def kesfet(hedef_url: str = "", ekran_tarif: str = "", ekran_bazli: bool = False
         yanit = ai(sistem, [{"role": "user", "content": icerik}], kapsam)
     except Exception as e:
         return {"ok": False, "anahtar": anahtar, "md": "", "neden": f"Keşif çalıştırılamadı: {str(e)[:200]}"}
-    if "<bff_rapor>" not in (yanit or ""):
-        # Blok hiç yok → rapor değil (tarayıcı aracı çalışmamış / model sapmış) → kaydetme, önbelleğe alma
-        return {"ok": False, "anahtar": anahtar, "md": "", "neden": "Rapor üretilemedi (tarayıcı aracı çalışmamış olabilir)."}
-    md = _xml_ayir(_metin_sikistir(yanit or ""), "bff_rapor").strip()
+    if "<bff_rapor>" in (yanit or ""):
+        md = _xml_ayir(_metin_sikistir(yanit or ""), "bff_rapor").strip()
+    elif re.search(r"^## (Ekran|Açılış|CREATE)\b", _metin_sikistir(yanit or ""), re.M):
+        # Etiket atlanmış ama rapor gövdesi var (model 10+ dk gözlem yapıp bloğu unutabiliyor) → KAYBETME
+        md = _metin_sikistir(yanit or "").strip()
+    else:
+        # Blok hiç yok → rapor değil (tarayıcı aracı çalışmamış / model sapmış) → kaydetme, önbelleğe alma;
+        # ham yanıtı teşhis için sakla (eskiden sessizce atılıyordu → neden anlaşılamıyordu)
+        ham_yol = _ham_kaydet(anahtar, yanit or "")
+        return {"ok": False, "anahtar": anahtar, "md": "",
+                "neden": "Rapor üretilemedi (tarayıcı aracı çalışmamış olabilir)." + (f" Ham yanıt: {ham_yol}" if ham_yol else "")}
     ok = bool(md) and ("## CREATE" in md or "POST" in md or "## Açılış" in md)
     if not md:
         return {"ok": False, "anahtar": anahtar, "md": "", "neden": "Rapor boş."}

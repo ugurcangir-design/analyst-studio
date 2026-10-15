@@ -786,6 +786,29 @@ mevcut dosyayı okur; istek gövdesinde bulunmayan alan (`"anahtar" in data` de�
 değerini korur. Yalnızca gövdede AÇIKÇA gönderilen alan güncellenir/silinir — `ctxFilterTemizle()`
 gibi "temizle" akışları hâlâ çalışır çünkü ilgili alanı açıkça boş gönderirler.
 
+### Model araç çağırmama (num_turns=1) — teşhis + otomatik tekrar (2026-10-16)
+**Belirti:** `⚠ CANLI GÖZLEM YAPILMAMIŞ OLABİLİR (num_turns=1, reddedilen=[])` — rozet "YAPILAMADI".
+**Teşhis yolu:** Claude CLI'ın MCP logu `~/Library/Caches/claude-cli-nodejs/<cwd-slug>/mcp-logs-playwright/*.jsonl`
+(cwd-slug = repo yolunun `-` ile yazılmış hâli). Başarısız koşularda sunucu `Successfully connected … hasTools:true`
+ile bağlanmış, 64–96 sn sonra `SIGINT` ile kapanmış — araç çağrısı yok. Yani MCP/Chrome/npx sağlam; **model**
+büyük promptta (referans blokları + few-shot + domain kuralları) ortada kalan tarayıcı talimatını atlayıp araçsız
+rapor yazdı. Küçük promptlu aynı çağrı (`canli_uygulama_baglami_hazirla` + kısa sistem) 10 tur gezdi.
+**Çözüm (`base._api_cagri_cli`):**
+1. Canlı kapsamlı (`_live_args` dolu) her çağrıda birleşik promptun EN SONUNA `_LIVE_APP_ZORUNLU_ILK_ADIM`
+   (kısa, emredici: "yanıt yazmadan önce `browser_navigate`; araçsız rapor YASAK") — recency etkisi.
+2. Yanıt `num_turns<=1` ise (izinli araç reddi DEĞİL) `_api_cagri_cli(..., _tekrar=True)` → promptun sonuna
+   `_LIVE_APP_TEKRAR_UYARISI` ("önceki denemede araç çağırmadın, yanıt reddedildi") ile BİR KEZ daha. İkinci
+   deneme de araçsızsa normal uyarı + rozet. `.env` `LIVE_APP_TEKRAR=false` kapatır (maliyet).
+3. `.gozlem-durum.json` → `neden` ("izinli tarayıcı aracı reddedildi" / "model hiç tarayıcı aracı çağırmadı
+   (MCP bağlıydı; tekrar denendi)") → Çıktı Dosyaları rozeti tooltip'inde.
+4. `live_app_kilidi_temizle`: SingletonLock symlink'ine ek `pgrep -f --user-data-dir=<profil>` ile profili
+   tutan başlı/yetim Chrome süreçleri de kapatılır (aksi hâlde Playwright "Browser is already in use" → model
+   aracı dener, hata alır, `num_turns≈4`).
+5. `bff_kesif.kesfet`: etiketsiz ama `## Ekran/Açılış/CREATE` başlıklı yanıt kabul edilir; blok hiç yoksa ham
+   yanıt `reference/live-app/bff/<anahtar>.ham.txt`'ye yazılır (12 dk gözlem sonrası sessiz kayıp olmasın).
+Test: `tests/test_canli_tekrar.py` (CLI mock, 0 token).
+
+
 ## Bilinen Kısıtlamalar
 - CLI modu görsel (PNG/JPG) analiz EDEMEZ (text-only); görsel BRD için API modu gerekir.
 - `markdown_to_adf` nested list'leri düzleştirir.

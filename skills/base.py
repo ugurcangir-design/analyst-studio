@@ -3153,6 +3153,16 @@ def live_app_profil_var_mi() -> bool:
     return (LIVE_APP_PROFILE_DIR / "Default" / "Cookies").exists()
 
 
+def _surec_var_mi(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
 def live_app_kilidi_temizle() -> None:
     """Kapatılmadan kalmış (yetim) Chrome sürecini sonlandırıp profil kilit
     dosyalarını (`SingletonLock` vb.) temizler.
@@ -3192,6 +3202,32 @@ def live_app_kilidi_temizle() -> None:
                 pass  # zaten kapanmış
             except PermissionError:
                 logger.warning(f"Canlı uygulama profil kilidi (PID {pid}) sonlandırılamadı — yetki yok.")
+    # Kilit symlink'i yok/okunamaz olsa da profili komut satırında taşıyan bir Chrome (başlı giriş
+    # penceresi ya da yetim headless) kalmış olabilir → süreç listesinden bul, kapat. Chrome aynı
+    # --user-data-dir'i ikinci kez açamaz ("Browser is already in use") → gözlem baştan düşer.
+    try:
+        r = subprocess.run(["pgrep", "-f", f"--user-data-dir={LIVE_APP_PROFILE_DIR}"],
+                           capture_output=True, text=True, timeout=5)
+        pids = [int(x) for x in (r.stdout or "").split() if x.isdigit()]
+        for p_ in pids:
+            try:
+                os.kill(p_, signal.SIGTERM)
+            except (ProcessLookupError, PermissionError):
+                pass
+        if pids:
+            for _ in range(12):
+                time.sleep(0.25)
+                if not any(_surec_var_mi(p_) for p_ in pids):
+                    break
+            for p_ in pids:
+                if _surec_var_mi(p_):
+                    try:
+                        os.kill(p_, signal.SIGKILL)
+                    except (ProcessLookupError, PermissionError):
+                        pass
+            logger.info("Canlı uygulama profilini tutan %d Chrome süreci kapatıldı.", len(pids))
+    except Exception:
+        pass   # pgrep yok / hata → symlink yolu zaten denendi
     for ad in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
         p = LIVE_APP_PROFILE_DIR / ad
         if p.is_symlink() or p.exists():
@@ -3385,15 +3421,16 @@ def cli_durum_probe() -> dict:
 GOZLEM_DURUM_DOSYA = OUTPUT_DIR / ".gozlem-durum.json"
 
 
-def _gozlem_durum_yaz(yapildi: bool, turns: int, reddedilen: list, kapsam: str) -> None:
+def _gozlem_durum_yaz(yapildi: bool, turns: int, reddedilen: list, kapsam: str, neden: str = "") -> None:
     """Son canlı-uygulama gözlem denemesinin MAKİNE-DOĞRULANMIŞ durumu (UI 'Gözlem Raporu'
-    rozeti). Model öz-raporundan bağımsız: num_turns/permission_denials'a dayanır. Fail-safe."""
+    rozeti). Model öz-raporundan bağımsız: num_turns/permission_denials'a dayanır. Fail-safe.
+    `neden`: başarısızlığın sınıfı (araç reddi / model araç çağırmadı) — rozet tooltip'inde."""
     try:
         from datetime import datetime
         GOZLEM_DURUM_DOSYA.parent.mkdir(parents=True, exist_ok=True)
         GOZLEM_DURUM_DOSYA.write_text(json.dumps({
             "yapildi": bool(yapildi), "num_turns": int(turns or 0),
-            "reddedilen": list(reddedilen or []), "kapsam": kapsam,
+            "reddedilen": list(reddedilen or []), "kapsam": kapsam, "neden": neden or "",
             "zaman": datetime.now().isoformat(timespec="seconds"),
         }, ensure_ascii=False), encoding="utf-8")
     except Exception:
@@ -3683,7 +3720,35 @@ def _cli_calistir(cmd: list, tam_prompt: str, cli_env: dict, timeout: int = 1200
     return subprocess.CompletedProcess(cmd, proc.returncode, out or "", err or "")
 
 
-def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | None = None) -> str:
+# Canlı gözlem promptunun EN SONUNA eklenen zorunlu ilk-eylem direktifi (recency). Teşhis
+# (2026-10-15/16): MCP sunucusu BAŞARIYLA bağlanmasına rağmen (hasTools=true) model büyük
+# promptlarda (referans blokları + few-shot + domain kuralları) tarayıcı talimatını atlayıp
+# tek turda araçsız rapor yazdı (num_turns=1, 7/7 koşu). Talimat promptun ortasında
+# kaybolduğu için en sona kısa ve emredici bir blok eklenir.
+_LIVE_APP_ZORUNLU_ILK_ADIM = (
+    "### ZORUNLU İLK EYLEM — CANLI GÖZLEM\n"
+    "Bu çağrıda canlı uygulama gözlemi İSTENDİ ve tarayıcı araçları (mcp__playwright__*) BAĞLI. "
+    "Tek kelime yanıt yazmadan ÖNCE `browser_navigate` ile hedef URL'yi aç ve yukarıdaki gözlem "
+    "adımlarını uygula. Araç çağırmadan, yalnız referans metinlerine dayanarak doğrudan rapor/analiz "
+    "yazmak YASAKTIR. Bir araç gerçekten hata verirse hatayı aynen 'Canlı Gözlem Kapsamı' altında "
+    "yaz ve ancak ondan sonra rapora geç."
+)
+_LIVE_APP_TEKRAR_UYARISI = (
+    _LIVE_APP_ZORUNLU_ILK_ADIM + "\n\n"
+    "UYARI: ÖNCEKİ DENEMEDE HİÇ TARAYICI ARACI ÇAĞIRMADIN ve yanıt bu yüzden REDDEDİLDİ. "
+    "İlk eylemin mutlaka `mcp__playwright__browser_navigate` olmalı; gözlem yapılmadan üretilen "
+    "yanıt yine reddedilecek."
+)
+
+
+def _live_app_tekrar_acik() -> bool:
+    """Canlı gözlem istenip model hiç araç çağırmadıysa (num_turns<=1) bir kez daha dene.
+    `.env` LIVE_APP_TEKRAR=false kapatır (maliyet kontrolü)."""
+    return (os.getenv("LIVE_APP_TEKRAR", "true") or "true").strip().lower() not in ("0", "false", "hayir", "no")
+
+
+def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | None = None,
+                   _tekrar: bool = False) -> str:
     claude_yolu = _claude_yolu_bul()
     if not claude_yolu:
         raise EnvironmentError(
@@ -3725,6 +3790,8 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
         except (TypeError, ValueError):
             _cli_timeout = 720
         print(f"  🌐 Canlı uygulama modu: Chrome MCP + {len(LIVE_APP_ALLOWED_TOOLS)} araç izni (timeout {_cli_timeout}s)")
+        # Zorunlu ilk-eylem direktifi promptun EN SONUNA (tekrar denemesinde sertleştirilmiş).
+        tam_prompt = tam_prompt + "\n\n" + (_LIVE_APP_TEKRAR_UYARISI if _tekrar else _LIVE_APP_ZORUNLU_ILK_ADIM)
     # v2 Faz 3.c — Analiz veri kaynakları (Postgres/Jira MCP). Opt-in; varsayılan KAPALI.
     # Canlı uygulama (Chrome MCP) ile AYNI çağrıda birleştirilmez (--strict-mcp-config
     # tekildir): canlı uygulama aktifse bu çağrıda veri-MCP atlanır.
@@ -3827,9 +3894,19 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
         _red_araclar = [(d.get("tool_name") if isinstance(d, dict) else str(d)) or "" for d in _denials]
         _browser_reddi = any(a in _izinli_araclar for a in _red_araclar)
         _yapildi = not (_browser_reddi or _turns <= 1)
+        # Model hiç araç çağırmadıysa (MCP bağlı olduğu hâlde — teşhis edilen gerçek neden) daha
+        # sert direktifle BİR KEZ daha dene; ikinci deneme de başarısızsa aşağıdaki uyarıya düşer.
+        if not _yapildi and _turns <= 1 and not _tekrar and _live_app_tekrar_acik():
+            logger.warning("⚠ Canlı gözlem istendi ama model hiç tarayıcı aracı çağırmadı (num_turns=%s, MCP bağlıydı) "
+                           "— sertleştirilmiş talimatla 1 kez daha deneniyor.", _turns)
+            print("  ⚠ Model tarayıcıyı kullanmadı — canlı gözlem bir kez daha deneniyor…")
+            return _api_cagri_cli(sistem, mesajlar, canli_uygulama_kapsami, _tekrar=True)
+        _neden = ("izinli tarayıcı aracı reddedildi" if _browser_reddi
+                  else ("model hiç tarayıcı aracı çağırmadı (MCP bağlıydı" + ("; tekrar denendi)" if _tekrar else ")")
+                        if _turns <= 1 else ""))
         # UI'nın "Gözlem Raporu" rozeti için makine-doğrulanmış durum (log'un yanında).
         _gozlem_durum_yaz(yapildi=_yapildi, turns=_turns, reddedilen=[str(d)[:120] for d in _denials],
-                          kapsam=canli_uygulama_kapsami)
+                          kapsam=canli_uygulama_kapsami, neden=_neden)
         if not _yapildi:
             logger.warning(
                 "⚠ CANLI GÖZLEM YAPILMAMIŞ OLABİLİR — MCP/Chrome erişilemedi veya araç reddedildi "
