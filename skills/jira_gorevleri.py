@@ -21,8 +21,7 @@ from .base import (
     prompt_yukle, extended_thinking_acik,
     referans_dosyalari_hazirla, _ref_bloklari_olustur, load_context_filter,
     canli_uygulama_baglami_hazirla,
-    yonetici_ozeti_olustur, yonetici_ozetini_cikar, canli_gozlem_kapsamini_cikar,
-    kanit_etiketlerini_temizle,
+    yonetici_ozeti_olustur, yonetici_ozetini_cikar, jira_icin_temizle,
     ai_ara_sozleri_temizle,
     MAX_TOKENS_KISA, MAX_TOKENS_COMBINED,
 )
@@ -1058,8 +1057,7 @@ def gorev_fe_be_task_olustur(key: str, be_markdown: str, fe_markdown: str,
     gorev_jiraya_yaz(key, be_markdown, summary=_katman_prefix("be", ozet))
 
     # 2) FE → yeni Task (aynı temizlik: TL;DR + canlı gözlem + [K:] etiketleri çıkarılır)
-    fe_temiz = kanit_etiketlerini_temizle(
-        canli_gozlem_kapsamini_cikar(yonetici_ozetini_cikar(fe_markdown or "")))
+    fe_temiz = jira_icin_temizle(fe_markdown or "")
     adf = markdown_to_adf(fe_temiz)
     if not adf:
         raise ValueError("FE içeriği boş; yeni task açılamadı.")
@@ -1089,8 +1087,7 @@ def gorev_fe_be_task_olustur(key: str, be_markdown: str, fe_markdown: str,
 def _analiz_adf(markdown: str) -> dict:
     """Analiz markdown'ını Jira gövdesine uygun ADF'ye çevirir (aynı temizlik:
     TL;DR + canlı gözlem kapsamı + [K:] kanıt etiketleri çıkarılır)."""
-    temiz = kanit_etiketlerini_temizle(
-        canli_gozlem_kapsamini_cikar(yonetici_ozetini_cikar(markdown or "")))
+    temiz = jira_icin_temizle(markdown or "")
     adf = markdown_to_adf(temiz)
     if not adf:
         raise ValueError("İçerik boş; task açılamadı.")
@@ -1302,14 +1299,10 @@ def gorev_jiraya_yaz(task_key: str, markdown: str, summary: str | None = None) -
     task_key = (task_key or "").strip().upper()
     if not _ID_DESENI.match(task_key):
         raise ValueError(f"Geçersiz Jira anahtarı: '{task_key}'")
-    # Yönetici Özeti (TL;DR) ve Canlı Gözlem Kapsamı Jira'ya GİTMEZ — ikisi de
-    # analistin doğrulama/şeffaflık bilgisidir, geliştiricinin task'ında işi yok.
-    # Analiz çıktısındaki hâlleri korunur; yalnızca Jira'ya yazılan kopya temizlenir.
-    markdown = yonetici_ozetini_cikar(markdown)
-    markdown = canli_gozlem_kapsamini_cikar(markdown)
-    # `[K: kaynak]` kanıt/izlenebilirlik etiketleri agent çıktısında kalır ama
-    # Jira task analizinde YER ALMAZ — sadece gerçek task analizi yazılır.
-    markdown = kanit_etiketlerini_temizle(markdown)
+    # Jira'ya giden kopya TEK kapıdan temizlenir (`base.jira_icin_temizle`): Yönetici Özeti +
+    # Canlı Gözlem Kapsamı + `<!-- RAG -->` yorumu + kaynak alıntı cümleleri + meta-gerekçe +
+    # `[K:]` etiketleri + ardışık bölüm numaraları. Analiz çıktısındaki hâl korunur.
+    markdown = jira_icin_temizle(markdown)
     adf_content = markdown_to_adf(markdown)
     if not adf_content:
         # İçerik yalnızca HTML yorumu/boşluktan ibaretse ADF boş kalır — Jira 400 verir.

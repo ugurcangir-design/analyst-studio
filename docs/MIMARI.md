@@ -809,6 +809,26 @@ rapor yazdı. Küçük promptlu aynı çağrı (`canli_uygulama_baglami_hazirla`
 Test: `tests/test_canli_tekrar.py` (CLI mock, 0 token).
 
 
+### Jira'ya giden task gövdesi — tek temizleme kapısı (`base.jira_icin_temizle`, 2026-10-16)
+**Sorun (owner):** Task analizi Jira'ya yazılınca geliştiricinin işine yaramayan analist-içi bilgiler gövdede kalıyor,
+elle siliniyordu: `<!-- RAG: … -->` yorumu, backtick'li `[K: …]` etiketlerinden kalan boş `` `` ``, "Analist notu bunu
+doğrular: '…'" / "Confluence: '…'" alıntı cümleleri, "Confluence'a göre" önekleri, seçilen yaklaşımı alternatiflere karşı
+savunan cümleler, "(… FE'nin kontrolü dışıdır — bkz. …)" hedge parantezleri ve atlanan şablon bölümleri yüzünden
+1-2-3-7-11 diye kopuk numaralar.
+**Çözüm — iki katman:**
+1. **Prompt** (`gorev_teknik_analiz` → "# JİRA TASK DİLİ"): kaynak alıntısı yazma (kaynak yalnız `[K:]` etiketi),
+   gerekçe/karşılaştırma yazma, hedge parantezi yazma, başka task'ı kanıt diye anlatma, motivasyon cümlesi yazma.
+2. **Deterministik kapı** `jira_icin_temizle(md)` — sıra: `yonetici_ozetini_cikar` → `canli_gozlem_kapsamini_cikar` →
+   HTML yorumu → `kanit_etiketlerini_temizle` (regex artık `` `[K: …]` `` backtick'lerini de yutar) → tamamı alıntı
+   olan madde satırı (`_KAYNAK_MADDE`) → alıntı cümlesi (`_KAYNAK_ALINTI`) → "X'e göre" öneki (`_KAYNAK_ONEK`) →
+   meta parantez bütünüyle (`_META_PARANTEZ`) → meta cümle (`_META_GEREKCE`) → boş kalan madde/parantez artıkları →
+   `_bolumleri_yeniden_numarala` (`## N.` ardışık; `### N.M` + `bkz./(N.M)/bölüm N.M` atıfları aynı harita; numarasız
+   başlık ve zaten ardışık metin dokunulmaz). Desenler satır sonunu YUTMAZ (`[ \t]*`), başlıklar birleşmez.
+   Çağıranlar: `gorev_jiraya_yaz` (gövde) · `gorev_fe_be_task_olustur` (FE yeni task) · `_analiz_adf` (Yeni Task Aç) ·
+   `jira_kopru._govdeye_yaz`. Analiz dosyası, ekran ve eğitim havuzu kopyası DEĞİŞMEZ (etiketler orada kalır).
+Test: `tests/test_jira_temizle.py` (sentetik örnek; gerçek analiz içeriği tracked dosyaya konmaz).
+
+
 ## Bilinen Kısıtlamalar
 - CLI modu görsel (PNG/JPG) analiz EDEMEZ (text-only); görsel BRD için API modu gerekir.
 - `markdown_to_adf` nested list'leri düzleştirir.

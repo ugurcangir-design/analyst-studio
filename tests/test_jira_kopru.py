@@ -238,7 +238,7 @@ kontrol("kanıt: boş/None güvenli", _kt("") == "" and _kt(None) is None)
 import inspect  # noqa: E402
 import skills.jira_gorevleri as _jg  # noqa: E402
 kontrol("kanıt: gorev_jiraya_yaz (gövde) temizleyiciyi çağırır",
-        "kanit_etiketlerini_temizle" in inspect.getsource(_jg.gorev_jiraya_yaz))
+        "jira_icin_temizle" in inspect.getsource(_jg.gorev_jiraya_yaz))   # tek kapı: etiket+özet+gözlem+alıntı+numaralama
 # (jk.jira_yorum_ekle testte mock'landı → gerçek kaynağı modül dosyasından oku)
 _jk_kaynak = inspect.getsource(jk)
 kontrol("kanıt: jira_yorum_ekle (yorum) temizleyiciyi çağırır",

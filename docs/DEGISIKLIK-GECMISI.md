@@ -6,6 +6,11 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## Jira'ya giden task gövdesi temizliği — tek kapı ✅
+- Owner: "task'ta olmaması gereken bilgiler Jira'ya gidiyor, elle düzeltiyoruz". `base.jira_icin_temizle` TÜM Jira
+  yazım yollarında: HTML yorumu, backtick'li `[K:]`, kaynak alıntı cümleleri, "X'e göre" öneki, meta-gerekçe/hedge,
+  ardışık bölüm numaralama. Prompt'a "JİRA TASK DİLİ" kuralı. Test `tests/test_jira_temizle.py`. Ayrıntı: MIMARI.md.
+
 ## Canlı gözlem: model araç çağırmama → zorunlu ilk-eylem + otomatik tekrar ✅
 - **Teşhis:** 2026-10-15 21:20'den itibaren tüm canlı gözlemler `num_turns=1`. CLI MCP logları sunucunun
   bağlandığını (hasTools) gösterdi → altyapı değil, model büyük promptta tarayıcı talimatını atlıyordu.

@@ -42,6 +42,7 @@ from .base import (
     canli_gozlem_kapsamini_cikar,
     canli_uygulama_baglami_hazirla,
     kanit_etiketlerini_temizle,
+    jira_icin_temizle,
     load_context_filter,
     yonetici_ozetini_cikar,
 )
@@ -446,7 +447,7 @@ def _govdeye_yaz(key: str, analiz_md: str, mevcut_desc: str) -> None:
     """#1 — Analizi task GÖVDESİNE (açıklama) yazar; ORİJİNAL talep korunur.
     Açıklama = '## 📌 Orijinal Talep' + orijinal + '## 🤖 Teknik Analiz' + analiz.
     Yönetici Özeti / Canlı Gözlem Kapsamı gövdeye YAZILMAZ (analist bilgisi)."""
-    temiz = canli_gozlem_kapsamini_cikar(yonetici_ozetini_cikar(analiz_md)).strip()
+    temiz = jira_icin_temizle(analiz_md).strip()
     orijinal = _orijinal_talep_ayikla(mevcut_desc)
     combined = (
         f"## 📌 Orijinal Talep\n\n{orijinal or '(açıklama yok)'}\n\n"

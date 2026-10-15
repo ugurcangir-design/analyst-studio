@@ -1447,6 +1447,18 @@ added / updated / removed olabilir."""
             "- Görev kapsamıyla ilgisiz genel yorum, süreç anlatımı, 'incelenmeli/araştırılmalı' notu YAZMA.\n"
             "- Kısa ≠ eksik: geliştiricinin başlaması için gereken her kritik bilgi bulunmalı; "
             "basitleştirme adına gerçek bir gereksinimi atlama.\n\n"
+            "# JİRA TASK DİLİ (çıktı DOĞRUDAN task gövdesine gider — geliştirici okur, analist değil)\n"
+            "- KAYNAK ALINTISI YAZMA: 'Analist notu bunu doğrular: \"…\"', 'Confluence: \"…\"', 'Confluence'a göre …', "
+            "'kaynakta tanımlı: …' gibi cümleler YASAK. Kaynağı YALNIZ `[K: …]` etiketiyle göster (etiket Jira'ya "
+            "gitmeden otomatik silinir); kuralı kendi cümlenle, emir kipinde yaz.\n"
+            "- GEREKÇE/KARŞILAŞTIRMA YAZMA: 'bu yol X yaklaşımına kıyasla en doğrudan çözümdür', 'yeni iş değil, mevcut "
+            "yetenekleri bağlamak' gibi seçilen yaklaşımı savunan/alternatif sayan anlatım YASAK — yalnız NE yapılacağını yaz.\n"
+            "- MEŞRUİYET/HEDGE PARANTEZİ YAZMA: '(… bu varsayımın uygulanıp uygulanmadığı FE'nin kontrolü dışıdır — bkz. …)' "
+            "türü parantez YASAK; belirsiz nokta → tek kısa cümle + `[K: ❓ Belirsiz]`, gerisi açık soru adımında toplanır.\n"
+            "- Başka Jira task'larını KANIT olarak anlatma ('… zaten mevcuttur (MBSTRADE-123)'); geliştiricinin gerçekten "
+            "bakması gereken bir task varsa `## 10` altında tek satır 'Bağlı task: KEY — neden' yaz.\n"
+            "- Her cümle geliştiriciye bir iş/kural söylemeli: açıklayıcı arka plan, 'analist şunu istedi' aktarımı, "
+            "'hedef: analist elle aramasın' tarzı motivasyon cümlesi YAZMA (Amaç bölümünde tek cümle yeter).\n\n"
             "# ÇIKTI BİÇİMİ\n"
             "Türkçe Markdown, TEK bir `<teknik_analiz>` XML bloğu içinde: "
             "`<teknik_analiz> ... </teknik_analiz>`. Blok dışına metin yazma."
@@ -1923,7 +1935,7 @@ def canli_gozlem_kapsamini_cikar(markdown: str) -> str:
 # `[K: Network:GET /api/x]`, `[K: Jira:KEY-1]`, `[K: 🔍 Türetilmiş - …]`,
 # `[K: ❓ Belirsiz]`, `[K: Analist cevabı]` … Kapanışa kadar `]` içermez (tek satır).
 # Öncesindeki boşluk da yutulur ki 'kelime [K: x]' → 'kelime' olsun.
-_KANIT_ETIKET = re.compile(r"[ \t]*\[K:[^\]\n]*\]")
+_KANIT_ETIKET = re.compile(r"[ \t]*`?\[K:[^\]\n]*\]`?")   # model etiketi bazen `…` içinde yazar → boş `` kalmasın
 
 
 def kanit_etiketlerini_temizle(markdown: str) -> str:
@@ -1943,6 +1955,101 @@ def kanit_etiketlerini_temizle(markdown: str) -> str:
     temiz = re.sub(r"[ \t]+([.,;:!?])", r"\1", temiz)
     temiz = re.sub(r"[ \t]+\n", "\n", temiz)
     return temiz
+
+
+# ─── Jira'ya giden task gövdesi — TEK temizleme kapısı ───────────────────────
+# Owner geri bildirimi (2026-10-16): Task analizinde "task içinde olmaması gereken bilgiler var,
+# Jira'ya gidiyor, sonra elle düzeltiyoruz". Gözlenen gürültü: `<!-- RAG: … -->` yorumu, kanıt
+# etiketleri, kaynak alıntısı cümleleri ("Analist notu bunu doğrular: '…'", "Confluence: '…'",
+# "Confluence'a göre …"), seçilen yaklaşımın alternatiflere karşı gerekçesi ("… yaklaşımına
+# kıyasla en doğrudan çözümdür"), kontrol-dışı meta parantezleri ve atlanan bölümler yüzünden
+# 1-2-3-7-11 diye kopuk bölüm numaraları. Prompt kuralı birincil (model yazmasın); bu fonksiyon
+# model kaysa bile Jira kopyasını deterministik temizler. Analiz dosyası/ekran DEĞİŞMEZ.
+_HTML_YORUM = re.compile(r"<!--.*?-->\s*", re.S)
+# Tamamı kaynak alıntısı olan madde satırı: `- **Beklenen davranış kaynakta tanımlı:** "…"`
+_KAYNAK_MADDE = re.compile(
+    r"^[ \t]*[-*]\s*\*\*[^*\n]*(?:kaynak|Confluence|Analist notu|BRD|Swagger)[^*\n]*:\*\*\s*[\"“][^\"”\n]+[\"”]\s*\.?[ \t]*$\n?",
+    re.I | re.M)
+# `Analist notu bunu doğrular: "…"` · `Confluence: "…"` · `Kaynakta tanımlı: "…"` → alıntı cümlesi tamamen
+_KAYNAK_ALINTI = re.compile(
+    r"(?:Analist notu|Confluence|Kaynak(?:ta)?|BRD|Swagger|Jira)[^.\n\"“]{0,40}?:\*{0,2}\s*[\"“][^\"”\n]{15,}[\"”][ \t]*\.?[ \t]*")
+# "Confluence'a göre manuel eventler …" → "manuel eventler …" (yalnız önek düşer)
+_KAYNAK_ONEK = re.compile(
+    r"\b(?:Confluence|BRD|Swagger|Analist notu|Kaynak|Dokümantasyon)(?:'[aey]|’[aey])?\s+(?:göre|uyarınca)\s*,?\s*([^\s])", re.I)
+# Seçilen yaklaşımın alternatiflere karşı gerekçesi / kontrol-dışı hedge — geliştiriciye iş değil
+_META_ISARET = (r"yaklaşımına kıyasla|alternatif(?:ler)?e kıyasla|en doğrudan (?:çözüm|yol)dur|"
+                r"kontrolü dışıdır|bu varsayımın uygulanıp uygulanmadığı")
+# bir seviye iç parantez toleranslı — "(… bkz. `## Bağımlılık (FE↔BE)`.)" bütünüyle silinsin
+_META_PARANTEZ = re.compile(r"[ \t]*\((?:[^()\n]|\([^()\n]*\))*(?:" + _META_ISARET + r")(?:[^()\n]|\([^()\n]*\))*\)[ \t]*\.?", re.I)
+_META_GEREKCE = re.compile(r"[^.\n]*(?:" + _META_ISARET + r")[^.\n]*\.?[ \t]*", re.I)
+# Bölüm başlığı: `## 3. Teknik …` / `### 3.3. Alt …` / `### 3.3 Alt …`
+_BOLUM_BASLIK = re.compile(r"^(#{2,3})\s+(\d+)(?:\.(\d+))?\.?\s+(.+)$", re.M)
+
+
+_TR_BUYUK = {"i": "İ", "ı": "I"}
+
+
+def _onek_sil(m: "re.Match") -> str:
+    """'Confluence'a göre manuel …' önekini siler; önek cümle/hücre başındaysa kalan metnin ilk harfini büyütür."""
+    h = m.group(1)
+    onceki = m.string[max(0, m.start() - 3):m.start()]
+    cumle_basi = m.start() == 0 or onceki.endswith(("\n", ". ", "! ", "? ", "| ", "** ", ": "))
+    return (_TR_BUYUK.get(h, h.upper()) if cumle_basi and h.isalpha() else h)
+
+
+def _bolumleri_yeniden_numarala(markdown: str) -> str:
+    """Atlanan şablon bölümleri yüzünden kopuk kalan `## N.` numaralarını ardışık yapar
+    (1,2,3,7,11 → 1,2,3,4,5); alt başlık `### N.M` ve metindeki `bkz. N.M` / `(N.M)` atıfları
+    aynı haritayla güncellenir. Numarasız başlıklara dokunmaz; zaten ardışıksa değişiklik yok."""
+    ust = []
+    for m in _BOLUM_BASLIK.finditer(markdown):
+        if m.group(1) == "##" and m.group(3) is None and int(m.group(2)) not in ust:
+            ust.append(int(m.group(2)))
+    if not ust or ust == list(range(1, len(ust) + 1)):
+        return markdown
+    harita = {eski: i + 1 for i, eski in enumerate(ust)}
+
+    def _baslik(m):
+        n = int(m.group(2))
+        if n not in harita:
+            return m.group(0)
+        yeni = harita[n]
+        if m.group(3) is not None:
+            return f"{m.group(1)} {yeni}.{m.group(3)}. {m.group(4)}"
+        return f"{m.group(1)} {yeni}. {m.group(4)}"
+    out = _BOLUM_BASLIK.sub(_baslik, markdown)
+
+    def _atif(m):
+        n = int(m.group(2))
+        return f"{m.group(1)}{harita.get(n, n)}.{m.group(3)}" if n in harita else m.group(0)
+    # yalnız açık atıf bağlamı: "bkz. 3.3", "(3.3)", "bölüm 3.3", "Bölüm 3.3'te"
+    out = re.sub(r"((?:bkz\.?|bölüm|Bölüm)\s+|\()(\d+)\.(\d+)(?=[)\s'’,.;:]|$)", _atif, out)
+    return out
+
+
+def jira_icin_temizle(markdown: str) -> str:
+    """Jira task gövdesine yazılacak analiz kopyasını üretir. TÜM Jira yazım yolları bunu
+    kullanır (gövde güncelle · FE yeni task · yeni task aç · köprü). Sıra: Yönetici Özeti →
+    Canlı Gözlem Kapsamı → HTML yorumu → kaynak alıntısı cümleleri/önekleri → meta-gerekçe →
+    boş kalan madde satırları → bölüm numaraları ardışık (`[K:]` etiketleri HTML yorumundan hemen sonra silinir)."""
+    if not markdown:
+        return markdown
+    m = yonetici_ozetini_cikar(markdown)
+    m = canli_gozlem_kapsamini_cikar(m)
+    m = _HTML_YORUM.sub("", m)
+    m = kanit_etiketlerini_temizle(m)   # ÖNCE etiketler: satır/cümle desenleri etiketsiz metne bakar
+    m = _KAYNAK_MADDE.sub("", m)
+    m = _KAYNAK_ALINTI.sub("", m)
+    m = _KAYNAK_ONEK.sub(_onek_sil, m)   # cümle başındaysa sonraki harf büyütülür
+    m = _META_PARANTEZ.sub("", m)     # önce parantez bütünüyle (içindeki noktalar cümle bölmesin)
+    m = _META_GEREKCE.sub("", m)
+    # Etiket/alıntı silinince boş kalan madde ("- " / "- **Başlık:**") ve boş parantez artıkları
+    m = re.sub(r"\(\s*\)", "", m)
+    m = re.sub(r"^[ \t]*[-*]\s*(?:\*\*[^*\n]*:\*\*\s*)?$\n?", "", m, flags=re.M)
+    m = re.sub(r"[ \t]+([.,;:!?])", r"\1", m)
+    m = re.sub(r"\n{3,}", "\n\n", m)
+    m = _bolumleri_yeniden_numarala(m)
+    return m.strip()
 
 
 def _metin_kes(metin: str, limit: int, dosya_adi: str) -> str:
