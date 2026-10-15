@@ -1799,9 +1799,15 @@ def yonetici_ozeti_olustur(markdown: str, kapsam: dict | None = None,
     if bolum:
         kapsam_parca.append(f"{bolum} bölüm")
 
+    # MODEL KENDİ ÖZETİNİ YAZDIYSA (few-shot örnekleri özet başlığıyla başladığından stil olarak
+    # kopyalıyordu) → o maddeler korunur, bizim deterministik sayaçlar ALTINA eklenir; çağıran
+    # `markdown`'ı `yonetici_ozetini_cikar` ile temizleyip bu bloğu başa koyar → TEK özet.
+    model_maddeleri = _model_ozet_maddeleri(markdown)
+
     satirlar = [YONETICI_OZETI_BASLIK,
                 "*(Hızlı tarama için — Jira'ya yazılmaz, düzenlenebilir.)*", ""]
-    if kapsam_parca:
+    satirlar += model_maddeleri
+    if kapsam_parca and not any("**Kapsam:**" in m for m in model_maddeleri):
         satirlar.append("- **Kapsam:** " + " · ".join(kapsam_parca))
     if kapsam and kapsam.get("toplam"):
         eksik_not = (f"; eksik: {', '.join(kapsam['eksik'][:6])}"
@@ -1812,20 +1818,33 @@ def yonetici_ozeti_olustur(markdown: str, kapsam: dict | None = None,
     if soru:
         kritik_not = f" ({kritik} kritik)" if kritik else ""
         satirlar.append(f"- **Açık sorular:** {soru}{kritik_not} — ekibe sormadan başlamayın")
-    if not kapsam_parca and not soru:
+    if not kapsam_parca and not soru and not model_maddeleri:
         satirlar.append("- _(özetlenecek yapılandırılmış içerik bulunamadı)_")
     satirlar += ["", "---", ""]
     return "\n".join(satirlar)
 
 
+_OZET_BLOK_DESENI = re.compile(r"^\s*##\s*📋\s*Yönetici Özeti\b(.*?)\n---\n+", re.DOTALL | re.MULTILINE)
+
+
+def _model_ozet_maddeleri(markdown: str) -> list[str]:
+    """Analiz gövdesinde modelin yazdığı Yönetici Özeti bloğu varsa madde satırlarını döndürür
+    (bizim 'Açık sorular:' sayacımız hariç — o deterministik yeniden hesaplanır). Yoksa []."""
+    maddeler: list[str] = []
+    for m in _OZET_BLOK_DESENI.finditer(markdown or ""):   # birden çok blok (eski çift-özetli dosya) → hepsi
+        for sat in m.group(1).splitlines():
+            st = sat.strip()
+            # bizim deterministik satırlar (Açık sorular / Süreç kapsamı / Kapsam sayacı) yeniden hesaplanır
+            if st.startswith("- ") and st not in maddeler and not any(
+                    k in st for k in ("**Açık sorular:**", "**Süreç kapsamı:**", "_(özetlenecek")):
+                maddeler.append(st)
+    return maddeler
+
+
 def yonetici_ozetini_cikar(markdown: str) -> str:
-    """Yönetici Özeti bloğunu (başlıktan onu izleyen ilk '---' ayırıcıya kadar)
-    siler. Jira'ya yazan TÜM yollar bunu önce çağırmalı — özet Jira'ya gitmez."""
-    desen = re.compile(
-        r"^\s*##\s*📋\s*Yönetici Özeti\b.*?\n---\n+",
-        re.DOTALL,
-    )
-    return desen.sub("", markdown, count=1).lstrip()
+    """Yönetici Özeti bloklarını (başlıktan onu izleyen ilk '---' ayırıcıya kadar) siler —
+    TÜMÜNÜ (model + bizimki; çift özet regresyonu). Jira'ya yazan TÜM yollar bunu önce çağırmalı."""
+    return _OZET_BLOK_DESENI.sub("", markdown).lstrip()
 
 
 # AI'ın kendi çalışma sürecini anlatan ARA SÖZLER — "Tüm gözlemlerimi topladım.

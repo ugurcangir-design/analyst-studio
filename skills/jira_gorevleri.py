@@ -1005,6 +1005,7 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
 
     # Yönetici Özeti (TL;DR) — modalda görünür, Jira'ya YAZILMAZ (gorev_jiraya_yaz keser).
     ozet = yonetici_ozeti_olustur(teknik, acik_sorular=acik)
+    teknik = yonetici_ozetini_cikar(teknik)   # modelin kendi özeti gövdeden çıkar (tek blok)
     return {"markdown": ozet + teknik, "acik_sorular": acik}
 
 

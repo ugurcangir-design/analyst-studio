@@ -7,7 +7,7 @@ from .base import (
     OZEL_PROMPT_DOGRULUK_EKI, belirsizlik_denetimi, akis_butunluk_denetimi, ai_ara_sozleri_temizle,
     referans_dosyalari_hazirla, _ref_bloklari_olustur,
     canli_uygulama_baglami_hazirla,
-    yonetici_ozeti_olustur,
+    yonetici_ozeti_olustur, yonetici_ozetini_cikar,
     MAX_TOKENS_UZUN,
     extended_thinking_acik,
 )
@@ -126,7 +126,8 @@ def surec_analizi_yap(icerik_override: list | None = None,
     if butunluk:
         print("  🔗 Akış bütünlük denetimi: akışa bağlanmamış/tanımsız öğeler — rapora eklendi.")
 
-    ozet = yonetici_ozeti_olustur(yanit)
+    ozet = yonetici_ozeti_olustur(yanit)                 # modelin kendi özet maddeleri birleştirilir
+    yanit = yonetici_ozetini_cikar(yanit)                 # gövdede ikinci özet kalmasın (tek blok)
     yol = _kaydet("surec-analizi.md", ozet + yanit + belirsizlik + butunluk)
 
     # Akış Kapatma (Faz 3): boşlukları bul → kaynakta bilgi varsa ilgili bölümü minimal düzelt, yoksa

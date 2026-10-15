@@ -41,8 +41,10 @@ def _temizle(md: str) -> str:
     (örnek stil referansı — etiket/cevapsız-soru gürültüsü few-shot'a girmez)."""
     md = re.sub(r"(?ms)^##\s*❗\s*Cevap Bekleyen Zorunlu Sorular.*?(?=^#{1,2}\s|\Z)", "", md or "")
     try:
-        from .base import kanit_etiketlerini_temizle
-        return kanit_etiketlerini_temizle(md)
+        from .base import kanit_etiketlerini_temizle, yonetici_ozetini_cikar
+        # Yönetici Özeti örneğe GİRMEZ: girince model stil olarak kopyalayıp kendi özetini yazıyor
+        # → analizde çift özet (regresyon). Özet zaten deterministik, kod tarafında üretilir.
+        return kanit_etiketlerini_temizle(yonetici_ozetini_cikar(md))
     except Exception:
         return md
 

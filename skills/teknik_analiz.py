@@ -18,7 +18,7 @@ from .base import (
     OZEL_PROMPT_DOGRULUK_EKI, MODEL_HAFIF, ai_ara_sozleri_temizle,
     belirsizlik_denetimi, izlenebilirlik_matrisi_olustur,
     extended_thinking_acik, hizli_mod_acik, surec_id_kapsam,
-    yonetici_ozeti_olustur,
+    yonetici_ozeti_olustur, yonetici_ozetini_cikar,
     OUTPUT_DIR,
     MAX_CHARS_GENEL,
     MAX_TOKENS_COMBINED, MAX_TOKENS_UZUN, MAX_TOKENS_KAPSAM,
@@ -345,6 +345,7 @@ def teknik_analiz_yap(ozel_atla: bool = False) -> tuple[Path, Path]:
     # ── Yönetici Özeti (TL;DR) — deterministik, 0 token; EN ÜSTE ekle.
     # Jira'ya YAZILMAZ (jira_tasks + gorev_jiraya_yaz yonetici_ozetini_cikar çağırır).
     ozet = yonetici_ozeti_olustur(teknik_ham, kapsam=kapsam, acik_sorular=sorular)
+    teknik_final = yonetici_ozetini_cikar(teknik_final)   # modelin kendi özeti gövdeden çıkar (tek blok)
     teknik_yol = _kaydet("teknik-analiz.md", ozet + teknik_final)
 
     # Akış Kapatma (Faz 3): teknik akıştaki boşlukları süreç analizine dayanarak kapat; kapatılamayanlar

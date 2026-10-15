@@ -294,7 +294,11 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   `reference/ornekler/<tip>_<id>.json` (gitignore), (2) merkezi sink'e `olay='ornek'` + İÇERİK push (`ornek_kaydet`
   → `_sink_push`; **analiz içeriğini merkeze taşır — app-sahibi bilinçli kararı**). `ornekleri_cek()` (günlük oto-sync
   + boot + `POST /api/ornekler/cek`) sink'ten `?ornekler=1&email=<şirket domaini>` ile **TÜM ekip örneklerini** yerel
-  havuza indirir → ortak öğrenme. **Few-shot:** `ornek_bloklari(sorgu, tip, n=2)` BM25 ile EN ALAKALI 2 örneği
+  havuza indirir → ortak öğrenme. **ÖRNEĞE YÖNETİCİ ÖZETİ GİRMEZ** (`_temizle` → `yonetici_ozetini_cikar`): özetli
+  örnekler modele stil olarak 'kendi özetini yaz'ı öğretti → analizde ÇİFT özet (regresyon). Ayrıca `yonetici_ozeti_olustur`
+  modelin yazdığı özet maddelerini (`_model_ozet_maddeleri`) bizim deterministik sayaçlarla BİRLEŞTİRİR; süreç/teknik/görev
+  çağıranlar gövdeyi `yonetici_ozetini_cikar` (TÜM blokları siler) ile temizleyip başa TEK özet koyar. Test:
+  `tests/test_yonetici_ozeti.py`. **Few-shot:** `ornek_bloklari(sorgu, tip, n=2)` BM25 ile EN ALAKALI 2 örneği
   **süreç + teknik + GÖREV analizine** ("ONAYLI ÖRNEK — stil/derinlik referansı") enjekte eder (`surec_analizi_yap`
   /`teknik_analiz_yap`/`gorev_analiz_et`). `[K:]` temizlenir; örnek ≤45k (Sheet hücre limiti); havuz ≤80 (en yeni).
   Kürasyon/görünürlük: `GET /api/ornekler` (owner liste) · `GET /api/ornekler/durum` (owner — havuz adedi+tip+son çekim,
@@ -379,6 +383,7 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   `test_baglam_jira.py` (bağlam filtresi Jira key'leri yerel export'ta yoksa uzaktan bulkfetch — yalnız eksik, hata yutulur; ağ MOCK/0-token),
   `test_soru_hedefli.py` (soru cevabı hedefli düzeltme yönlendirmesi — süreç/teknik kendine, bölüm bulunamazsa tam üretim; AI MOCK/0-token),
   `test_roller.py` (kullanıcı-bazlı ekran yetkisi — hash/PII'siz, etkin rol/görünürlük, owner sınırı, CRUD; offline/0-token),
+  `test_yonetici_ozeti.py` (çift Yönetici Özeti regresyonu — model özeti birleştirme, tümünü çıkarma, few-shot temizliği; offline/0-token),
   `test_sohbet_tazelik.py` (İnteraktif Analiz bayat çıktı tazeliği + ön-söz/iç-konuşma kırpma; offline/0-token),
   `test_kabul_kontrolu.py` (Kabul Kontrolü — liste normalize, karar mantığı [eksik→geri, bildirilmeyen→doğrulanamadı], canlı hedef yok, rapor, köprü komutu; AI enjekte/0-token),
   `test_uat_senkron.py` (UAT Durum Senkronu — plan kuralları, geçiş bulma, rapor modunda Jira'ya yazma YOK, otomatik taşıma + geçmiş, uçlar; Jira MOCK/0-token),
