@@ -181,6 +181,10 @@ def sohbet_mesaj(metin: str, gozlem: bool = False) -> dict:
         mesajlar.append({"role": "user", "content": blok})
         mesajlar.append({"role": "assistant", "content": [
             {"type": "text", "text": "Referans bağlamı aldım. İsterinizi dinliyorum."}]})
+    bff_blok = _bff_raporlari_blogu()
+    if bff_blok:
+        mesajlar.append({"role": "user", "content": [{"type": "text", "text": bff_blok}]})
+        mesajlar.append({"role": "assistant", "content": [{"type": "text", "text": "BFF sözleşme raporlarını gerçek veri olarak aldım."}]})
     cevaplanan = _cevaplanan_sorular_metni()
     if cevaplanan:
         mesajlar.append({"role": "user", "content": [{"type": "text", "text":
@@ -256,6 +260,67 @@ def giris_testi() -> dict:
     oturum["mesajlar"].append({"rol": "agent", "metin": metin, "ts": time.time(), "sistem": True})
     _oturum_yaz(oturum)
     return sonuc
+
+
+# ─── BFF Keşfi (sohbetten) — agent miras canlı uygulamada ekranda kendisi CRUD yapar ────────
+
+def bff_kesfet(ekran_tarif: str) -> dict:
+    """Miras `live_app` ANA adresi + verilen ekran tarifiyle `bff_kesif.kesfet(ekran_bazli=True)`; sonuç
+    oturum['bff'] listesine + sohbete sistem mesajı. Anahtar Task Analizi ile ORTAKTIR (aynı ekran = aynı rapor)."""
+    from .bff_kesif import kesfet
+    ekran_tarif = (ekran_tarif or "").strip()
+    if not ekran_tarif:
+        raise ValueError("Hangi ekranda keşif yapılacağını yazın (ör. 'Sport Basic Data › Sports').")
+    urls = live_app_urls()
+    r = kesfet(urls[0] if urls else "", ekran_tarif, ekran_bazli=True)
+    oturum = oturum_oku()
+    liste = [x for x in (oturum.get("bff") or []) if x.get("anahtar") != r.get("anahtar")]
+    liste.append({"anahtar": r.get("anahtar"), "ekran": ekran_tarif, "ts": r.get("ts") or time.time(), "ok": bool(r.get("ok"))})
+    oturum["bff"] = liste[-20:]
+    if r.get("ok"):
+        md = r.get("md") or ""
+        bulunan = [m for m in ("POST", "PUT", "PATCH", "DELETE") if f"`{m} " in md or f"{m} /" in md]
+        metin = (f"🔌 **BFF keşfi tamamlandı — {ekran_tarif}.** Agent ekranda kendisi oluştur/güncelle/sil yaptı; "
+                 f"yakalanan yazma servisleri: {', '.join(bulunan) or '—'}. Rapor bu sohbete ve üretime otomatik girer "
+                 f"(7 gün). AI-TEST kayıtları ekranda bırakıldı — raporda listeli.")
+    else:
+        metin = f"🔌 **BFF keşfi tamamlanamadı — {ekran_tarif}:** {r.get('neden') or 'neden belirlenemedi'}."
+    oturum["mesajlar"].append({"rol": "agent", "metin": metin, "ts": time.time(), "sistem": True, "bff_anahtar": r.get("anahtar")})
+    _oturum_yaz(oturum)
+    return r
+
+
+def _bff_raporlari_blogu() -> str:
+    """Bu oturumda çıkarılmış, hâlâ TAZE (7 gün) BFF raporları → sohbet turu + üretim girdisi bloğu. Yoksa ''."""
+    try:
+        from .bff_kesif import rapor_oku, taze_mi, rapor_blogu
+        parcalar = []
+        for x in (oturum_oku().get("bff") or []):
+            r = rapor_oku_anahtar(x.get("anahtar"), rapor_oku)
+            if taze_mi(r):
+                parcalar.append(rapor_blogu(r))
+        return "\n\n".join(parcalar)[:60_000]
+    except Exception:
+        return ""
+
+
+def rapor_oku_anahtar(anahtar: str | None, _rapor_oku=None) -> dict | None:
+    """Anahtarla rapor (bff_kesif depo düzeni: <anahtar>.md + .json)."""
+    from .bff_kesif import BFF_DIR
+    import json as _json
+    if not anahtar:
+        return None
+    md_yol, meta_yol = BFF_DIR / f"{anahtar}.md", BFF_DIR / f"{anahtar}.json"
+    if not md_yol.exists():
+        return None
+    try:
+        meta = _json.loads(meta_yol.read_text(encoding="utf-8")) if meta_yol.exists() else {}
+    except Exception:
+        meta = {}
+    ts = float(meta.get("ts") or md_yol.stat().st_mtime)
+    return {"anahtar": anahtar, "md": md_yol.read_text(encoding="utf-8"), "ts": ts,
+            "yas_gun": round((time.time() - ts) / 86400, 1), "hedef_url": meta.get("hedef_url", ""),
+            "ekran": meta.get("ekran", ""), "yol": str(md_yol), "ok": bool(meta.get("ok", True))}
 
 
 # ─── Ekran bazlı iş: ekran envanteri + ekran başına FE/BE görev girdisi ──────
@@ -356,7 +421,9 @@ def _uretim_girdisi(oturum: dict) -> list:
     if not konusma.strip():
         raise ValueError("Önce sohbette isterini yaz (analiz üretilecek içerik yok).")
     cevaplar = _cevaplanan_sorular_metni()
-    return [{"type": "text", "text": (
+    bff_blok = _bff_raporlari_blogu()
+    girdi = [{"type": "text", "text": bff_blok}] if bff_blok else []
+    return girdi + [{"type": "text", "text": (
         "### İnteraktif Analiz Oturumu (analist ↔ agent sohbeti)\n\n"
         "Aşağıda bir isteri/süreç üzerine yapılan sohbet var. Bu sohbette OLGUNLAŞAN "
         "gereksinimi analiz konusu kabul et; analistin son kararlarını/cevaplarını esas al, "

@@ -40,7 +40,13 @@ BE + FE analiz → Task Analizi'nde görünür → Jira'ya **'Yeni Task Aç'** (
 `canli_hedef` varsa `_canli_tabanli_baglam` ile `canli_baglam_override` geçer; sentetik `EKRAN-` kayıtları eğitim
 havuzuna/depoya GİRMEZ; `gorev_yeni_task_olustur` `_ID_DESENI`'ye uymayan kaynak anahtarını yok sayar; UI sentetik kayıtta
 'Onayla ve Jira'da Güncelle' kapalı. Test: `tests/test_sohbet_ekran.py` (AI enjekte, 0 token).
-**Durdur / Devam Ettir / İptal:** `POST /api/sohbet/uret/durdur {job, iptal?}` → `_sohbet_is_kes`: iş
+**BFF KEŞFİ (sohbetten — `bff_kesfet`):** "BFF Keşfi (CRUD)" butonu (ekran adı sorulur) + ekran envanteri satırlarında
+🔌 düğmesi → `POST /api/sohbet/bff-kesif {ekran}` → iş hedefi `bff` → `bff_kesif.kesfet(miras live_app ANA adresi,
+ekran, ekran_bazli=True)` (anahtar Task Analizi ile ORTAK) → `oturum.bff[]` + sistem mesajı (yakalanan POST/PUT/DELETE
+özeti, "Raporu gör" → `GET /api/sohbet/bff-rapor?anahtar=`). `_bff_raporlari_blogu` bu oturumun TAZE raporlarını her sohbet
+turuna ve `_uretim_girdisi`'ne (Süreç/Teknik üretim) GERÇEK sözleşme olarak verir; üretim öncesi OTOMATİK keşif YOK
+(owner kararı — yalnız mevcut raporlar; ekran bazlı işte keşif Task iş sistemi üzerinden zaten otomatik). Test:
+`tests/test_sohbet_bff.py`. **Durdur / Devam Ettir / İptal:** `POST /api/sohbet/uret/durdur {job, iptal?}` → `_sohbet_is_kes`: iş
 `durduruldu|iptal`, o an süren claude CLI `cli_proc_durdur(worker_tid)` ile process-grubuyla ÖLDÜRÜLÜR (token yakma anında
 kesilir; `DurdurulduError` hata sayılmaz). `POST /api/sohbet/uret/devam {job}` yalnız `durduruldu` işte → AYNI hedefle yeni iş
 (eski kayıt `devam_etti`); tamamlanan analiz aşamaları `_api_cagri` önbelleğinden gelir, yalnız kesilen aşama yeniden çalışır
@@ -416,6 +422,7 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   `test_soru_hedefli.py` (soru cevabı hedefli düzeltme yönlendirmesi — süreç/teknik kendine, bölüm bulunamazsa tam üretim; AI MOCK/0-token),
   `test_roller.py` (kullanıcı-bazlı ekran yetkisi — hash/PII'siz, etkin rol/görünürlük, owner sınırı, CRUD; offline/0-token),
   `test_yonetici_ozeti.py` (çift Yönetici Özeti regresyonu — model özeti birleştirme, tümünü çıkarma, few-shot temizliği; offline/0-token),
+  `test_sohbet_bff.py` (İnteraktif Analiz BFF keşfi — bff_kesfet/oturum kaydı/sistem mesajı, raporların sohbet+üretime girişi, tazelik, uçlar; AI enjekte/0-token),
   `test_bff_kesif.py` (BFF Keşfi — önbellek/tazelik, plan kuralları, ekran-bazlı vs görev hedefi, blok yoksa kaydetme, analiz motoruna rapor girişi, app modu; AI enjekte/0-token),
   `test_sohbet_ekran.py` (İnteraktif Analiz ekran bazlı iş — gözlemli tur, cevaplanan sorular bağlamı, giriş testi, ekran envanteri/görevleri, iş başlatma + sentetik kayıt korumaları; AI enjekte/0-token),
   `test_sohbet_tazelik.py` (İnteraktif Analiz bayat çıktı tazeliği + ön-söz/iç-konuşma kırpma; offline/0-token),

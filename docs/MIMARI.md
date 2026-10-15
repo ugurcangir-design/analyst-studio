@@ -527,6 +527,17 @@ kayıtta denenir); rapor 7 gün önbellek.
   dict'inde de taşınır (`_adim_isle` her ikisini okur). Maliyet: ekran başına 1 canlı CLI çağrısı (5-10 dk), 7 günde bir.
   Test: `tests/test_bff_kesif.py`.
 
+### BFF Keşfi — İnteraktif Analiz'den
+Aynı motor (`skills/bff_kesif.py`), sohbet ekranından: `sohbet_analiz.bff_kesfet(ekran)` → miras `live_app` ANA adresi +
+ekran tarifi (`ekran_bazli=True`, 'surec' kapsamı) → rapor (anahtar = URL + ekran, Task Analizi ile ortak depo) →
+`oturum.bff[]` (ekran başına tek kayıt) + sohbete sistem mesajı (`bff_anahtar` → UI "Raporu gör" → `GET /api/sohbet/
+bff-rapor?anahtar=<12 hex>`). `_bff_raporlari_blogu()` oturumun taze (7 gün, ok) raporlarını `rapor_blogu` ile her sohbet
+turuna (kullanıcı/asistan çifti) ve `_uretim_girdisi`'ne (Süreç/Teknik üretim, girdi listesinin BAŞINA) ekler. Üretim
+öncesi otomatik keşif YOK (owner: yalnız mevcut raporlar); "Ekran Task'ları Üret" yolu Task iş sistemine düştüğü için orada
+otomatik keşif zaten çalışır. UI: kilometre taşı satırında "BFF Keşfi (CRUD)" (prompt ile ekran; envanterdeki ilk ekran
+varsayılan) + envanter tablosunda satır başına 🔌 BFF; iş hedefi `bff` çip/HUD'da "BFF keşfi (ekranda CRUD)".
+`POST /api/sohbet/bff-kesif {ekran}` (URL yoksa 400). Test: `tests/test_sohbet_bff.py`.
+
 ## Jira Görevleri Özelliği (`skills/jira_gorevleri.py` + UI `page-jira-gorevler`)
 Doküman yüklemeden, **mevcut** Jira Epic/Story altındaki görevleri çekip triyaj eder.
 - **Çekme — İKİ AŞAMALI (keşif + taze okuma):**

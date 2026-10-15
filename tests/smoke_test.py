@@ -262,6 +262,10 @@ kontrol("sohbet/ekran-gorevleri secilen yok → 400",
 kontrol("sohbet/mesaj gözlem boş metin → 400",
         istemci.post("/api/sohbet/mesaj", json={"metin": "", "gozlem": True}, headers=ORIGIN).status_code == 400)
 kontrol("sohbet/oturum giris+ekranlar alanları", {"giris", "ekranlar"} <= set((_so.get("oturum") or {}).keys()))
+kontrol("sohbet/bff-kesif ekran yok → 400",
+        istemci.post("/api/sohbet/bff-kesif", json={}, headers=ORIGIN).status_code == 400)
+kontrol("sohbet/bff-rapor geçersiz anahtar → 400", istemci.get("/api/sohbet/bff-rapor?anahtar=x").status_code == 400)
+kontrol("sohbet/oturum bff alanı", "bff" in (_so.get("oturum") or {}))
 kontrol("sohbet/uret geçersiz hedef → 400",
         istemci.post("/api/sohbet/uret", json={"hedef": "xyz"}, headers=ORIGIN).status_code == 400)
 kontrol("sohbet/uret/durum bilinmeyen iş → 404",

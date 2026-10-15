@@ -96,6 +96,9 @@
         <button class="btn btn-primary btn-sm" id="sh-teknik-btn" onclick="shUret('teknik')" disabled>
           <svg class="ico"><use href="#i-layers"/></svg> Teknik Analiz Üret
         </button>
+        <button class="btn btn-outline btn-sm" id="sh-bff-btn" onclick="shBffKesif()" title="Agent miras canlı uygulamada verdiğiniz ekranda KENDİSİ oluştur/güncelle/sil yapar (AI-TEST), BFF istek/yanıtlarını yakalayıp sözleşme raporu çıkarır; rapor bu sohbete ve üretime otomatik girer (7 gün).">
+          <svg class="ico"><use href="#i-server"/></svg> BFF Keşfi (CRUD)
+        </button>
         <button class="btn btn-success btn-sm" id="sh-ekran-btn" onclick="shEkranlar()" disabled title="Sohbet + BRD'den ekran envanteri çıkarılır; seçtiğiniz her ekran için FE+BE analiz üretilir (Task Analizi) → oradan Jira'ya ekran başına FE/BE task.">
           <svg class="ico"><use href="#i-layers"/></svg> Ekran Task'ları Üret
         </button>
@@ -129,6 +132,7 @@
       }
 
       function shRender(o) {
+        _shSonOturum = o;
         const thread = document.getElementById('sh-thread');
         const mesajlar = (o && o.mesajlar) || [];
         if (!mesajlar.length) {
@@ -136,7 +140,8 @@
         } else {
           thread.innerHTML = mesajlar.map(m => {
             const agent = m.rol === 'agent';
-            const rozet = m.gozlem ? '<span class="sh-rozet">🌐 canlı gözlemli</span><br>' : '';
+            const rozet = (m.gozlem ? '<span class="sh-rozet">🌐 canlı gözlemli</span><br>' : '')
+              + (m.bff_anahtar ? `<button class="btn btn-outline btn-xs" style="float:right;margin-left:8px" onclick="shBffRaporAc('${escHtml(m.bff_anahtar)}')">Raporu gör</button>` : '');
             const govde = agent && typeof marked !== 'undefined'
               ? '<div class="sh-bubble md-body">' + rozet + marked.parse(m.metin || '') + '</div>'
               : '<div class="sh-bubble">' + rozet + escHtml(m.metin || '') + '</div>';
@@ -168,6 +173,7 @@
         document.getElementById('sh-surec-btn').disabled = !varMesaj || !!_shAktifJob;
         document.getElementById('sh-teknik-btn').disabled = !(o && o.surec_var) || !!_shAktifJob;
         document.getElementById('sh-ekran-btn').disabled = !varMesaj || !!_shAktifJob;
+        document.getElementById('sh-bff-btn').disabled = !!_shAktifJob;
         // Giriş testi durumu (en başta yakalanır)
         const gd = document.getElementById('sh-giris-durum'), g = o && o.giris;
         if (g) {
@@ -278,7 +284,7 @@
           }
           if (d.durum === 'iptal') { _shDurum('✕ ' + etiket + ' üretimi iptal edildi.', ''); _shKontrol(''); shYukle(); return; }
           _shKontrol('');
-          if (d.durum === 'bitti' && ['giris', 'gozlem', 'ekranlar'].includes(hedef)) {
+          if (d.durum === 'bitti' && ['giris', 'gozlem', 'ekranlar', 'bff'].includes(hedef)) {
             _shDurum('', ''); toast(etiket + ' tamamlandı', 'success'); shYukle(); return;
           }
           if (d.durum === 'bitti') {
@@ -318,6 +324,37 @@
         } catch (e) { toast('Hata: ' + e, 'error'); }
       }
 
+      // ── BFF Keşfi (sohbetten): agent miras canlı uygulamada verilen ekranda kendisi CRUD yapar
+      async function shBffKesif(ekran) {
+        if (_shAktifJob) { toast('Bir iş sürüyor — bitince deneyin', 'info'); return; }
+        if (!ekran) {
+          const varsayilan = (((_shSonOturum || {}).ekranlar || [])[0] || {}).ad || '';
+          ekran = prompt("Hangi ekranda BFF keşfi yapılsın? (menü › ekran — ör. 'Sport Basic Data › Sports')", varsayilan);
+          if (ekran == null) return;
+          ekran = ekran.trim();
+          if (!ekran) { toast('Ekran adı gerekli', 'info'); return; }
+        }
+        if (!confirm(`"${ekran}" ekranında BFF keşfi başlatılsın mı?\n\nAgent TEST ortamında AI-TEST önekli kayıt OLUŞTURUR, GÜNCELLER ve ayrı bir kaydı SİLER; isteklerin method/path/payload/yanıtını yakalar (5-10 dk, arka planda). Kayıtlar kalır. Canlı uygulama hedefi test/UAT olmalı.`)) return;
+        try {
+          const d = await (await fetch('/api/sohbet/bff-kesif', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ekran }) })).json();
+          if (!d.ok) { toast(d.error || 'Başlatılamadı', 'error'); return; }
+          _shAktifJob = d.job; _shKontrol('calisiyor', d.job);
+          _shDurum('⏳ 🔌 BFF keşfi — ' + ekran + ' (ekranda CRUD gözlemi, arka planda sürer)', '');
+          _shPoll('BFF keşfi', 'bff');
+        } catch (e) { toast('Hata: ' + e, 'error'); }
+      }
+      async function shBffRaporAc(anahtar) {
+        try {
+          const d = await (await fetch('/api/sohbet/bff-rapor?anahtar=' + encodeURIComponent(anahtar))).json();
+          if (!d.ok) { toast(d.error || 'Rapor okunamadı', 'error'); return; }
+          const el = document.getElementById('sh-cikti');
+          document.getElementById('sh-cikti-title').textContent = 'BFF Sözleşme Raporu — ' + (d.ekran || anahtar) + (d.yas_gun != null ? ` · ${d.yas_gun} gün önce` : '');
+          document.getElementById('sh-cikti-body').innerHTML = typeof marked !== 'undefined' ? marked.parse(d.md || '') : escHtml(d.md || '');
+          el.style.display = ''; el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (e) { toast('Hata: ' + e, 'error'); }
+      }
+      let _shSonOturum = null;
+
       // ── Ekran Task'ları: envanter (AI) → seçim → Task Analizi'nde ekran başına FE+BE analiz
       async function shEkranlar() {
         if (_shAktifJob) { toast('Bir iş sürüyor — bitince deneyin', 'info'); return; }
@@ -339,7 +376,7 @@
             <button class="btn btn-outline btn-xs" onclick="document.querySelectorAll('#sh-ekranlar input[type=checkbox]').forEach(c=>c.checked=true)">Tümü</button>
             <button class="btn btn-outline btn-xs" onclick="document.querySelectorAll('#sh-ekranlar input[type=checkbox]').forEach(c=>c.checked=false)">Hiçbiri</button></div>
           <table><thead><tr><th></th><th>Ekran</th><th>Menü</th><th>Bu ekranda yapılacak</th><th>BRD</th></tr></thead><tbody>`
-          + ekranlar.map((e, i) => `<tr><td><input type="checkbox" data-i="${i}" checked></td><td><b>${escHtml(e.ad)}</b>${e.not ? '<div style="color:var(--text3);font-size:11px">' + escHtml(e.not) + '</div>' : ''}</td><td>${escHtml(e.menu || '—')}</td><td>${escHtml(e.ister || '—')}</td><td>${escHtml(e.brd_ref || '—')}</td></tr>`).join('')
+          + ekranlar.map((e, i) => `<tr><td><input type="checkbox" data-i="${i}" checked></td><td><b>${escHtml(e.ad)}</b>${e.not ? '<div style="color:var(--text3);font-size:11px">' + escHtml(e.not) + '</div>' : ''}</td><td>${escHtml(e.menu || '—')}</td><td>${escHtml(e.ister || '—')}</td><td>${escHtml(e.brd_ref || '—')}<div style="margin-top:4px"><button class="btn btn-outline btn-xs" onclick="shBffKesif(${JSON.stringify((e.menu && e.menu.toLowerCase().endsWith(e.ad.toLowerCase())) ? e.menu : ((e.menu ? e.menu + ' › ' : '') + e.ad))})" title="Bu ekranda BFF keşfi (CRUD)">🔌 BFF</button></div></td></tr>`).join('')
           + `</tbody></table>
           <div class="sh-soru-eylem"><button class="btn btn-success btn-sm" onclick="shEkranAnaliz()">Seçilen ekranlar için FE+BE analiz üret → Task Analizi</button>
           <span style="font-size:12px;color:var(--text2);align-self:center">Her ekran: canlı gözlem + BE analizi + FE analizi (ekran başına ~2 AI çağrısı). Jira'ya açma Task Analizi'nden "Yeni Task Aç" ile.</span></div>`;

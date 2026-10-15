@@ -5813,6 +5813,7 @@ def _sohbet_ozet(oturum: dict) -> dict:
         "durdurulmus_is": _sohbet_durdurulmus_is(),
         "giris": oturum.get("giris"),
         "ekranlar": oturum.get("ekranlar") or [],
+        "bff": oturum.get("bff") or [],
     }
 
 
@@ -5902,6 +5903,12 @@ def _sohbet_uret_calistir(job_id: str, hedef: str) -> None:
             sonuc = {"gozlem": True}
         elif hedef == "ekranlar":
             sonuc = {"ekranlar": ekran_listesi_cikar()}
+        elif hedef == "bff":
+            from skills.sohbet_analiz import bff_kesfet
+            with _sohbet_is_lock:
+                _ekran = _sohbet_isler[job_id].get("metin", "")
+            _r = bff_kesfet(_ekran)
+            sonuc = {"bff": {k: _r.get(k) for k in ("ok", "anahtar", "neden", "yas_gun")}}
         else:
             surec_uret()
             sonuc = {"dosya": "surec-analizi.md"}
@@ -5975,6 +5982,34 @@ def sohbet_ekranlar():
         return jsonify({"ok": False, "error": "Önce sohbette kapsamı netleştirin."}), 400
     r = _sohbet_is_baslat("ekranlar")
     return (jsonify(r), 409) if not r.get("ok") else jsonify(r)
+
+
+@app.route("/api/sohbet/bff-kesif", methods=["POST"])
+def sohbet_bff_kesif():
+    """Sohbetten BFF keşfi: miras canlı uygulamada verilen ekranda agent kendisi CRUD yapar (arka plan iş).
+    Body: {ekran} → {ok, job}."""
+    from skills.base import live_app_urls
+    data = request.get_json(silent=True) or {}
+    ekran = (data.get("ekran") or "").strip()
+    if not ekran:
+        return jsonify({"ok": False, "error": "ekran (hangi ekranda keşif yapılacak) gerekli"}), 400
+    if not live_app_urls():
+        return jsonify({"ok": False, "error": "Canlı uygulama URL'i tanımlı değil (Süreç/Teknik Analiz → Bağlam Filtresi)."}), 400
+    r = _sohbet_is_baslat("bff", metin=ekran[:300])
+    return (jsonify(r), 409) if not r.get("ok") else jsonify(r)
+
+
+@app.route("/api/sohbet/bff-rapor", methods=["GET"])
+def sohbet_bff_rapor():
+    """Rapor içeriği (anahtar ile) — 'Raporu gör'."""
+    from skills.sohbet_analiz import rapor_oku_anahtar
+    anahtar = (request.args.get("anahtar") or "").strip()
+    if not re.fullmatch(r"[0-9a-f]{12}", anahtar):
+        return jsonify({"ok": False, "error": "geçersiz anahtar"}), 400
+    r = rapor_oku_anahtar(anahtar)
+    if not r:
+        return jsonify({"ok": False, "error": "Rapor bulunamadı"}), 404
+    return jsonify({"ok": True, **{k: r.get(k) for k in ("anahtar", "md", "ts", "yas_gun", "ekran", "ok")}})
 
 
 @app.route("/api/sohbet/ekran-gorevleri", methods=["POST"])

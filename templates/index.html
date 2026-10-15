@@ -7137,7 +7137,8 @@ function _updateRunChip(s){
   if (running) {
     chip.className = 'run-chip show running';
     const _SH_ET = { surec: 'İnteraktif süreç analizi üretiliyor', teknik: 'İnteraktif teknik analizi üretiliyor',
-                     giris: 'İnteraktif: canlı giriş testi', gozlem: 'İnteraktif: canlı gözlemli yanıt', ekranlar: 'İnteraktif: ekran envanteri' };
+                     giris: 'İnteraktif: canlı giriş testi', gozlem: 'İnteraktif: canlı gözlemli yanıt', ekranlar: 'İnteraktif: ekran envanteri',
+                     bff: 'İnteraktif: BFF keşfi (ekranda CRUD)' };
     const shEtiket = sh ? (_SH_ET[sh.hedef] || 'İnteraktif analiz işi') : '';
     if (lbl)  lbl.textContent  = (s.calisiyor && !bekliyor) ? (s.etiket || 'Analiz çalışıyor') : shEtiket;
     const bas = _stepStart[s.durum];
@@ -7172,7 +7173,8 @@ function _updateRunChip(s){
     } else if (sh) {
       const sd = document.getElementById('im-sohbet-durdur'); if (sd) sd.style.display = '';
       const _HUD = { surec: ['Süreç Analizi üretiliyor', '1/2', 'ADIM · canlı gözlem dahil'], teknik: ['Teknik Analiz üretiliyor', '2/2', 'ADIM · canlı gözlem dahil'],
-                     giris: ['Canlı giriş testi', '🔐', 'ERİŞİM'], gozlem: ['Canlı gözlemli yanıt', '🌐', 'GÖZLEM'], ekranlar: ['Ekran envanteri çıkarılıyor', '🧩', 'ENVANTER'] };
+                     giris: ['Canlı giriş testi', '🔐', 'ERİŞİM'], gozlem: ['Canlı gözlemli yanıt', '🌐', 'GÖZLEM'], ekranlar: ['Ekran envanteri çıkarılıyor', '🧩', 'ENVANTER'],
+                     bff: ['BFF keşfi — ekranda CRUD gözlemi', '🔌', 'KEŞİF'] };
       const h = _HUD[sh.hedef] || ['İnteraktif analiz işi', '•', 'İŞLENİYOR'];
       _setTxt('im-title', 'İnteraktif Analiz — ' + h[0]);
       _setTxt('im-step', h[1]);
