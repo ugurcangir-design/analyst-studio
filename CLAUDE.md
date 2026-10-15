@@ -18,7 +18,10 @@ gözlem yalnız üretim adımlarında. **Global süreç workflow'una DOKUNMAZ** 
 Oturum `output/sohbet/oturum.json` (gitignore). Endpoint: `/api/sohbet/{oturum,mesaj,sifirla,uret,uret/durum}` (kimlik-gate,
 üretim arka plan iş). **Tazelik:** `surec_var_mi/teknik_var_mi(oturum)` çıktıyı YALNIZ mtime ≥ oturumun ilk mesajı (yoksa
 `created`) ise "var" sayar → önceki doküman/sohbet akışının bayat çıktısı sohbetin ürünü gibi GÖSTERİLMEZ (hata: 12 Eylül
-çıktısı 15 Ekim sohbetinde göründü). `base._onsoz_kirp` 2 katlı: baştaki düz ön-söz + meta-yorum/ayraç SONRASI, ilk
+çıktısı 15 Ekim sohbetinde göründü). **Arka plan + görünürlük:** üretim daemon thread'de sürer (ekran değişimi/yenileme KESMEZ; restart/kapanma koruması
+`_arka_plan_isleri_calisiyor`). `_sohbet_aktif_is()` → `/api/sohbet/oturum.aktif_is` (ekran açılınca sürmekte olan işe YENİDEN
+BAĞLANIR, `_shPoll`) + `/api/workflow-state.sohbet_is` (üst-bar işlem çipi + HUD her ekranda "İnteraktif süreç/teknik
+analizi üretiliyor · süre"; global workflow'a DOKUNMAZ). `uret/durum` `gecen_sn` döner (180 sn üstü takılma uyarısı). `base._onsoz_kirp` 2 katlı: baştaki düz ön-söz + meta-yorum/ayraç SONRASI, ilk
 başlık/tablodan önceki İngilizce iç-konuşma paragrafı (`_ONSOZ_IC_KONUSMA`; gövde paragrafı/JSON dokunulmaz). Test: `tests/test_sohbet_tazelik.py`. UI: `screens/sohbet.html` (nav "İnteraktif Analiz", Analiz grubu; chat thread + `sh-*`). Test: `smoke_test`
 (oturum + doğrulama uçları). **NOT — motor refactor'u:** `surec_analizi_yap(icerik_override, dosya_adi_override, ozel_atla)` +
 `teknik_analiz_yap(ozel_atla)` opsiyonel parametre aldı — override YOKKEN davranış AYNEN korunur (doküman akışı etkilenmez).

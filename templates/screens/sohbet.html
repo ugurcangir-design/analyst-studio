@@ -120,6 +120,15 @@
           }).join('');
         }
         thread.scrollTop = thread.scrollHeight;
+        // SÜRMEKTE OLAN üretime yeniden bağlan (başka ekrana geçip dönünce / sayfa yenilenince):
+        // iş sunucuda arka planda sürer; ekran bunu kaybetmesin, bitince sonucu göstersin.
+        const ai = o && o.aktif_is;
+        if (ai && ai.job && !_shAktifJob) {
+          _shAktifJob = ai.job;
+          const et = ai.hedef === 'teknik' ? 'Teknik Analiz' : 'Süreç Analizi';
+          _shDurum('⏳ ' + et + ' üretiliyor… (arka planda sürüyor' + (ai.gecen_sn != null ? ' · ' + Math.floor(ai.gecen_sn / 60) + ' dk' : '') + ')', '');
+          _shPoll(et, ai.hedef);
+        }
         // Kilometre taşı buton durumları
         const varMesaj = mesajlar.length > 0;
         document.getElementById('sh-surec-btn').disabled = !varMesaj || !!_shAktifJob;
@@ -172,7 +181,7 @@
         if (_shAktifJob) { toast('Bir üretim zaten sürüyor', 'info'); return; }
         const etiket = hedef === 'teknik' ? 'Teknik Analiz' : 'Süreç Analizi';
         if (!confirm(etiket + ' üretilsin mi? Sohbette olgunlaşan gereksinim analiz edilir (canlı gözlem dahil, birkaç dakika sürebilir).')) return;
-        _shDurum('⏳ ' + etiket + ' üretiliyor… (canlı gözlem dahil, sürebilir)', '');
+        _shDurum('⏳ ' + etiket + ' üretiliyor… (canlı gözlem dahil · arka planda sürer, başka ekrana geçebilirsiniz)', '');
         document.getElementById('sh-surec-btn').disabled = true;
         document.getElementById('sh-teknik-btn').disabled = true;
         try {
@@ -193,8 +202,15 @@
           let d;
           try { d = await (await fetch('/api/sohbet/uret/durum?job=' + encodeURIComponent(_shAktifJob))).json(); }
           catch (e) { return; }
-          if (!d.ok) return;
-          if (d.durum === 'calisiyor') return;
+          if (!d.ok) { if (d.error) { clearInterval(_shPollTimer); _shPollTimer = null; _shAktifJob = null; _shDurum('⚠ Üretim izi kayboldu (uygulama yeniden başlamış olabilir) — tekrar üretin.', 'err'); shYukle(); } return; }
+          if (d.durum === 'calisiyor') {
+            if (d.gecen_sn != null) {
+              const dk = Math.floor(d.gecen_sn / 60), sn = d.gecen_sn % 60;
+              _shDurum('⏳ ' + etiket + ' üretiliyor… ' + String(dk).padStart(2, '0') + ':' + String(sn).padStart(2, '0')
+                + ' (canlı gözlem dahil · arka planda sürer, başka ekrana geçebilirsiniz' + (d.gecen_sn > 180 ? ' · beklenenden uzun — VPN/ağ kontrol' : '') + ')', '');
+            }
+            return;
+          }
           clearInterval(_shPollTimer); _shPollTimer = null; _shAktifJob = null;
           if (d.durum === 'bitti') {
             _shDurum('✓ ' + etiket + ' üretildi.', 'ok');

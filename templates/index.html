@@ -7096,14 +7096,18 @@ function _updateRunChip(s){
   const sep  = document.getElementById('run-chip-sep');
   if (!chip) return;
   const bekliyor = s.onay_bekleniyor || s.teknik_onay_bekleniyor || s.brd_revize_bekleniyor;
-  const running  = s.calisiyor && !bekliyor;
+  // İnteraktif Analiz (sohbet) üretimi global workflow dışında çalışır → çip/HUD onu da göstersin
+  const sh = s.sohbet_is || null;
+  const running  = (s.calisiyor && !bekliyor) || !!sh;
   const lbl  = document.getElementById('run-chip-label');
   const meta = document.getElementById('run-chip-meta');
   if (running) {
     chip.className = 'run-chip show running';
-    if (lbl)  lbl.textContent  = s.etiket || 'Analiz çalışıyor';
+    const shEtiket = sh ? ('İnteraktif ' + (sh.hedef === 'teknik' ? 'teknik' : 'süreç') + ' analizi üretiliyor') : '';
+    if (lbl)  lbl.textContent  = (s.calisiyor && !bekliyor) ? (s.etiket || 'Analiz çalışıyor') : shEtiket;
     const bas = _stepStart[s.durum];
-    if (meta) meta.textContent = bas ? _fmtSure(Date.now() - bas) : '';
+    if (meta) meta.textContent = (s.calisiyor && !bekliyor) ? (bas ? _fmtSure(Date.now() - bas) : '')
+                                 : (sh && sh.gecen_sn != null ? _fmtSure(sh.gecen_sn * 1000) : '');
     if (sep) sep.style.display = '';
     // Yeni bir çalışma başladıysa (çalışmıyor → çalışıyor) İşlem Modu'nu (JARVIS HUD)
     // öne getir — analist analiz sırasında zengin görseli görsün. Kapatırsa arka planda sürer.
@@ -7123,18 +7127,26 @@ function _updateRunChip(s){
     if (_islemModuAcik) islemModuKapat();
   }
   if (_islemModuAcik && running) {
-    const st = _STEP_NO[s.durum] || '';
-    _setTxt('im-title', s.etiket || 'Analiz çalışıyor');
-    _setTxt('im-step', st || '•');
-    _setTxt('im-sub',  st ? 'ADIM' : 'İŞLENİYOR');
-    const bas = _stepStart[s.durum];
-    _setTxt('im-sure', bas ? _fmtSure(Date.now() - bas) : '00:00');
+    if (s.calisiyor && !bekliyor) {
+      const st = _STEP_NO[s.durum] || '';
+      _setTxt('im-title', s.etiket || 'Analiz çalışıyor');
+      _setTxt('im-step', st || '•');
+      _setTxt('im-sub',  st ? 'ADIM' : 'İŞLENİYOR');
+      const bas = _stepStart[s.durum];
+      _setTxt('im-sure', bas ? _fmtSure(Date.now() - bas) : '00:00');
+    } else if (sh) {
+      _setTxt('im-title', 'İnteraktif Analiz — ' + (sh.hedef === 'teknik' ? 'Teknik Analiz' : 'Süreç Analizi') + ' üretiliyor');
+      _setTxt('im-step', sh.hedef === 'teknik' ? '2/2' : '1/2');
+      _setTxt('im-sub', 'ADIM · canlı gözlem dahil');
+      _setTxt('im-sure', sh.gecen_sn != null ? _fmtSure(sh.gecen_sn * 1000) : '00:00');
+    }
   }
 }
 function _runChipTikla(){
   const s = _lastState || {};
   const bekliyor = s.onay_bekleniyor || s.teknik_onay_bekleniyor || s.brd_revize_bekleniyor;
   if (s.calisiyor && !bekliyor) islemModuAc();
+  else if (s.sohbet_is) { islemModuAc(); }
   else if (bekliyor) switchTab(_activePipeline === 'brd' ? 'brd' : 'surec');
 }
 function islemModuAc(){

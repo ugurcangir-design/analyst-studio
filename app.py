@@ -1353,6 +1353,9 @@ def workflow_state():
     if _stale_workflow_kurtar(ozet):
         ozet = wf.ozet()
     ozet["suspended"] = _suspended
+    # İnteraktif Analiz üretimi global workflow'a DOKUNMAZ (kendi inline işi); ama üst-bar işlem
+    # çipi + HUD her ekranda görünsün diye ayrı alanda bildirilir (UI: _updateRunChip).
+    ozet["sohbet_is"] = _sohbet_aktif_is()
     return jsonify(ozet)
 
 
@@ -5757,7 +5760,19 @@ def _sohbet_ozet(oturum: dict) -> dict:
         # YALNIZ bu oturumda üretilen çıktı "var" sayılır (bayat dosya sohbetin ürünü gibi gösterilmez)
         "surec_var": surec_var_mi(oturum),
         "teknik_var": teknik_var_mi(oturum),
+        # Sürmekte olan üretim (varsa) → ekran değiştirip dönünce / yenileyince yeniden bağlanma
+        "aktif_is": _sohbet_aktif_is(),
     }
+
+
+def _sohbet_aktif_is() -> dict | None:
+    """Çalışan sohbet üretimi: {job, hedef, bas_ts, gecen_sn} ya da None."""
+    with _sohbet_is_lock:
+        for jid, j in _sohbet_isler.items():
+            if j.get("durum") == "calisiyor":
+                bas = j.get("bas_ts") or time.time()
+                return {"job": jid, "hedef": j.get("hedef"), "bas_ts": bas, "gecen_sn": int(time.time() - bas)}
+    return None
 
 
 @app.route("/api/sohbet/oturum", methods=["GET"])
@@ -5841,7 +5856,7 @@ def sohbet_uret():
             if j.get("durum") == "calisiyor":
                 return jsonify({"ok": False, "error": "Bir üretim zaten sürüyor."}), 409
         job_id = f"sohbet-uret-{int(time.time() * 1000)}"
-        _sohbet_isler[job_id] = {"durum": "calisiyor", "hedef": hedef}
+        _sohbet_isler[job_id] = {"durum": "calisiyor", "hedef": hedef, "bas_ts": time.time()}
         # Bellek sınırı: son 20 iş
         if len(_sohbet_isler) > 20:
             for k in list(_sohbet_isler)[:-20]:
@@ -5858,7 +5873,8 @@ def sohbet_uret_durum():
         job = _sohbet_isler.get(job_id)
         if not job:
             return jsonify({"ok": False, "error": "İş bulunamadı"}), 404
-        return jsonify({"ok": True, **job})
+        bas = job.get("bas_ts")
+        return jsonify({"ok": True, **job, "gecen_sn": int(time.time() - bas) if bas else None})
 
 
 # ─── Confluence Yayımla ───────────────────────────────────────────────────────
