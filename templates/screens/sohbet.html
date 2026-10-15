@@ -29,6 +29,19 @@
         #page-sohbet .sh-uret-durum.err { color:var(--run); }
         #page-sohbet .sh-uret-durum.ok { color:var(--green); }
         #page-sohbet .sh-uret-kontrol { display:inline-flex; gap:6px; }
+        #page-sohbet .sh-gozlem-opt { display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--text2); margin-top:6px; cursor:pointer; }
+        #page-sohbet .sh-rozet { display:inline-block; font-size:10.5px; padding:1px 7px; border-radius:999px; background:var(--accent-soft); color:var(--accent); margin-bottom:4px; }
+        #page-sohbet .sh-msg-row.agent.sistem .sh-bubble { background:var(--surface3,var(--surface2)); border-style:dashed; }
+        #page-sohbet .sh-ekranlar { margin-top:14px; border:1px solid var(--border); border-radius:10px; padding:12px 14px; background:var(--surface); }
+        #page-sohbet .sh-ekranlar table { width:100%; border-collapse:collapse; font-size:12.5px; }
+        #page-sohbet .sh-ekranlar th, #page-sohbet .sh-ekranlar td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); vertical-align:top; }
+        #page-sohbet .sh-ekranlar th { font-size:10px; text-transform:uppercase; letter-spacing:.4px; color:var(--text3); }
+        #page-sohbet .sh-sorular { margin-top:14px; border:1px solid var(--yellow,#d97706); border-radius:10px; padding:12px 14px; background:var(--surface); }
+        #page-sohbet .sh-soru-bas { display:flex; justify-content:space-between; align-items:baseline; gap:8px; font-size:12.5px; color:var(--text2); margin-bottom:6px; }
+        #page-sohbet .sh-soru-metin { font-size:13.5px; line-height:1.55; margin-bottom:6px; }
+        #page-sohbet .sh-soru-detay { font-size:12px; color:var(--text2); margin-bottom:8px; }
+        #page-sohbet .sh-sorular textarea { width:100%; min-height:56px; resize:vertical; }
+        #page-sohbet .sh-soru-eylem { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
         #page-sohbet .sh-cikti { margin-top:14px; border:1px solid var(--accent); background:var(--accent-soft); border-radius:10px; overflow:hidden; }
         #page-sohbet .sh-cikti-head { display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
         #page-sohbet .sh-cikti-title { font-size:13px; font-weight:600; color:var(--text); }
@@ -46,6 +59,9 @@
           <p>Doküman yüklemeden, sohbetle süreç ve teknik analiz. İsterinizi yazın; agent soru sorar / yöntem önerir; hazır olunca formal analizi üretin.</p>
         </div>
         <div class="ph-actions">
+          <button class="btn btn-outline btn-sm" id="sh-giris-btn" onclick="shGirisTest()" title="Kayıtlı test hesabıyla canlı uygulamaya giriş denenir; başarısızsa (ör. yanlış şifre) gözlem/analize geçmeden burada yakalanır.">
+            <svg class="ico"><use href="#i-check"/></svg> Girişi Test Et
+          </button>
           <button class="btn btn-outline btn-sm" onclick="shTarayiciAc()" title="Miras alınan Ana Uygulama URL'ini tarayıcıda aç (bakmak için)">
             <svg class="ico"><use href="#i-monitor"/></svg> Tarayıcıdan Aç
           </button>
@@ -60,6 +76,7 @@
         <span><b>Bağlam Filtresi</b> ve <b>uygulama giriş bilgileri</b> Süreç/Teknik Analiz ekranından <b>miras</b> alınır — tekrar girmezsiniz. Analiz üretiminde <b>canlı uygulama gözlemi</b> de yapılır. Doküman yükleme / özel prompt yoktur.</span>
       </div>
 
+      <div class="sh-miras" id="sh-giris-durum" style="display:none"></div>
       <div class="sh-thread" id="sh-thread"></div>
       <div class="sh-typing" id="sh-typing" style="display:none">Agent düşünüyor…</div>
 
@@ -69,7 +86,8 @@
           <svg class="ico"><use href="#i-arrow-right"/></svg> Gönder
         </button>
       </div>
-      <div class="sh-hint">⌘/Ctrl + Enter ile gönder · Yeterince netleştiğinde aşağıdan <b>Süreç Analizi Üret</b> → <b>Teknik Analiz Üret</b>. Üretim canlı gözlem içerir, birkaç dakika sürebilir.</div>
+      <label class="sh-gozlem-opt"><input type="checkbox" id="sh-gozlem"> 🌐 <b>Canlı gözlemle yanıtla</b> — agent bu mesaj için uygulamaya girip ekranı gerçekten gezer (dakikalar sürer, arka planda çalışır)</label>
+      <div class="sh-hint">⌘/Ctrl + Enter ile gönder · Agent soruları <b>sırayla</b> sorar; BRD referanslarda hazırdır (yüklemezsiniz). Ekran bazlı iş için kapsam netleşince <b>Ekran Task'ları Üret</b>; tek doküman için <b>Süreç → Teknik Analiz Üret</b>.</div>
 
       <div class="sh-milestones">
         <button class="btn btn-primary btn-sm" id="sh-surec-btn" onclick="shUret('surec')" disabled>
@@ -78,10 +96,15 @@
         <button class="btn btn-primary btn-sm" id="sh-teknik-btn" onclick="shUret('teknik')" disabled>
           <svg class="ico"><use href="#i-layers"/></svg> Teknik Analiz Üret
         </button>
+        <button class="btn btn-success btn-sm" id="sh-ekran-btn" onclick="shEkranlar()" disabled title="Sohbet + BRD'den ekran envanteri çıkarılır; seçtiğiniz her ekran için FE+BE analiz üretilir (Task Analizi) → oradan Jira'ya ekran başına FE/BE task.">
+          <svg class="ico"><use href="#i-layers"/></svg> Ekran Task'ları Üret
+        </button>
         <span class="sh-uret-durum" id="sh-uret-durum"></span>
         <span class="sh-uret-kontrol" id="sh-uret-kontrol"></span>
       </div>
 
+      <div class="sh-ekranlar" id="sh-ekranlar" style="display:none"></div>
+      <div class="sh-sorular" id="sh-sorular" style="display:none"></div>
       <div class="sh-cikti" id="sh-cikti" style="display:none">
         <div class="sh-cikti-head">
           <span class="sh-cikti-title" id="sh-cikti-title">Üretilen Analiz</span>
@@ -113,10 +136,11 @@
         } else {
           thread.innerHTML = mesajlar.map(m => {
             const agent = m.rol === 'agent';
+            const rozet = m.gozlem ? '<span class="sh-rozet">🌐 canlı gözlemli</span><br>' : '';
             const govde = agent && typeof marked !== 'undefined'
-              ? '<div class="sh-bubble md-body">' + marked.parse(m.metin || '') + '</div>'
-              : '<div class="sh-bubble">' + escHtml(m.metin || '') + '</div>';
-            return '<div class="sh-msg-row ' + (agent ? 'agent' : 'analist') + '">'
+              ? '<div class="sh-bubble md-body">' + rozet + marked.parse(m.metin || '') + '</div>'
+              : '<div class="sh-bubble">' + rozet + escHtml(m.metin || '') + '</div>';
+            return '<div class="sh-msg-row ' + (agent ? 'agent' : 'analist') + (m.sistem ? ' sistem' : '') + '">'
               + '<div class="sh-av ' + (agent ? 'agent' : 'analist') + '">' + (agent ? 'AI' : 'Siz') + '</div>'
               + govde + '</div>';
           }).join('');
@@ -143,6 +167,17 @@
         const varMesaj = mesajlar.length > 0;
         document.getElementById('sh-surec-btn').disabled = !varMesaj || !!_shAktifJob;
         document.getElementById('sh-teknik-btn').disabled = !(o && o.surec_var) || !!_shAktifJob;
+        document.getElementById('sh-ekran-btn').disabled = !varMesaj || !!_shAktifJob;
+        // Giriş testi durumu (en başta yakalanır)
+        const gd = document.getElementById('sh-giris-durum'), g = o && o.giris;
+        if (g) {
+          gd.style.display = '';
+          gd.innerHTML = (g.ok ? '🔐 <span><b>Canlı giriş doğrulandı</b>' + (g.ekran ? ' · ' + escHtml(g.ekran) : '') + '</span>'
+                               : '⚠️ <span style="color:var(--run)"><b>Canlı giriş başarısız:</b> ' + escHtml(g.neden || '') + ' — Bağlam Filtresi\'nde giriş bilgilerini düzeltip tekrar test edin.</span>')
+                       + ' <span style="color:var(--text3);margin-left:auto">' + new Date((g.ts || 0) * 1000).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) + '</span>';
+        } else gd.style.display = 'none';
+        _shEkranlarRender(o && o.ekranlar || []);
+        if (varMesaj && o && (o.surec_var || o.teknik_var)) _shSorulariYukle(); else _shSorulariGizle();
         // Üretilmiş çıktı önizlemesi — YALNIZ bu oturumda sohbet varsa (boş oturumda
         // önceki doküman akışının bayat çıktısını gösterme).
         if (varMesaj && o && o.teknik_var) shOnizle('teknik-analiz.md', 'Teknik Analiz');
@@ -164,6 +199,20 @@
         if (document.querySelector('#sh-thread .sh-empty')) thread.innerHTML = '';
         thread.insertAdjacentHTML('beforeend', '<div class="sh-msg-row analist"><div class="sh-av analist">Siz</div><div class="sh-bubble">' + escHtml(metin) + '</div></div>');
         thread.scrollTop = thread.scrollHeight;
+        const gozlem = !!document.getElementById('sh-gozlem').checked;
+        if (gozlem) {
+          try {
+            const r = await fetch('/api/sohbet/mesaj', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ metin, gozlem: true }) });
+            const d = await r.json();
+            if (!d.ok) { _shMsg(d.error || 'Başlatılamadı', 'err'); return; }
+            ta.value = ''; document.getElementById('sh-gozlem').checked = false;
+            _shAktifJob = d.job; _shKontrol('calisiyor', d.job);
+            _shDurum('⏳ 🌐 Canlı gözlemle yanıt hazırlanıyor… (uygulama geziliyor · arka planda sürer)', '');
+            _shPoll('Canlı gözlemli yanıt', 'gozlem');
+          } catch (e) { _shMsg('Bağlantı hatası: ' + e, 'err'); }
+          finally { btn.disabled = false; ta.disabled = false; document.getElementById('sh-typing').style.display = 'none'; }
+          return;
+        }
         try {
           const r = await fetch('/api/sohbet/mesaj', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ metin })
@@ -229,6 +278,9 @@
           }
           if (d.durum === 'iptal') { _shDurum('✕ ' + etiket + ' üretimi iptal edildi.', ''); _shKontrol(''); shYukle(); return; }
           _shKontrol('');
+          if (d.durum === 'bitti' && ['giris', 'gozlem', 'ekranlar'].includes(hedef)) {
+            _shDurum('', ''); toast(etiket + ' tamamlandı', 'success'); shYukle(); return;
+          }
           if (d.durum === 'bitti') {
             _shDurum('✓ ' + etiket + ' üretildi.', 'ok');
             toast(etiket + ' üretildi', 'success');
@@ -252,6 +304,114 @@
           document.getElementById('sh-jira-btn').style.display = (dosya === 'teknik-analiz.md') ? '' : 'none';
           document.getElementById('sh-cikti').style.display = '';
         } catch (e) { /* sessiz */ }
+      }
+
+      // ── Girişi Test Et — canlı uygulama erişimi EN BAŞTA doğrulanır (arka plan iş)
+      async function shGirisTest() {
+        if (_shAktifJob) { toast('Bir iş sürüyor — bitince deneyin', 'info'); return; }
+        try {
+          const d = await (await fetch('/api/sohbet/giris-test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json();
+          if (!d.ok) { toast(d.error || 'Başlatılamadı', 'error'); return; }
+          _shAktifJob = d.job; _shKontrol('calisiyor', d.job);
+          _shDurum('⏳ 🔐 Giriş deneniyor… (tarayıcı açılıyor, 1-2 dk)', '');
+          _shPoll('Giriş testi', 'giris');
+        } catch (e) { toast('Hata: ' + e, 'error'); }
+      }
+
+      // ── Ekran Task'ları: envanter (AI) → seçim → Task Analizi'nde ekran başına FE+BE analiz
+      async function shEkranlar() {
+        if (_shAktifJob) { toast('Bir iş sürüyor — bitince deneyin', 'info'); return; }
+        if (!confirm('Sohbet + BRD referanslarından ekran envanteri çıkarılsın mı? (1 AI çağrısı) Sonra seçtiğiniz ekranlar için FE+BE analiz üretilir.')) return;
+        try {
+          const d = await (await fetch('/api/sohbet/ekranlar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json();
+          if (!d.ok) { toast(d.error || 'Başlatılamadı', 'error'); return; }
+          _shAktifJob = d.job; _shKontrol('calisiyor', d.job);
+          _shDurum('⏳ 🧩 Ekran envanteri çıkarılıyor…', '');
+          _shPoll('Ekran envanteri', 'ekranlar');
+        } catch (e) { toast('Hata: ' + e, 'error'); }
+      }
+      function _shEkranlarRender(ekranlar) {
+        const el = document.getElementById('sh-ekranlar');
+        if (!ekranlar.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+        el.style.display = '';
+        el.innerHTML = `<div class="bs-grup-bas" style="margin-bottom:8px">🧩 Ekran envanteri <span class="bs-say">(${ekranlar.length})</span>
+            <span style="flex:1"></span>
+            <button class="btn btn-outline btn-xs" onclick="document.querySelectorAll('#sh-ekranlar input[type=checkbox]').forEach(c=>c.checked=true)">Tümü</button>
+            <button class="btn btn-outline btn-xs" onclick="document.querySelectorAll('#sh-ekranlar input[type=checkbox]').forEach(c=>c.checked=false)">Hiçbiri</button></div>
+          <table><thead><tr><th></th><th>Ekran</th><th>Menü</th><th>Bu ekranda yapılacak</th><th>BRD</th></tr></thead><tbody>`
+          + ekranlar.map((e, i) => `<tr><td><input type="checkbox" data-i="${i}" checked></td><td><b>${escHtml(e.ad)}</b>${e.not ? '<div style="color:var(--text3);font-size:11px">' + escHtml(e.not) + '</div>' : ''}</td><td>${escHtml(e.menu || '—')}</td><td>${escHtml(e.ister || '—')}</td><td>${escHtml(e.brd_ref || '—')}</td></tr>`).join('')
+          + `</tbody></table>
+          <div class="sh-soru-eylem"><button class="btn btn-success btn-sm" onclick="shEkranAnaliz()">Seçilen ekranlar için FE+BE analiz üret → Task Analizi</button>
+          <span style="font-size:12px;color:var(--text2);align-self:center">Her ekran: canlı gözlem + BE analizi + FE analizi (ekran başına ~2 AI çağrısı). Jira'ya açma Task Analizi'nden "Yeni Task Aç" ile.</span></div>`;
+      }
+      async function shEkranAnaliz() {
+        const secilen = [...document.querySelectorAll('#sh-ekranlar input[type=checkbox]:checked')].map(c => parseInt(c.dataset.i, 10));
+        if (!secilen.length) { toast('En az bir ekran seçin', 'info'); return; }
+        if (secilen.length > 12) { toast('Tek seferde en fazla 12 ekran', 'info'); return; }
+        if (typeof _jgMesgul === 'function' && _jgMesgul()) { toast('Task Analizi\'nde bir iş sürüyor — bitince deneyin', 'info'); return; }
+        try {
+          const d = await (await fetch('/api/sohbet/ekran-gorevleri', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secilen }) })).json();
+          if (!d.ok) { toast(d.error || 'Hazırlanamadı', 'error'); return; }
+          // Sentetik görevleri Task Analizi'nin görev haritasına koy (cevap/düzelt turları açıklamayı bulsun)
+          (d.adimlar || []).forEach(a => { if (a.gorev) _jgGorevler[a.gorev.key] = a.gorev; });
+          await _jgIsBaslat(d.adimlar, 'Ekran analizleri (FE+BE)', d.adimlar[0].key, true);
+          switchTab('jira-gorevler');
+          toast(`${d.adimlar.length} ekran için FE+BE analiz başlatıldı — Task Analizi ekranında izleyin`, 'success');
+        } catch (e) { toast('Hata: ' + e, 'error'); }
+      }
+
+      // ── Açık sorular — SIRAYLA (bu oturumun süreç/teknik/açık-soru dosyalarından)
+      let _shSorular = [], _shSoruIdx = 0;
+      const _SH_SORU_DOSYALAR = ['surec-analizi.md', 'teknik-analiz.md', 'acik-sorular.md'];
+      function _shSorulariGizle() { const el = document.getElementById('sh-sorular'); el.style.display = 'none'; el.innerHTML = ''; }
+      async function _shSorulariYukle() {
+        try {
+          const d = await (await fetch('/api/sorular')).json();
+          _shSorular = (d.sorular || []).filter(q => _SH_SORU_DOSYALAR.includes(q.kaynak_dosya) && ['acik', 'bekleniyor'].includes(q.durum || 'acik'));
+          _shSoruIdx = 0;
+          _shSoruRender();
+        } catch (e) { _shSorulariGizle(); }
+      }
+      function _shSoruRender() {
+        const el = document.getElementById('sh-sorular');
+        if (!_shSorular.length) { _shSorulariGizle(); return; }
+        el.style.display = '';
+        if (_shSoruIdx >= _shSorular.length) {
+          el.innerHTML = `<div class="sh-soru-bas"><b>✓ Açık soruların hepsi cevaplandı / atlandı</b></div>
+            <div class="sh-soru-eylem"><button class="btn btn-primary btn-sm" onclick="shSorulariUygula()">Cevapları analize uygula</button>
+            <span style="font-size:12px;color:var(--text2);align-self:center">Cevaplar ilgili bölümlere hedefli işlenir; sohbet de bunları kesin bilgi sayar.</span></div>`;
+          return;
+        }
+        const q = _shSorular[_shSoruIdx];
+        el.innerHTML = `<div class="sh-soru-bas"><b>❓ Açık soru ${_shSoruIdx + 1} / ${_shSorular.length}</b><span>${escHtml(q.id)} · ${escHtml(q.kaynak_dosya)}${q.zorunlu ? ' · <b style="color:var(--run)">ZORUNLU</b>' : ''}${q.oncelik ? ' · ' + escHtml(q.oncelik) : ''}</span></div>
+          <div class="sh-soru-metin">${escHtml(q.soru || q.baslik || '')}</div>
+          ${(q.mevcut_durum || q.beklenen_yanit) ? `<div class="sh-soru-detay">${q.mevcut_durum ? 'Mevcut: ' + escHtml(q.mevcut_durum) : ''}${q.mevcut_durum && q.beklenen_yanit ? ' · ' : ''}${q.beklenen_yanit ? 'Beklenen: ' + escHtml(q.beklenen_yanit) : ''}</div>` : ''}
+          <textarea id="sh-soru-cevap" placeholder="Cevabınız (⌘/Ctrl+Enter ile kaydet)" onkeydown="if(event.key==='Enter'&&(event.metaKey||event.ctrlKey)){event.preventDefault();shSoruCevapla('cevaplandi');}"></textarea>
+          <div class="sh-soru-eylem">
+            <button class="btn btn-primary btn-sm" onclick="shSoruCevapla('cevaplandi')">Cevapla → sonraki</button>
+            <button class="btn btn-outline btn-sm" onclick="shSoruCevapla('varsayim')" title="Cevap yerine varsayım olarak işaretle">Varsayım olarak kaydet</button>
+            <button class="btn btn-outline btn-sm" onclick="_shSoruIdx++; _shSoruRender();">Atla</button>
+          </div>`;
+        document.getElementById('sh-soru-cevap').focus();
+      }
+      async function shSoruCevapla(durum) {
+        const q = _shSorular[_shSoruIdx]; if (!q) return;
+        const cevap = (document.getElementById('sh-soru-cevap').value || '').trim();
+        if (!cevap) { toast('Cevap boş — Atla ile geçebilirsiniz', 'info'); return; }
+        try {
+          const body = durum === 'varsayim' ? { kaynak_dosya: q.kaynak_dosya, durum, varsayim: cevap } : { kaynak_dosya: q.kaynak_dosya, durum, cevap };
+          const d = await (await fetch('/api/sorular/' + encodeURIComponent(q.id), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
+          if (!d.ok) { toast(d.error || 'Kaydedilemedi', 'error'); return; }
+          _shSoruIdx++; _shSoruRender();
+        } catch (e) { toast('Hata: ' + e, 'error'); }
+      }
+      async function shSorulariUygula() {
+        try {
+          const d = await (await fetch('/api/sorular/uygula', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json();
+          if (!d.ok) { toast(d.error || 'Uygulanamadı', 'error'); return; }
+          toast('Cevaplar analize işleniyor (arka plan) — Analiz Dosyaları\'ndan izleyebilirsiniz', 'success');
+          _shSorulariGizle();
+        } catch (e) { toast('Hata: ' + e, 'error'); }
       }
 
       async function shTarayiciAc() {

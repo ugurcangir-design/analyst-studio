@@ -5486,7 +5486,10 @@ function _jgSonucGoster(key) {
   document.getElementById('jg-preview-sub').textContent = s.summary || '';
   document.getElementById('jg-preview-editor').style.display = '';
   document.getElementById('jg-preview-editor').value = s.hata ? '' : (s.markdown || '');
-  document.getElementById('jg-approve-btn').disabled = !!s.hata || !s.markdown;
+  const _sentetik = /^EKRAN-\d+/.test(key);   // İnteraktif Analiz ekran kaydı — Jira'da task yok
+  const _ab = document.getElementById('jg-approve-btn');
+  _ab.disabled = !!s.hata || !s.markdown || _sentetik;
+  _ab.title = _sentetik ? "Bu bir ekran analizi (Jira'da task yok) — Jira'ya açmak için 'Yeni Task Aç' kullanın" : '';
   const ytBtn = document.getElementById('jg-yenitask-btn');
   if (ytBtn) ytBtn.disabled = !!s.hata || !s.markdown;
   jgYeniTaskKapat();   // analiz değişince yeni-task paneli kapansın (içerik yeni analizle yeniden açılır)
@@ -7104,7 +7107,9 @@ function _updateRunChip(s){
   const meta = document.getElementById('run-chip-meta');
   if (running) {
     chip.className = 'run-chip show running';
-    const shEtiket = sh ? ('İnteraktif ' + (sh.hedef === 'teknik' ? 'teknik' : 'süreç') + ' analizi üretiliyor') : '';
+    const _SH_ET = { surec: 'İnteraktif süreç analizi üretiliyor', teknik: 'İnteraktif teknik analizi üretiliyor',
+                     giris: 'İnteraktif: canlı giriş testi', gozlem: 'İnteraktif: canlı gözlemli yanıt', ekranlar: 'İnteraktif: ekran envanteri' };
+    const shEtiket = sh ? (_SH_ET[sh.hedef] || 'İnteraktif analiz işi') : '';
     if (lbl)  lbl.textContent  = (s.calisiyor && !bekliyor) ? (s.etiket || 'Analiz çalışıyor') : shEtiket;
     const bas = _stepStart[s.durum];
     if (meta) meta.textContent = (s.calisiyor && !bekliyor) ? (bas ? _fmtSure(Date.now() - bas) : '')
@@ -7137,9 +7142,12 @@ function _updateRunChip(s){
       _setTxt('im-sure', bas ? _fmtSure(Date.now() - bas) : '00:00');
     } else if (sh) {
       const sd = document.getElementById('im-sohbet-durdur'); if (sd) sd.style.display = '';
-      _setTxt('im-title', 'İnteraktif Analiz — ' + (sh.hedef === 'teknik' ? 'Teknik Analiz' : 'Süreç Analizi') + ' üretiliyor');
-      _setTxt('im-step', sh.hedef === 'teknik' ? '2/2' : '1/2');
-      _setTxt('im-sub', 'ADIM · canlı gözlem dahil');
+      const _HUD = { surec: ['Süreç Analizi üretiliyor', '1/2', 'ADIM · canlı gözlem dahil'], teknik: ['Teknik Analiz üretiliyor', '2/2', 'ADIM · canlı gözlem dahil'],
+                     giris: ['Canlı giriş testi', '🔐', 'ERİŞİM'], gozlem: ['Canlı gözlemli yanıt', '🌐', 'GÖZLEM'], ekranlar: ['Ekran envanteri çıkarılıyor', '🧩', 'ENVANTER'] };
+      const h = _HUD[sh.hedef] || ['İnteraktif analiz işi', '•', 'İŞLENİYOR'];
+      _setTxt('im-title', 'İnteraktif Analiz — ' + h[0]);
+      _setTxt('im-step', h[1]);
+      _setTxt('im-sub', h[2]);
       _setTxt('im-sure', sh.gecen_sn != null ? _fmtSure(sh.gecen_sn * 1000) : '00:00');
     }
   }

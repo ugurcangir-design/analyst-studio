@@ -257,6 +257,11 @@ kontrol("sohbet/uret/durdur bilinmeyen iş → 404",
 kontrol("sohbet/uret/devam bilinmeyen iş → 404",
         istemci.post("/api/sohbet/uret/devam", json={"job": "yok"}, headers=ORIGIN).status_code == 404)
 kontrol("sohbet/oturum durdurulmus_is alanı", "durdurulmus_is" in (_so.get("oturum") or {}))
+kontrol("sohbet/ekran-gorevleri secilen yok → 400",
+        istemci.post("/api/sohbet/ekran-gorevleri", json={}, headers=ORIGIN).status_code == 400)
+kontrol("sohbet/mesaj gözlem boş metin → 400",
+        istemci.post("/api/sohbet/mesaj", json={"metin": "", "gozlem": True}, headers=ORIGIN).status_code == 400)
+kontrol("sohbet/oturum giris+ekranlar alanları", {"giris", "ekranlar"} <= set((_so.get("oturum") or {}).keys()))
 kontrol("sohbet/uret geçersiz hedef → 400",
         istemci.post("/api/sohbet/uret", json={"hedef": "xyz"}, headers=ORIGIN).status_code == 400)
 kontrol("sohbet/uret/durum bilinmeyen iş → 404",

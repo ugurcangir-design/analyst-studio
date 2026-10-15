@@ -1141,6 +1141,8 @@ def gorev_yeni_task_olustur(proje: str, mode: str = "tek", markdown: str = "",
 
     ust_key = (ust_key or "").strip().upper()
     kaynak_key = (kaynak_key or "").strip().upper()
+    if kaynak_key and not _ID_DESENI.match(kaynak_key):
+        kaynak_key = ""   # sentetik kaynak (İnteraktif Analiz ekran kaydı EKRAN-n) → Jira'da yok, bağ kurulmaz
     if ust_key and not _ID_DESENI.match(ust_key):
         raise ValueError(f"Geçersiz üst öğe anahtarı: '{ust_key}'")
     ozet = (baslik or "").strip() or "Yeni görev"

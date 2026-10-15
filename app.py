@@ -1621,8 +1621,8 @@ def _ornek_yakala_md(tip: str, md: str, ozet: str = "", proje: str = "", jira_ke
 def _gorev_egitim_topla(key: str, summary: str, katman: str, mode: str, sonuc: dict) -> None:
     """Task analizi tamamlanınca: (C) sunucu deposuna yaz (kalıcı, 30g) + (A) few-shot havuzuna
     yakala — Jira'ya YAZILMASA da üretilen analiz toplansın. BEST-EFFORT, arka plan."""
-    if mode == "formatla":
-        return  # salt biçimlendirme — eğitim değeri yok
+    if mode == "formatla" or key.upper().startswith("EKRAN-"):
+        return  # salt biçimlendirme / sentetik ekran kaydı (Jira'da yok) — eğitim değeri yok
     try:
         from skills.gorev_deposu import kaydet as _gd_kaydet
         proje = key.split("-")[0].upper()
@@ -5226,6 +5226,16 @@ def _gorev_is_calistir(job_id: str) -> None:
             if not gorev:
                 raise ValueError(f"Görev okunamadı: {key}")
             mode = adim.get("mode", "analiz")
+            # Ekran bazlı iş: miras canlı uygulama ANA adresi + bu ekranın hedefiyle gözlem (live_app_gorev yerine)
+            _canli_ek = {}
+            if adim.get("canli_hedef"):
+                try:
+                    from skills.sohbet_analiz import _canli_tabanli_baglam
+                    _co = _canli_tabanli_baglam(adim["canli_hedef"])
+                    if _co:
+                        _canli_ek = {"canli_baglam_override": _co}
+                except Exception as _e:
+                    logger.warning("Ekran canlı hedefi hazırlanamadı (%s): %s", key, _e)
             if mode == "formatla":
                 md = gorev_standart_formatla(gorev)
                 sonuc = {"markdown": md, "acik_sorular": ""}
@@ -5246,7 +5256,7 @@ def _gorev_is_calistir(job_id: str) -> None:
             elif mode == "fe-be-ayir":
                 # Tek görevi FE ve BE olarak İKİ AYRI katman-özel analize böl (Option A).
                 r = gorev_fe_be_analiz(gorev, cevaplar=adim.get("cevaplar", ""),
-                                       onceki_sorular=adim.get("onceki_sorular", ""))
+                                       onceki_sorular=adim.get("onceki_sorular", ""), **_canli_ek)
                 sonuc = {"fe_be": r}
             else:
                 iliskili = []
@@ -5257,7 +5267,7 @@ def _gorev_is_calistir(job_id: str) -> None:
                             iliskili.append(g)
                 r = gorev_analiz_et(gorev, cevaplar=adim.get("cevaplar", ""),
                                     iliskili=iliskili, katman=adim.get("katman", ""),
-                                    onceki_sorular=adim.get("onceki_sorular", ""))
+                                    onceki_sorular=adim.get("onceki_sorular", ""), **_canli_ek)
                 sonuc = {"markdown": r.get("markdown", ""), "acik_sorular": r.get("acik_sorular", "")}
             with _gorev_is_lock:
                 job["sonuclar"][key] = {**sonuc, "summary": gorev.get("summary", ""),
@@ -5317,11 +5327,13 @@ def jira_gorev_is_baslat():
     adimlar = data.get("adimlar")
     if not isinstance(adimlar, list) or not adimlar:
         return jsonify({"ok": False, "error": "adimlar gerekli"}), 400
-    hata = _jira_baglanti_eksik()
-    if hata:
-        return jsonify({"ok": False, "error": hata}), 400
+    # Sentetik görevler (İnteraktif Analiz → ekran bazlı EKRAN-n) Jira okumaz → bağlantı şart değil
+    if not all(isinstance((a or {}).get("gorev"), dict) and (a.get("gorev") or {}).get("description") for a in adimlar):
+        hata = _jira_baglanti_eksik()
+        if hata:
+            return jsonify({"ok": False, "error": hata}), 400
     temiz = []
-    for a in adimlar[:6]:
+    for a in adimlar[:12]:
         k = str((a or {}).get("key") or (a.get("gorev") or {}).get("key") or "").strip()
         if not k:
             continue
@@ -5331,6 +5343,7 @@ def jira_gorev_is_baslat():
                       "onceki_sorular": a.get("onceki_sorular", ""),
                       "markdown": a.get("markdown", ""), "talimat": a.get("talimat", ""),
                       "gorev": a.get("gorev") if isinstance(a.get("gorev"), dict) else None,
+                      "canli_hedef": str(a.get("canli_hedef") or "").strip(),
                       "summary": (a.get("gorev") or {}).get("summary", "")})
     if not temiz:
         return jsonify({"ok": False, "error": "Geçerli adım yok"}), 400
@@ -5763,6 +5776,8 @@ def _sohbet_ozet(oturum: dict) -> dict:
         # Sürmekte olan üretim (varsa) → ekran değiştirip dönünce / yenileyince yeniden bağlanma
         "aktif_is": _sohbet_aktif_is(),
         "durdurulmus_is": _sohbet_durdurulmus_is(),
+        "giris": oturum.get("giris"),
+        "ekranlar": oturum.get("ekranlar") or [],
     }
 
 
@@ -5802,6 +5817,10 @@ def sohbet_mesaj_gonder():
     metin = (data.get("metin") or "").strip()
     if not metin:
         return jsonify({"ok": False, "error": "Boş mesaj gönderilemez."}), 400
+    if data.get("gozlem"):
+        # 🌐 Gözlemli tur: canlı uygulama gezilir (dakikalar) → arka plan iş; UI üretim gibi izler.
+        r = _sohbet_is_baslat("gozlem", metin=metin)
+        return (jsonify(r), 409) if not r.get("ok") else jsonify(r)
     _bas = time.time()
     _tbas = _token_bas()
     try:
@@ -5835,10 +5854,19 @@ def _sohbet_uret_calistir(job_id: str, hedef: str) -> None:
         # Durdur: o an süren claude CLI'ı bu thread kimliğiyle killpg edebilsin (_CLI_PROC_REG)
         _sohbet_isler[job_id]["worker_tid"] = threading.get_ident()
     try:
-        from skills.sohbet_analiz import surec_uret, teknik_uret
+        from skills.sohbet_analiz import surec_uret, teknik_uret, giris_testi, sohbet_mesaj, ekran_listesi_cikar
         if hedef == "teknik":
             teknik_uret()
             sonuc = {"dosya": "teknik-analiz.md"}
+        elif hedef == "giris":
+            sonuc = {"giris": giris_testi()}
+        elif hedef == "gozlem":
+            with _sohbet_is_lock:
+                _metin = _sohbet_isler[job_id].get("metin", "")
+            sohbet_mesaj(_metin, gozlem=True)
+            sonuc = {"gozlem": True}
+        elif hedef == "ekranlar":
+            sonuc = {"ekranlar": ekran_listesi_cikar()}
         else:
             surec_uret()
             sonuc = {"dosya": "surec-analizi.md"}
@@ -5881,6 +5909,53 @@ def _sohbet_is_kes(job_id: str, yeni_durum: str) -> dict | None:
     except Exception:
         oldurdu = False
     return {"hedef": hedef, "cli_oldurdu": oldurdu}
+
+
+def _sohbet_is_baslat(hedef: str, metin: str = "") -> dict:
+    """Sohbet arka plan işi (giris / gozlem / ekranlar) — tek seferde tek iş."""
+    with _sohbet_is_lock:
+        if any(j.get("durum") == "calisiyor" for j in _sohbet_isler.values()):
+            return {"ok": False, "error": "Bir üretim/gözlem zaten sürüyor — bitmesini bekleyin."}
+        job_id = f"sohbet-uret-{int(time.time() * 1000)}"
+        _sohbet_isler[job_id] = {"durum": "calisiyor", "hedef": hedef, "bas_ts": time.time(), "metin": metin}
+    threading.Thread(target=_sohbet_uret_calistir, args=(job_id, hedef), daemon=True).start()
+    return {"ok": True, "job": job_id, "hedef": hedef}
+
+
+@app.route("/api/sohbet/giris-test", methods=["POST"])
+def sohbet_giris_test():
+    """Canlı uygulamaya kayıtlı hesapla giriş denemesi (arka plan) → sonuç sohbete mesaj + oturum.giris."""
+    from skills.base import live_app_urls
+    if not live_app_urls():
+        return jsonify({"ok": False, "error": "Canlı uygulama URL'i tanımlı değil (Süreç/Teknik Analiz → Bağlam Filtresi)."}), 400
+    r = _sohbet_is_baslat("giris")
+    return (jsonify(r), 409) if not r.get("ok") else jsonify(r)
+
+
+@app.route("/api/sohbet/ekranlar", methods=["POST"])
+def sohbet_ekranlar():
+    """Sohbet + BRD'den ekran envanteri (arka plan, 1 AI çağrısı) → oturum.ekranlar."""
+    from skills.sohbet_analiz import oturum_oku
+    if not (oturum_oku().get("mesajlar")):
+        return jsonify({"ok": False, "error": "Önce sohbette kapsamı netleştirin."}), 400
+    r = _sohbet_is_baslat("ekranlar")
+    return (jsonify(r), 409) if not r.get("ok") else jsonify(r)
+
+
+@app.route("/api/sohbet/ekran-gorevleri", methods=["POST"])
+def sohbet_ekran_gorevleri():
+    """Seçilen ekranlar için Task Analizi iş adımları (fe-be-ayir, sentetik EKRAN-n görev + canlı hedef).
+    Body: {secilen:[idx…]} → {adimlar}. UI bunları /api/jira/gorev/is'e verir."""
+    data = request.get_json(silent=True) or {}
+    secilen = data.get("secilen")
+    if not isinstance(secilen, list) or not secilen:
+        return jsonify({"ok": False, "error": "secilen (ekran index listesi) gerekli"}), 400
+    try:
+        from skills.sohbet_analiz import ekran_gorevleri
+        adimlar = ekran_gorevleri([int(i) for i in secilen][:12])
+    except (ValueError, TypeError) as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    return jsonify({"ok": True, "adimlar": adimlar})
 
 
 @app.route("/api/sohbet/uret", methods=["POST"])

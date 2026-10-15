@@ -21,7 +21,26 @@ Oturum `output/sohbet/oturum.json` (gitignore). Endpoint: `/api/sohbet/{oturum,m
 çıktısı 15 Ekim sohbetinde göründü). **Arka plan + görünürlük:** üretim daemon thread'de sürer (ekran değişimi/yenileme KESMEZ; restart/kapanma koruması
 `_arka_plan_isleri_calisiyor`). `_sohbet_aktif_is()` → `/api/sohbet/oturum.aktif_is` (ekran açılınca sürmekte olan işe YENİDEN
 BAĞLANIR, `_shPoll`) + `/api/workflow-state.sohbet_is` (üst-bar işlem çipi + HUD her ekranda "İnteraktif süreç/teknik
-analizi üretiliyor · süre"; global workflow'a DOKUNMAZ). `uret/durum` `gecen_sn` döner (180 sn üstü takılma uyarısı). **Durdur / Devam Ettir / İptal:** `POST /api/sohbet/uret/durdur {job, iptal?}` → `_sohbet_is_kes`: iş
+analizi üretiliyor · süre"; global workflow'a DOKUNMAZ). `uret/durum` `gecen_sn` döner (180 sn üstü takılma uyarısı). **EKRAN BAZLI İŞ (owner isteri — 'BRD'yi uygulamayla ekran ekran karşılaştır, her ekran için FE/BE task'):** sohbet
+ekranı büyütüldü, yeni ekran YOK. (a) **Girişi Test Et** (`POST /api/sohbet/giris-test` → `giris_testi`): miras canlı
+uygulamaya kayıtlı hesapla giriş denenir (1 CLI/Playwright çağrısı), sonuç `oturum.giris` + sistem mesajı + ekranda bant
+→ 'Wrong Password' gözlem/üretim ÖNCESİ yakalanır. (b) **🌐 Canlı gözlemle yanıtla** (mesaj `{gozlem:true}` → arka plan iş
+hedef `gozlem` → `sohbet_mesaj(gozlem=True)`: miras `live_app` ANA adresi + mesaj = hedef, `canli_uygulama_kapsami="surec"`,
+önbellek kapalı; mesajlar `gozlem` bayraklı, rozetli). (c) **Sıralı açık sorular**: sohbet ekranı bu oturumun
+süreç/teknik/açık-soru dosyalarındaki açık soruları TEK TEK sorar (Cevapla→sonraki / Varsayım / Atla → `POST
+/api/sorular/<id>`), sonunda "Cevapları analize uygula" (`/api/sorular/uygula`); `_cevaplanan_sorular_metni` bu oturumun
+cevaplarını sohbet turuna ve üretim girdisine KESİN bilgi olarak verir (tekrar sorulmaz). Sistem promptu: SIRAYLA sor,
+BRD referansta hazır (yükleme yok), ekran bazlı iş için 'Ekran Task'ları Üret'. (d) **Ekran Task'ları Üret**
+(`POST /api/sohbet/ekranlar` → `ekran_listesi_cikar`: sohbet+BRD'den `<ekranlar>` JSON → `oturum.ekranlar` + seçim
+tablosu) → seçilenler `POST /api/sohbet/ekran-gorevleri {secilen}` → `ekran_gorevleri`: SENTETİK görev `EKRAN-n`
+(summary "menü › ekran", description ister + BRD ref + cevaplar + sohbet) + `canli_hedef` → mevcut Task Analizi iş
+sistemine `mode:'fe-be-ayir'` adımları (`_jgIsBaslat` + `switchTab('jira-gorevler')`): her ekran için canlı gözlem +
+BE + FE analiz → Task Analizi'nde görünür → Jira'ya **'Yeni Task Aç'** (FE+BE, Blocks, Epic'e Relates). Altyapı:
+`jira_gorev_is_baslat` tüm adımlar görev dict'liyse Jira bağlantısı istemez + `canli_hedef` taşır; `_adim_isle`
+`canli_hedef` varsa `_canli_tabanli_baglam` ile `canli_baglam_override` geçer; sentetik `EKRAN-` kayıtları eğitim
+havuzuna/depoya GİRMEZ; `gorev_yeni_task_olustur` `_ID_DESENI`'ye uymayan kaynak anahtarını yok sayar; UI sentetik kayıtta
+'Onayla ve Jira'da Güncelle' kapalı. Test: `tests/test_sohbet_ekran.py` (AI enjekte, 0 token).
+**Durdur / Devam Ettir / İptal:** `POST /api/sohbet/uret/durdur {job, iptal?}` → `_sohbet_is_kes`: iş
 `durduruldu|iptal`, o an süren claude CLI `cli_proc_durdur(worker_tid)` ile process-grubuyla ÖLDÜRÜLÜR (token yakma anında
 kesilir; `DurdurulduError` hata sayılmaz). `POST /api/sohbet/uret/devam {job}` yalnız `durduruldu` işte → AYNI hedefle yeni iş
 (eski kayıt `devam_etti`); tamamlanan analiz aşamaları `_api_cagri` önbelleğinden gelir, yalnız kesilen aşama yeniden çalışır
@@ -384,6 +403,7 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   `test_soru_hedefli.py` (soru cevabı hedefli düzeltme yönlendirmesi — süreç/teknik kendine, bölüm bulunamazsa tam üretim; AI MOCK/0-token),
   `test_roller.py` (kullanıcı-bazlı ekran yetkisi — hash/PII'siz, etkin rol/görünürlük, owner sınırı, CRUD; offline/0-token),
   `test_yonetici_ozeti.py` (çift Yönetici Özeti regresyonu — model özeti birleştirme, tümünü çıkarma, few-shot temizliği; offline/0-token),
+  `test_sohbet_ekran.py` (İnteraktif Analiz ekran bazlı iş — gözlemli tur, cevaplanan sorular bağlamı, giriş testi, ekran envanteri/görevleri, iş başlatma + sentetik kayıt korumaları; AI enjekte/0-token),
   `test_sohbet_tazelik.py` (İnteraktif Analiz bayat çıktı tazeliği + ön-söz/iç-konuşma kırpma; offline/0-token),
   `test_kabul_kontrolu.py` (Kabul Kontrolü — liste normalize, karar mantığı [eksik→geri, bildirilmeyen→doğrulanamadı], canlı hedef yok, rapor, köprü komutu; AI enjekte/0-token),
   `test_uat_senkron.py` (UAT Durum Senkronu — plan kuralları, geçiş bulma, rapor modunda Jira'ya yazma YOK, otomatik taşıma + geçmiş, uçlar; Jira MOCK/0-token),

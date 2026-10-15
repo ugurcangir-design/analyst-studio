@@ -477,6 +477,30 @@ FİİLEN dener; eksik varsa iş geliştirmeye döner, tamsa analist test ekibine
   `_kontrol_islet` → rapor yorum. **Jira durumu HİÇBİR kanalda değişmez.** Maliyet: task başına 2 AI çağrısı
   (liste + canlı doğrulama; canlı doğrulama CLI/Playwright, `LIVE_APP_CLI_TIMEOUT`). Test: `tests/test_kabul_kontrolu.py`.
 
+## İnteraktif Analiz — Ekran Bazlı İş (sohbet → ekran başına FE/BE task)
+Owner isteri: "BRD ile uygulamaya gir, BRD'deki isterlere göre ekranları kontrol et, her ekran için BE+FE task aç; analist
+isteri adım adım oluştursun, agent soru sorsun, açık soruları sırayla sorsun." Sohbet ekranı büyütüldü (yeni ekran yok):
+1. **Girişi Test Et** — `giris_testi()`: `_canli_tabanli_baglam` (miras `live_app` ANA adresi + hedef) ile 1 CLI/Playwright
+   çağrısı; `<giris_sonuc>{ok,neden,ekran,menu}`; `oturum.giris` + sohbete sistem mesajı + ekranda durum bandı. URL yoksa AI
+   çağrılmaz. Amaç: "Wrong Password" gibi erişim sorununu dakikalarca süren gözlem/üretimden ÖNCE yakalamak.
+2. **🌐 Canlı gözlemle yanıtla** — mesaj `{gozlem:true}` → `_sohbet_is_baslat('gozlem')` (arka plan; çip/HUD "canlı gözlemli
+   yanıt") → `sohbet_mesaj(metin, gozlem=True)`: analist mesajı HEMEN yazılır (yeniden bağlanma), canlı görev bloğu + "sohbet
+   tonunda gözlem" talimatı, `_api_cagri(onbellek=False, canli_uygulama_kapsami='surec')`; yanıt `gozlem` bayraklı.
+3. **Sıralı açık sorular** — UI `_shSorulariYukle` (`/api/sorular`, bu oturumun `surec-analizi.md/teknik-analiz.md/
+   acik-sorular.md` açık soruları) → tek tek kart (Cevapla→sonraki · Varsayım · Atla → `POST /api/sorular/<id>`) → sonunda
+   "Cevapları analize uygula" (`/api/sorular/uygula`). `_cevaplanan_sorular_metni()` (bu oturum: `guncellendi_at` ≥ ilk mesaj)
+   sohbet turuna "CEVAPLANAN SORULAR" bloğu + üretim girdisine "Analistin kesin cevapları" olarak girer → tekrar sorulmaz.
+   Sistem promptu: aynı anda en fazla 1-2 soru (sırayla), BRD referansta hazır, hedef ekran bazlı iş.
+4. **Ekran Task'ları Üret** — `ekran_listesi_cikar()` (1 AI: sohbet + RAG/BRD → `<ekranlar>[{ad,menu,ister,brd_ref,not}]`,
+   ≤40) → `oturum.ekranlar` + seçim tablosu → `ekran_gorevleri(secilen)`: sentetik görev `EKRAN-n` (summary "menü › ekran"
+   — menü zaten ekran adıyla bitiyorsa tekrar eklenmez; description = ister + BRD ref + kesin cevaplar + sohbet bağlamı) +
+   `canli_hedef` → `mode:'fe-be-ayir'` adımları → UI `_jgGorevler[key]=gorev` + `_jgIsBaslat` + `switchTab('jira-gorevler')`.
+   `_adim_isle`: `canli_hedef` → `_canli_tabanli_baglam` → `canli_baglam_override` (live_app_gorev DEĞİL, miras ana adres +
+   ekran hedefi). Sonuç Task Analizi'nde ekran başına BE+FE entry; Jira'ya **Yeni Task Aç** (fe-be mode, Epic'e Relates).
+   Korumalar: `jira_gorev_is_baslat` tüm adımlar görev dict'li (description'lı) ise Jira bağlantısı istemez, ≤12 adım;
+   sentetik `EKRAN-` eğitim havuzu/depoya girmez; `gorev_yeni_task_olustur` geçersiz kaynak anahtarına bağ kurmaz; UI
+   sentetik kayıtta 'Onayla ve Jira'da Güncelle' kapalı (Jira'da task yok). Test: `tests/test_sohbet_ekran.py`.
+
 ## Jira Görevleri Özelliği (`skills/jira_gorevleri.py` + UI `page-jira-gorevler`)
 Doküman yüklemeden, **mevcut** Jira Epic/Story altındaki görevleri çekip triyaj eder.
 - **Çekme — İKİ AŞAMALI (keşif + taze okuma):**

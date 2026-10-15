@@ -15,11 +15,13 @@ import json
 import time
 from pathlib import Path
 
+from urllib.parse import urlparse
+
 from .base import (
-    _api_cagri, OUTPUT_DIR,
+    _api_cagri, _xml_ayir, _metin_sikistir, OUTPUT_DIR,
     referans_dosyalari_hazirla, _ref_bloklari_olustur,
-    _domain_kurallari_oku,
-    MAX_TOKENS_COMBINED,
+    _domain_kurallari_oku, canli_uygulama_baglami_hazirla, live_app_urls,
+    MAX_TOKENS_COMBINED, MAX_TOKENS_KISA,
 )
 
 _SOHBET_DIR = OUTPUT_DIR / "sohbet"
@@ -46,7 +48,20 @@ _SOHBET_SISTEM = (
     "gözlemlenebilir gerçek veri kazanır.\n"
     "- Yeterince netleştiğinde analiste 'Süreç Analizi Üret' (ve ardından 'Teknik Analiz Üret') "
     "butonlarıyla formal analizi üretebileceğini HATIRLAT.\n"
-    "- Türkçe yaz; teknik terimler İngilizce kalabilir.\n"
+    "- Türkçe yaz; teknik terimler İngilizce kalabilir.\n\n"
+    "ÇALIŞMA BİÇİMİ (analist adım adım ilerler — bunlara UY):\n"
+    "- SIRAYLA SOR: aynı anda EN FAZLA BİR (zorunluysa iki) netleştirici soru sor; analist cevaplayınca "
+    "bir sonrakine geç. Soru listesi dökme.\n"
+    "- BRD YÜKLENMEZ, REFERANSTA HAZIRDIR: 'BRD'deki X isteri' dendiğinde REFERANS BAĞLAM'daki BRD "
+    "parçalarını kullan ve atıf ver; bulamıyorsan 'BRD'de bu ekran/ister için metin bulamadım' de, uydurma.\n"
+    "- CANLI GÖZLEM: analist mesajı '🌐 Gözlemle' ile gönderdiyse sana CANLI UYGULAMA GÖREVİ verilir — "
+    "uygulamayı GERÇEKTEN gez, gördüğünü (ekran, kolon, buton var/yok, servis) sohbet tonunda yaz. Normal "
+    "turda uygulamayı açma. Giriş reddedilirse tekrar deneme; 'Girişi Test Et' ile hesabın düzeltilmesini iste.\n"
+    "- ANALİSTİN CEVAPLADIĞI AÇIK SORULAR sana 'CEVAPLANAN SORULAR' bloğunda gelir — bunları KESİN kabul et, "
+    "tekrar sorma.\n"
+    "- HEDEF ÇIKTI: iş EKRAN BAZLIDIR. Kapsam netleşince (hangi ekranlar, her ekranda ne) analiste "
+    "'Ekran Task'ları Üret' adımını öner: her ekran için ayrı FE+BE analiz üretilir ve Jira'ya ekran başına "
+    "FE/BE task açılır. 'Süreç/Teknik Analizi Üret' TEK doküman içindir — ekran bazlı işte onu değil bunu öner.\n"
 )
 
 
@@ -90,18 +105,63 @@ def _konusma_metni(oturum: dict, son_n: int | None = None) -> str:
     return "\n\n".join(satirlar)
 
 
+# ─── Canlı uygulama (miras live_app ana adresi + sohbetten hedef) ─────────────
+
+def _canli_tabanli_baglam(hedef_tarif: str) -> str | None:
+    """Süreç/Teknik ekranından MİRAS alınan canlı uygulama URL'inin ANA adresi (base) + verilen hedef
+    tarifiyle canlı gözlem görevi. URL yoksa None (gözlem yapılamaz, sessizce atlanır)."""
+    urls = live_app_urls()
+    if not urls:
+        return None
+    p = urlparse(urls[0])
+    if not (p.scheme and p.netloc):
+        return None
+    return canli_uygulama_baglami_hazirla(base_url_override=f"{p.scheme}://{p.netloc}",
+                                          hedef_tarif=(hedef_tarif or "").strip() or "Ana ekran")
+
+
+def _cevaplanan_sorular_metni() -> str:
+    """Analistin Sorular defterinde (bu oturumda) cevapladığı/varsayım girdiği sorular → sohbet ve üretim
+    bağlamına KESİN bilgi olarak girer (tekrar sorulmaz). Best-effort; hata → ''."""
+    try:
+        from .sorular import sorular_yukle
+        o = oturum_oku()
+        mesajlar = o.get("mesajlar") or []
+        esik = min((m.get("ts") or 0) for m in mesajlar) if mesajlar else (o.get("created") or 0)
+        satirlar = []
+        for q in (sorular_yukle().get("sorular") or []):
+            if q.get("durum") not in ("cevaplandi", "varsayim"):
+                continue
+            ts = q.get("guncellendi_at") or q.get("olusturuldu_at") or ""
+            try:
+                from datetime import datetime
+                if datetime.fromisoformat(ts).timestamp() < float(esik or 0) - 1:
+                    continue   # önceki oturumun cevabı
+            except Exception:
+                pass
+            cevap = q.get("cevap") or q.get("varsayim") or ""
+            if cevap:
+                satirlar.append(f"- {q.get('id')} ({q.get('kaynak_dosya', '')}): {q.get('soru') or q.get('baslik', '')} → "
+                                f"{'VARSAYIM: ' if q.get('durum') == 'varsayim' else ''}{cevap}")
+        return "\n".join(satirlar)
+    except Exception:
+        return ""
+
+
 # ─── Sohbet turu ─────────────────────────────────────────────────────────────
 
-def sohbet_mesaj(metin: str) -> dict:
+def sohbet_mesaj(metin: str, gozlem: bool = False) -> dict:
     """Analistin mesajını ekler, RAG'li yanıt üretir, ekler ve oturumu döndürür.
-    Canlı gözlem YAPILMAZ (sohbet hızlı kalsın); gözlem yalnız üretim adımlarında."""
+    gozlem=False: canlı gözlem YAPILMAZ (hızlı sohbet). gozlem=True ('🌐 Gözlemle'): miras canlı
+    uygulamada mesaja göre GERÇEK gözlem yapılır (dakikalar sürer — arka plan iş)."""
     metin = (metin or "").strip()
     if not metin:
         raise ValueError("Boş mesaj gönderilemez.")
     oturum = oturum_oku()
-    oturum["mesajlar"].append({"rol": "analist", "metin": metin, "ts": time.time()})
+    oturum["mesajlar"].append({"rol": "analist", "metin": metin, "ts": time.time(), **({"gozlem": True} if gozlem else {})})
     if not oturum.get("baslik"):
         oturum["baslik"] = metin[:60] + ("…" if len(metin) > 60 else "")
+    _oturum_yaz(oturum)   # gözlem turu uzun sürer → analist mesajı hemen görünsün (yeniden bağlanma)
 
     # RAG — sohbet metnini sorgu vererek en alakalı referans parçaları getir (otomatik alaka).
     ref_bloklari: list = []
@@ -121,16 +181,172 @@ def sohbet_mesaj(metin: str) -> dict:
         mesajlar.append({"role": "user", "content": blok})
         mesajlar.append({"role": "assistant", "content": [
             {"type": "text", "text": "Referans bağlamı aldım. İsterinizi dinliyorum."}]})
+    cevaplanan = _cevaplanan_sorular_metni()
+    if cevaplanan:
+        mesajlar.append({"role": "user", "content": [{"type": "text", "text":
+            "### CEVAPLANAN SORULAR (analistin Sorular defterindeki kesin cevapları — tekrar sorma)\n" + cevaplanan}]})
+        mesajlar.append({"role": "assistant", "content": [{"type": "text", "text": "Cevapları kesin bilgi olarak aldım."}]})
     for m in oturum["mesajlar"]:
         rol = "user" if m.get("rol") == "analist" else "assistant"
         mesajlar.append({"role": rol, "content": [{"type": "text", "text": m.get("metin", "")}]})
 
+    canli = _canli_tabanli_baglam(metin) if gozlem else None
+    if gozlem and canli:
+        mesajlar.append({"role": "user", "content": [{"type": "text", "text": canli},
+            {"type": "text", "text": (
+                "### 🌐 CANLI GÖZLEM TURU\nAnalistin SON mesajı için yukarıdaki canlı uygulama görevini GERÇEKTEN uygula "
+                "(gir, ilgili ekrana git, gör), sonra gözlemi KISA sohbet yanıtına çevir: ekran/kolon/buton/servis ne "
+                "gördüysen onu yaz; göremediğini yazma. Rapor biçimi değil, sohbet tonu; sonunda bir sonraki adımı öner.")}]})
+    elif gozlem:
+        mesajlar.append({"role": "user", "content": [{"type": "text", "text":
+            "(Analist canlı gözlem istedi ama canlı uygulama URL'i tanımlı değil — bunu belirt, Bağlam Filtresi'ne yönlendir.)"}]})
+
     sistem = _SOHBET_SISTEM + _domain_kurallari_oku()
-    yanit = _api_cagri(sistem, mesajlar, max_tokens=MAX_TOKENS_COMBINED, thinking=False)
+    yanit = _api_cagri(sistem, mesajlar, max_tokens=MAX_TOKENS_COMBINED, thinking=False,
+                       onbellek=not (gozlem and canli), canli_uygulama_kapsami=("surec" if (gozlem and canli) else None))
     yanit = (yanit or "").strip()
-    oturum["mesajlar"].append({"rol": "agent", "metin": yanit, "ts": time.time()})
+    oturum = oturum_oku()   # gözlem sürerken oturum değişmiş olabilir → taze oku
+    oturum["mesajlar"].append({"rol": "agent", "metin": yanit, "ts": time.time(), **({"gozlem": True} if gozlem else {})})
     _oturum_yaz(oturum)
     return oturum
+
+
+# ─── Giriş testi (canlı uygulama erişimi EN BAŞTA doğrulanır) ────────────────
+
+def giris_testi() -> dict:
+    """Miras canlı uygulamaya kayıtlı test hesabıyla giriş dener; sonucu oturuma yazar + sohbete mesaj ekler.
+    Dönen: {ok, neden, ekran, menu}. 'Wrong Password' gibi sorunlar gözlem/üretim öncesi yakalanır."""
+    canli = _canli_tabanli_baglam("GİRİŞ TESTİ — yalnız giriş yap ve açılan ilk ekranı/üst menüyü bildir; başka ekran gezme.")
+    if not canli:
+        sonuc = {"ok": False, "neden": "Canlı uygulama URL'i tanımlı değil (Süreç/Teknik ekranı → Bağlam Filtresi).", "ekran": "", "menu": []}
+    else:
+        sistem = ("Canlı uygulama ERİŞİM testçisisin. Tek görevin: ana adrese gidip kayıtlı hesapla giriş yapmak ve "
+                  "sonucu bildirmek. Gezme, analiz yapma, varsayım üretme.")
+        icerik = [{"type": "text", "text": canli}, {"type": "text", "text": (
+            "### GÖREV\n1) Ana adrese git. 2) Giriş formu varsa kayıtlı hesapla giriş yap (bir kez). 3) Sonucu bildir.\n"
+            "Çıktı YALNIZ şu blok:\n<giris_sonuc>{\"ok\": true, \"neden\": \"\", \"ekran\": \"giriş sonrası sayfa başlığı/route\", "
+            "\"menu\": [\"üst menü öğeleri\"]}</giris_sonuc>\nGiriş reddedildiyse ok=false ve neden'e ekrandaki hata metnini AYNEN yaz. "
+            "Şifreyi yazma.")}]
+        try:
+            yanit = _api_cagri(sistem, [{"role": "user", "content": icerik}], max_tokens=MAX_TOKENS_KISA, thinking=False,
+                               onbellek=False, canli_uygulama_kapsami="surec")
+            ham = _xml_ayir(_metin_sikistir(yanit or ""), "giris_sonuc")
+            try:
+                d = json.loads(ham)
+            except Exception:
+                a, b = ham.find("{"), ham.rfind("}")
+                d = json.loads(ham[a:b + 1]) if a != -1 and b > a else {}
+            sonuc = {"ok": bool(d.get("ok")), "neden": str(d.get("neden") or "").strip(),
+                     "ekran": str(d.get("ekran") or "").strip(),
+                     "menu": [str(x) for x in (d.get("menu") or []) if str(x).strip()][:30]}
+            if not d:
+                sonuc["neden"] = "Giriş sonucu okunamadı (tarayıcı aracı çalışmamış olabilir)."
+        except Exception as e:
+            sonuc = {"ok": False, "neden": f"Giriş testi çalıştırılamadı: {str(e)[:200]}", "ekran": "", "menu": []}
+    sonuc["ts"] = time.time()
+    oturum = oturum_oku()
+    oturum["giris"] = sonuc
+    if sonuc["ok"]:
+        metin = (f"🔐 **Giriş testi başarılı.** Açılan ekran: `{sonuc['ekran'] or '—'}`."
+                 + (f" Üst menü: {', '.join(sonuc['menu'][:12])}." if sonuc["menu"] else "")
+                 + " Canlı gözlem ve ekran bazlı analiz için erişim hazır.")
+    else:
+        metin = (f"🔐 **Giriş testi BAŞARISIZ** — {sonuc['neden'] or 'neden belirlenemedi'}. Canlı gözlem bu hesapla "
+                 "yapılamaz: Süreç/Teknik Analiz → Bağlam Filtresi'nde uygulama giriş bilgilerini düzeltip tekrar test edin.")
+    oturum["mesajlar"].append({"rol": "agent", "metin": metin, "ts": time.time(), "sistem": True})
+    _oturum_yaz(oturum)
+    return sonuc
+
+
+# ─── Ekran bazlı iş: ekran envanteri + ekran başına FE/BE görev girdisi ──────
+
+_EKRAN_SISTEM = (
+    "Kıdemli iş analistisin. Verilen sohbetten (analist ↔ agent) ve REFERANS BAĞLAM'daki BRD/Confluence "
+    "parçalarından, yapılacak işin EKRAN ENVANTERİNİ çıkar. Yalnız sohbette KAPSAMA ALINAN ekranlar (analistin "
+    "son kararları esas: ör. 'önce Sport Basic Data altındaki ekranlar'). Her ekran için o ekranda yapılacak "
+    "değişikliği 1-3 cümleyle, BRD atfıyla yaz. Uydurma ekran ekleme; BRD/sohbette geçmeyen ekranı alma.\n\n"
+    "Çıktı YALNIZ şu blok:\n<ekranlar>[{\"ad\": \"Ekran adı\", \"menu\": \"Ana menü › alt menü\", "
+    "\"ister\": \"bu ekranda yapılacak değişiklik\", \"brd_ref\": \"BRD §/sayfa veya Confluence sayfası\", "
+    "\"not\": \"sekme/özel durum (varsa)\"}]</ekranlar>"
+)
+
+
+def ekran_listesi_cikar() -> list[dict]:
+    """Sohbet + BRD referanslarından ekran envanteri (1 AI çağrısı). oturum['ekranlar']'a yazar."""
+    oturum = oturum_oku()
+    konusma = _konusma_metni(oturum)
+    if not konusma.strip():
+        raise ValueError("Önce sohbette kapsamı netleştirin.")
+    ref_bloklari: list = []
+    try:
+        ref_dosyalar = referans_dosyalari_hazirla()
+        if ref_dosyalar:
+            ref_bloklari, _ = _ref_bloklari_olustur(ref_dosyalar, sorgu_metni=_konusma_metni(oturum, son_n=8))
+    except Exception as e:
+        print(f"  ⚠ Ekran envanteri RAG atlandı: {e}")
+    icerik = list(ref_bloklari) + [
+        {"type": "text", "text": "### SOHBET\n\n" + konusma[-12000:]},
+        {"type": "text", "text": _cevaplanan_sorular_metni() and ("### CEVAPLANAN SORULAR\n" + _cevaplanan_sorular_metni()) or "(cevaplanmış soru yok)"},
+        {"type": "text", "text": "Ekran envanterini çıkar."},
+    ]
+    yanit = _api_cagri(_EKRAN_SISTEM + _domain_kurallari_oku(), [{"role": "user", "content": icerik}],
+                       max_tokens=MAX_TOKENS_KISA, thinking=False)
+    ham = _xml_ayir(_metin_sikistir(yanit or ""), "ekranlar")
+    try:
+        liste = json.loads(ham)
+    except Exception:
+        a, b = ham.find("["), ham.rfind("]")
+        liste = json.loads(ham[a:b + 1]) if a != -1 and b > a else []
+    ekranlar = []
+    for e in liste if isinstance(liste, list) else []:
+        if not isinstance(e, dict) or not str(e.get("ad") or "").strip():
+            continue
+        ekranlar.append({"ad": str(e.get("ad")).strip(), "menu": str(e.get("menu") or "").strip(),
+                         "ister": str(e.get("ister") or "").strip(), "brd_ref": str(e.get("brd_ref") or "").strip(),
+                         "not": str(e.get("not") or "").strip()})
+        if len(ekranlar) >= 40:
+            break
+    oturum = oturum_oku()
+    oturum["ekranlar"] = ekranlar
+    oturum["mesajlar"].append({"rol": "agent", "sistem": True, "ts": time.time(), "metin":
+        (f"🧩 **Ekran envanteri çıkarıldı: {len(ekranlar)} ekran.** Aşağıdan seçip her ekran için FE+BE analiz "
+         "üretebilirsiniz (Task Analizi ekranında görünür; oradan 'Yeni Task Aç' ile Jira'ya ekran başına FE/BE task açılır).")
+        if ekranlar else "🧩 Ekran envanteri çıkarılamadı — sohbette hangi ekranların kapsamda olduğunu netleştirin."})
+    _oturum_yaz(oturum)
+    return ekranlar
+
+
+def ekran_gorevleri(secilen: list[int]) -> list[dict]:
+    """Seçilen ekranlar için Task Analizi iş adımları (mode fe-be-ayir, sentetik görev EKRAN-n + canlı hedef).
+    Jira'da task YOK — analiz üretilir, Jira'ya açma Task Analizi 'Yeni Task Aç' ile yapılır."""
+    oturum = oturum_oku()
+    ekranlar = oturum.get("ekranlar") or []
+    if not ekranlar:
+        raise ValueError("Önce ekran envanteri çıkarın.")
+    konusma = _konusma_metni(oturum)[-6000:]
+    cevaplar = _cevaplanan_sorular_metni()
+    adimlar = []
+    for i in secilen:
+        if not (0 <= int(i) < len(ekranlar)):
+            continue
+        e = ekranlar[int(i)]
+        key = f"EKRAN-{int(i) + 1}"
+        menu = (e.get("menu") or "").strip()
+        # Model 'menu' alanına ekran adını çoğu zaman zaten ekler ("Sport Basic Data › Sports") → tekrar ekleme
+        baslik = menu if (menu and menu.lower().endswith(e["ad"].lower())) else (f"{menu} › {e['ad']}" if menu else e["ad"])
+        aciklama = (f"## Ekran: {e['ad']}\nMenü: {e.get('menu') or '—'}\n\n## İster (bu ekranda yapılacak)\n{e.get('ister') or '—'}\n"
+                    + (f"\nBRD referansı: {e['brd_ref']}\n" if e.get("brd_ref") else "")
+                    + (f"Not: {e['not']}\n" if e.get("not") else "")
+                    + (f"\n## Analistin kesin cevapları\n{cevaplar}\n" if cevaplar else "")
+                    + f"\n## Sohbetten kararlar (bağlam)\n{konusma}")
+        adimlar.append({"key": key, "mode": "fe-be-ayir",
+                        "gorev": {"key": key, "summary": baslik, "description": aciklama, "issuetype": "Görev",
+                                  "status": "", "ekran": e["ad"]},
+                        "canli_hedef": f"{baslik} ekranı — DataTable kolonları, mevcut butonlar/aksiyonlar, tetiklenen "
+                                       f"servis çağrıları; istenen değişiklik: {e.get('ister') or ''}"})
+    if not adimlar:
+        raise ValueError("Geçerli ekran seçilmedi.")
+    return adimlar
 
 
 # ─── Kilometre taşı üretim — MEVCUT motorları sohbet girdisiyle çalıştır ──────
@@ -139,11 +355,13 @@ def _uretim_girdisi(oturum: dict) -> list:
     konusma = _konusma_metni(oturum)
     if not konusma.strip():
         raise ValueError("Önce sohbette isterini yaz (analiz üretilecek içerik yok).")
+    cevaplar = _cevaplanan_sorular_metni()
     return [{"type": "text", "text": (
         "### İnteraktif Analiz Oturumu (analist ↔ agent sohbeti)\n\n"
         "Aşağıda bir isteri/süreç üzerine yapılan sohbet var. Bu sohbette OLGUNLAŞAN "
         "gereksinimi analiz konusu kabul et; analistin son kararlarını/cevaplarını esas al, "
-        "açık kalan noktaları 'Açık Sorular'a taşı.\n\n" + konusma)}]
+        "açık kalan noktaları 'Açık Sorular'a taşı.\n\n" + konusma
+        + (("\n\n### Analistin kesin cevapları (Sorular defteri — açık soru olarak TEKRAR SORMA)\n" + cevaplar) if cevaplar else ""))}]
 
 
 def surec_uret(oturum: dict | None = None) -> Path:
