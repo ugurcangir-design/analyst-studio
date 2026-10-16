@@ -61,7 +61,12 @@ Bir Jira task'ının **yorum** satırına yaz:
 2. **Agent tarar:** ~60 sn'de bir kendi agent'ın Jira'yı tarar (webhook yok, polling). Komutu bulur.
 3. **Analiz üretir:** CLI + (varsa) canlı uygulama gözlemi + task anahtar kelimeleriyle RAG. Birkaç dakika sürebilir.
 4. **Gövdeye yazar:** sonuç task **açıklamasına** yazılır — `## 📌 Orijinal Talep` (senin talebin korunur) + `## 🤖 Teknik Analiz`.
+   Gövdeye yalnız gerçek analiz gider: Yönetici Özeti, `[K: …]` kanıt etiketleri, kaynak alıntıları ve gerekçe cümleleri
+   otomatik temizlenir, bölüm numaraları ardışık yapılır (elle düzeltme gerekmez).
 5. **Açık sorular:** ayrı bir **yorum** olarak listelenir (Q-T-001…), her biri önem + beklenen yanıt ile.
+   Agent her soruyu önce **kendisi araştırır** (Swagger/Confluence/Jira referansları, bağlıysa kod, gerekirse canlı uygulama):
+   yorumda `Agent durumu: cevaplandı / kısmen / karar gerekli` + `Agent cevabı` + `Agent kanıtı` satırları görürsün —
+   cevaplananları onaylaman yeter, yalnız "karar gerekli" olanlar senin kararını bekler.
 6. **Cevapla:** `/analyst_agent cevap Q-T-001: … Q-T-002: …` → analiz güncellenir, cevaplanan sorular düşer.
 7. **İlişkili task (opsiyonel):** `/analyst_agent ilişkili-aç` → öneri taslağı → `/analyst_agent onayla` → gerçek task açılır + bağlanır.
 8. **Bildirim:** analiz bitince kendi bilgisayarında masaüstü bildirimi alırsın (aşağı bak).

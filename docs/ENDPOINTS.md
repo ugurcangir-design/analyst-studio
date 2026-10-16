@@ -53,7 +53,8 @@ GET  /api/live-app/giris-durum     ?kapsam=gorev|surec → {url, var, giris{ok,n
 POST /api/live-app/giris-test      {kapsam} → arka plan giriş denemesi (1 CLI/Playwright) → {job}; URL yoksa 400
 GET  /api/live-app/giris-test/durum ?job= → {durum:calisiyor|bitti|hata, sonuc{ok,neden,ekran,menu,url}, gecen_sn}
                                    (Task Analizi analiz öncesi KAPI: giriş başarısızsa analiz başlamaz; hedef yoksa gözlemsiz başlar)
-GET  /api/live-app/status          Canlı uygulama hazırlığı {hazir, npx, profil, cli_modu, claude_var} (yalnız CLI yolunda çalışır)
+GET  /api/live-app/status          Canlı uygulama hazırlığı {hazir, npx, profil, cli_modu, claude_var, slotlar{toplam,dolu[],bos}}
+                                   (yalnız CLI yolunda çalışır; slotlar = paralel gözlem profil havuzu, LIVE_APP_PARALEL)
 GET  /api/outputs              Mevcut çıktıları listele
 GET  /api/output/<ad>          İçerik oku
 POST /api/output/delete        Çıktıyı sil
