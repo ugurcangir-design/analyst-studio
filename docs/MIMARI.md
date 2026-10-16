@@ -894,6 +894,28 @@ gözlem + token yakıyordu); hedef yoksa "canlı gözlem yapılmadan analiz yap�
   sonuç imzalı dosyaya da yazılır; iki ekran aynı doğrulamayı paylaşır.
 - Test: `tests/test_canli_giris.py` + `smoke_test` (4 uç kontrolü).
 
+### Profil Havuzu — paralel canlı gözlem (`base._slot_al/_slot_birak`, 2026-10-16)
+**Sorun:** tek Chrome profili (`.live-app-profile`) → ikinci eşzamanlı gözlem "Browser is already in use" ile düşüyordu
+(Task Analizi + İnteraktif Analiz çakışması; farklı analistlerin Kabul Kontrolü + Süreç analizi de aynı). Eski kod analiz
+öncesi ana profili kapatıyordu (`live_app_kilidi_temizle`) — bu da süren diğer gözlemi öldürüyordu.
+**Çözüm:**
+- `LIVE_APP_PROFILE_HAVUZ = .live-app-profiles/`; slot `slot-N` (N ≤ `LIVE_APP_PARALEL`, vars. 6, en çok 16).
+- `_slot_al(bekle_sn)`: `slot-N.lock` dosyasını `O_CREAT|O_EXCL` ile oluşturur, içine pid yazar (süreçler arası güvenli:
+  run.py alt-süreci ↔ Flask thread'leri). Kilit varsa: sahibi canlı başka süreç → atla · sahibi bu süreçte başka thread
+  (`_SLOT_SAHIPLI`) → atla · ölü pid → bayat, devral. Slot alınınca `_profil_sureclerini_kapat(slot)` (yetim headless;
+  pgrep deseni `--user-data-dir=<dir>(\s|$)` TAM eşleşme) + `_slot_oturum_kopyala(slot)`. Havuz doluysa 2 sn'de bir
+  yeniden dener, `LIVE_APP_SLOT_BEKLE` (300 sn) sonunda None → `_live_app_cli_argumanlari` net RuntimeError.
+- `_slot_oturum_kopyala`: ana profilin `Default/Cookies(-journal)`, `Network/Cookies`, `Login Data`, `Preferences` +
+  `Local Storage`, `Session Storage`, `IndexedDB` dizinleri slota kopyalanır; `.oturum-damga` (ana mtime) ile yalnız
+  ana profil yenilenince (analist "Tarayıcıda Giriş Yap" ile giriş yapınca) tekrar kopyalanır. macOS'ta Chrome çerez
+  şifreleme anahtarı Keychain'de kurulum-başına → profiller arası kopya çözülür.
+- `live_app_mcp_config_yaz(profil_dir, config_yol)` → `.live-app-profiles/mcp.slot-N.json`; `_live_app_cli_argumanlari`
+  ana profili ARTIK KAPATMAZ (yalnız `/api/live-app/login` yolu `live_app_kilidi_temizle` çağırır).
+- `_api_cagri_cli`: `_cli_calistir` try/finally → `_slot_birak()` her durumda (hata/timeout/Durdur); araç-çağırmama
+  tekrarı (`_tekrar=True`) yeni slot alır. `slot_durumu()` → `/api/live-app/status.slotlar {toplam, dolu[], bos}`.
+- Kanıt: iki eşzamanlı headless gözlem (example.com) ayrı slotlarda çakışmadan tamamlandı.
+Test: `tests/test_live_app_slot.py`.
+
 ## Bilinen Kısıtlamalar
 - CLI modu görsel (PNG/JPG) analiz EDEMEZ (text-only); görsel BRD için API modu gerekir.
 - `markdown_to_adf` nested list'leri düzleştirir.

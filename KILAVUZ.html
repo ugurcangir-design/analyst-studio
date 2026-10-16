@@ -1711,7 +1711,9 @@ pip install -r requirements.txt   # gerekirse</code></pre>
         <td>Önce <strong>İnteraktif Analiz → Girişi Test Et</strong>: "Wrong Password / Bad credentials" dönüyorsa Bağlam Filtresi'ndeki
         test hesabı yanlıştır — gözlem login duvarında kalır. Rozet tooltip'i "model hiç tarayıcı aracı çağırmadı" diyorsa agent zaten
         bir kez daha denemiştir; analizi tekrar çalıştırın. "Browser is already in use" benzeri hata: açık kalan "Tarayıcıda Giriş Yap"
-        penceresini kapatın (yeni sürüm bunu kendisi temizler). Teşhis için owner: <code>~/Library/Caches/claude-cli-nodejs/…/mcp-logs-playwright/</code>.</td>
+        penceresini kapatın (yeni sürüm bunu kendisi temizler). Aynı anda birden çok gözlem (Task Analizi + İnteraktif + Kabul Kontrolü,
+        farklı analistler dahil) artık <strong>ayrı tarayıcı profillerinde</strong> çalışır (profil havuzu, varsayılan 6); "Tarayıcıda Giriş Yap"
+        ile yaptığınız giriş bu profillere otomatik taşınır. Teşhis için owner: <code>~/Library/Caches/claude-cli-nodejs/…/mcp-logs-playwright/</code>.</td>
       </tr>
       <tr>
         <td>Kurulumda "swiftc bulunamadı" / masaüstü ikonu oluşmadı</td>

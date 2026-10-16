@@ -102,6 +102,12 @@ CONTEXT_FILTER_PATH = REF_DIR / "context_filter.json"
 # yapar, sonraki headless analiz çağrıları aynı oturumu kullanır. gitignore'da.
 LIVE_APP_PROFILE_DIR = BASE_DIR / ".live-app-profile"
 LIVE_APP_MCP_CONFIG = BASE_DIR / ".mcp.live-app.json"
+# Paralel canlı gözlem için PROFİL HAVUZU (owner isteri 2026-10-16: Task Analizi + İnteraktif Analiz + Kabul
+# Kontrolü + Süreç analizi AYNI ANDA çalışabilsin). Chrome aynı --user-data-dir'i ikinci kez açamaz ("Browser is
+# already in use") → her canlı çağrı kendine bir slot kilitler (`.live-app-profiles/slot-N`), ana profilin
+# (`.live-app-profile`, "Tarayıcıda Giriş Yap" penceresi) çerez + localStorage'ı slota kopyalanır (oturum taşınır),
+# çağrı bitince slot serbest kalır. Kilit DOSYA tabanlı (pid) → run.py alt-süreci ile Flask thread'leri de paylaşır.
+LIVE_APP_PROFILE_HAVUZ = BASE_DIR / ".live-app-profiles"
 
 # claude -p'ye açıkça izin verilen tarayıcı araçları. Listede OLMAYAN araç
 # headless modda REDDEDİLİR (permission_denials). browser_evaluate (keyfi JS)
@@ -3313,7 +3319,7 @@ def live_app_kilidi_temizle() -> None:
     # penceresi ya da yetim headless) kalmış olabilir → süreç listesinden bul, kapat. Chrome aynı
     # --user-data-dir'i ikinci kez açamaz ("Browser is already in use") → gözlem baştan düşer.
     try:
-        r = subprocess.run(["pgrep", "-f", f"--user-data-dir={LIVE_APP_PROFILE_DIR}"],
+        r = subprocess.run(["pgrep", "-f", f"--user-data-dir={re.escape(str(LIVE_APP_PROFILE_DIR))}(\\s|$)"],
                            capture_output=True, text=True, timeout=5)
         pids = [int(x) for x in (r.stdout or "").split() if x.isdigit()]
         for p_ in pids:
@@ -3344,14 +3350,17 @@ def live_app_kilidi_temizle() -> None:
                 pass
 
 
-def live_app_mcp_config_yaz() -> Path | None:
+def live_app_mcp_config_yaz(profil_dir: Path | None = None, config_yol: Path | None = None) -> Path | None:
     """Playwright MCP config'ini MUTLAK yollarla üretir (headless + kalıcı profil).
-    npx yoksa None döner → canlı uygulama özelliği sessizce devre dışı kalır."""
+    npx yoksa None döner → canlı uygulama özelliği sessizce devre dışı kalır.
+    `profil_dir`/`config_yol` verilirse (profil havuzu slotu) o profil ve o config dosyası kullanılır."""
     npx = _npx_yolu_bul()
     if not npx:
         logger.warning("npx bulunamadı — canlı uygulama (Chrome MCP) devre dışı.")
         return None
-    LIVE_APP_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+    profil = profil_dir or LIVE_APP_PROFILE_DIR
+    cfg_yol = config_yol or LIVE_APP_MCP_CONFIG
+    profil.mkdir(parents=True, exist_ok=True)
     cfg = {
         "mcpServers": {
             "playwright": {
@@ -3363,13 +3372,200 @@ def live_app_mcp_config_yaz() -> Path | None:
                     "-y", "@playwright/mcp@0.0.80",
                     "--headless",
                     "--browser", "chrome",
-                    "--user-data-dir", str(LIVE_APP_PROFILE_DIR),
+                    "--user-data-dir", str(profil),
                 ],
             }
         }
     }
-    LIVE_APP_MCP_CONFIG.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-    return LIVE_APP_MCP_CONFIG
+    cfg_yol.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+    return cfg_yol
+
+
+# ─── Profil havuzu (paralel canlı gözlem) ────────────────────────────────────
+_SLOT_TL = threading.local()          # bu thread'in tuttuğu slot (release için)
+_SLOT_LOCK = threading.Lock()
+_SLOT_SAHIPLI: set[int] = set()       # bu süreçte thread'lerce tutulan slotlar (kilit dosyasındaki pid aynı olduğundan)
+_SLOT_OTURUM_DOSYALARI = ("Default/Cookies", "Default/Cookies-journal", "Default/Network/Cookies",
+                          "Default/Network/Cookies-journal", "Default/Login Data", "Default/Preferences")
+_SLOT_OTURUM_DIZINLERI = ("Default/Local Storage", "Default/Session Storage", "Default/IndexedDB")
+
+
+def _slot_sayisi() -> int:
+    try:
+        return max(1, min(16, int(os.getenv("LIVE_APP_PARALEL", "6"))))
+    except (TypeError, ValueError):
+        return 6
+
+
+def _pid_canli(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def _profil_sureclerini_kapat(profil: Path) -> int:
+    """Verilen --user-data-dir'i (TAM eşleşme — `.live-app-profile` deseni `.live-app-profiles/…`'i yakalamasın)
+    kullanan Chrome süreçlerini kapatır; Singleton* kilit dosyalarını siler. Dönen: kapatılan süreç sayısı."""
+    pids: list[int] = []
+    try:
+        r = subprocess.run(["pgrep", "-f", f"--user-data-dir={re.escape(str(profil))}(\\s|$)"],
+                           capture_output=True, text=True, timeout=5)
+        pids = [int(x) for x in (r.stdout or "").split() if x.isdigit()]
+    except Exception:
+        pids = []
+    for p_ in pids:
+        try:
+            os.kill(p_, signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            pass
+    if pids:
+        for _ in range(12):
+            time.sleep(0.25)
+            if not any(_pid_canli(p_) for p_ in pids):
+                break
+        for p_ in pids:
+            if _pid_canli(p_):
+                try:
+                    os.kill(p_, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    pass
+    for ad in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+        q = profil / ad
+        if q.is_symlink() or q.exists():
+            try:
+                q.unlink()
+            except OSError:
+                pass
+    return len(pids)
+
+
+def _slot_oturum_kopyala(slot_dir: Path) -> None:
+    """Ana profilin (başlı 'Tarayıcıda Giriş Yap' penceresi) çerez/localStorage/IndexedDB'sini slota kopyalar →
+    analistin elle yaptığı giriş slotlarda da geçerli. Yalnız ana profil daha YENİ ise (mtime) kopyalanır; best-effort.
+    (macOS'ta Chrome çerez şifreleme anahtarı Keychain'de kurulum-başına → profiller arası kopya çözülebilir.)"""
+    kaynak = LIVE_APP_PROFILE_DIR
+    if not (kaynak / "Default").exists():
+        return
+    damga = slot_dir / ".oturum-damga"
+    try:
+        kaynak_mtime = max((kaynak / rel).stat().st_mtime for rel in _SLOT_OTURUM_DOSYALARI if (kaynak / rel).exists())
+    except ValueError:
+        return
+    try:
+        if damga.exists() and float(damga.read_text() or 0) >= kaynak_mtime:
+            return
+    except Exception:
+        pass
+    import shutil
+    (slot_dir / "Default").mkdir(parents=True, exist_ok=True)
+    (slot_dir / "Default" / "Network").mkdir(parents=True, exist_ok=True)
+    for rel in _SLOT_OTURUM_DOSYALARI:
+        src = kaynak / rel
+        if src.exists():
+            try:
+                shutil.copy2(src, slot_dir / rel)
+            except Exception:
+                pass
+    for rel in _SLOT_OTURUM_DIZINLERI:
+        src = kaynak / rel
+        if src.is_dir():
+            try:
+                hedef = slot_dir / rel
+                if hedef.exists():
+                    shutil.rmtree(hedef, ignore_errors=True)
+                shutil.copytree(src, hedef, dirs_exist_ok=True)
+            except Exception:
+                pass
+    try:
+        damga.write_text(str(kaynak_mtime), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _slot_al(bekle_sn: int | None = None) -> tuple[int, Path] | None:
+    """Boş bir profil slotunu KİLİTLER (pid'li lock dosyası, O_EXCL — süreçler arası güvenli). Ölü pid'li kilit
+    bayattır → o slotu kullanan yetim Chrome kapatılıp slot devralınır. Hepsi doluysa `bekle_sn` kadar bekler
+    (LIVE_APP_SLOT_BEKLE, vars. 300). Dönen: (slot_no, profil_dir) ya da None (süre doldu)."""
+    if bekle_sn is None:
+        try:
+            bekle_sn = int(os.getenv("LIVE_APP_SLOT_BEKLE", "300"))
+        except (TypeError, ValueError):
+            bekle_sn = 300
+    LIVE_APP_PROFILE_HAVUZ.mkdir(parents=True, exist_ok=True)
+    son = time.time() + max(0, bekle_sn)
+    uyari_verildi = False
+    while True:
+        for n in range(1, _slot_sayisi() + 1):
+            slot_dir = LIVE_APP_PROFILE_HAVUZ / f"slot-{n}"
+            kilit = LIVE_APP_PROFILE_HAVUZ / f"slot-{n}.lock"
+            with _SLOT_LOCK:
+                try:
+                    fd = os.open(kilit, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                except FileExistsError:
+                    # bayat mı? (sahibi ölmüş)
+                    try:
+                        sahip = int((kilit.read_text(encoding="utf-8") or "0").strip() or 0)
+                    except Exception:
+                        sahip = 0
+                    if sahip and _pid_canli(sahip) and sahip != os.getpid():
+                        continue                      # başka süreç (run.py alt-süreci) tutuyor
+                    if sahip == os.getpid() and n in _SLOT_SAHIPLI:
+                        continue                      # aynı süreçte başka thread tutuyor
+                    try:
+                        kilit.unlink()
+                        fd = os.open(kilit, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                    except Exception:
+                        continue
+                    logger.info("Canlı profil slot-%d bayat kilit devralındı (sahip pid %s).", n, sahip)
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    f.write(str(os.getpid()))
+                _SLOT_SAHIPLI.add(n)
+            slot_dir.mkdir(parents=True, exist_ok=True)
+            _profil_sureclerini_kapat(slot_dir)     # yetim headless Chrome kaldıysa
+            _slot_oturum_kopyala(slot_dir)
+            _SLOT_TL.slot = n
+            return n, slot_dir
+        if time.time() >= son:
+            return None
+        if not uyari_verildi:
+            print(f"  ⏳ Tüm canlı gözlem profilleri ({_slot_sayisi()}) meşgul — boşalması bekleniyor…")
+            uyari_verildi = True
+        time.sleep(2)
+
+
+def _slot_birak(n: int | None = None) -> None:
+    n = n if n is not None else getattr(_SLOT_TL, "slot", None)
+    if not n:
+        return
+    kilit = LIVE_APP_PROFILE_HAVUZ / f"slot-{n}.lock"
+    with _SLOT_LOCK:
+        _SLOT_SAHIPLI.discard(n)
+        try:
+            if kilit.exists() and (kilit.read_text(encoding="utf-8").strip() or "0") == str(os.getpid()):
+                kilit.unlink()
+        except Exception:
+            pass
+    if getattr(_SLOT_TL, "slot", None) == n:
+        _SLOT_TL.slot = None
+
+
+def slot_durumu() -> dict:
+    """UI/sağlık: {toplam, dolu:[n…], bos}."""
+    dolu = []
+    for n in range(1, _slot_sayisi() + 1):
+        kilit = LIVE_APP_PROFILE_HAVUZ / f"slot-{n}.lock"
+        try:
+            if kilit.exists():
+                sahip = int((kilit.read_text(encoding="utf-8") or "0").strip() or 0)
+                if sahip and _pid_canli(sahip):
+                    dolu.append(n)
+        except Exception:
+            continue
+    return {"toplam": _slot_sayisi(), "dolu": dolu, "bos": _slot_sayisi() - len(dolu)}
 
 
 def _live_app_cli_argumanlari(kapsam: str | None = None) -> list[str]:
@@ -3397,10 +3593,18 @@ def _live_app_cli_argumanlari(kapsam: str | None = None) -> list[str]:
         return []                       # bu çağrıda browsing talimatı yok → hiç açma
     if not (gorev_live_app_urls() if kapsam == "gorev" else live_app_urls()):
         return []                       # canlı uygulama kapalı → normal analiz
-    live_app_kilidi_temizle()           # kapatılmamış giriş penceresi headless başlatmayı engellemesin
-    cfg = live_app_mcp_config_yaz()
+    # Profil HAVUZU: ana profil ("Tarayıcıda Giriş Yap") kapatılmaz; bu çağrı kendi slotunu kilitler → paralel akışlar
+    # (Task Analizi · İnteraktif · Kabul Kontrolü · Süreç) çakışmaz. Slot yoksa (süre doldu) net hata — sessiz düşüş yok.
+    s = _slot_al()
+    if not s:
+        raise RuntimeError("Canlı gözlem için boş tarayıcı profili yok — tüm profiller başka analizlerce meşgul. "
+                           "Biraz sonra tekrar deneyin ya da .env LIVE_APP_PARALEL değerini artırın.")
+    n, profil = s
+    cfg = live_app_mcp_config_yaz(profil_dir=profil, config_yol=LIVE_APP_PROFILE_HAVUZ / f"mcp.slot-{n}.json")
     if not cfg:
+        _slot_birak(n)
         return []
+    print(f"  🧩 Canlı gözlem profili: slot-{n}")
     return ["--mcp-config", str(cfg), "--strict-mcp-config",
             "--allowedTools", *LIVE_APP_ALLOWED_TOOLS]
 
@@ -3914,10 +4118,14 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
     # --model DAİMA açıkça geçilir → Claude Code'un varsayılan (ör. Fable) modeli KULLANILMAZ.
     _aktif_model = aktif_cli_model()   # canlı okuma → arayüzden değişince restart gerekmez
     _model_args = ["--model", _aktif_model] if _aktif_model else []
-    proc = _cli_calistir(
-        [claude_yolu, "-p", "--output-format", "json", *_model_args, *_live_args, *_analiz_mcp_args],
-        tam_prompt, cli_env, timeout=_cli_timeout,
-    )
+    try:
+        proc = _cli_calistir(
+            [claude_yolu, "-p", "--output-format", "json", *_model_args, *_live_args, *_analiz_mcp_args],
+            tam_prompt, cli_env, timeout=_cli_timeout,
+        )
+    finally:
+        if _live_args:
+            _slot_birak()      # profil slotu serbest (tekrar denemesi yeni slot alır)
     if proc.returncode != 0:
         # stdout JSON ise içinden okunabilir mesaj çıkar (429 limit, billing vb.)
         ham_err = proc.stdout.strip() or proc.stderr.strip() or "Bilinmeyen hata"

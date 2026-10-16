@@ -6,6 +6,11 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## Profil Havuzu — paralel canlı gözlem (Task + İnteraktif + Kabul + Süreç aynı anda) ✅
+- "Browser is already in use" çakışması çözüldü: her canlı çağrı `.live-app-profiles/slot-N` kilitler (pid'li lock,
+  süreçler arası), ana profilin oturumu (çerez/localStorage) slota kopyalanır, finally ile serbest bırakılır; ana profil
+  artık analiz öncesi kapatılmaz. `LIVE_APP_PARALEL` (6) · `LIVE_APP_SLOT_BEKLE` (300). Test `tests/test_live_app_slot.py`.
+
 ## Canlı Uygulama Giriş Kapısı — giriş doğrulanmadan analiz başlamaz ✅
 - Owner (Task Analizi): canlı hedef varken giriş başarısızsa analiz BAŞLAMAZ (⛔ neden + tekrar dene); hedef yoksa
   "canlı gözlem yapılmadan üretilecek" bilgisiyle başlar. `skills/canli_giris.py` (imzalı önbellek, `GIRIS_TEST_GECERLILIK`),
