@@ -1006,6 +1006,15 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
         acik = _gorev_acik_sorular_uret(teknik, gorev, cevaplar=cevaplar, onceki_sorular=onceki_sorular)
     except Exception as e:
         print(f"  ⚠ Görev açık soruları üretilemedi: {e}")
+    # Aşama 2b — Açık Soru ÖZ-ÇÖZÜMLEME: analist görmeden önce agent her soruyu referans/kod/tüketici taramasıyla
+    # ve gerekirse tek canlı gözlem turuyla araştırır; cevaplananlar UI'da önceden dolu gelir (analiz yeniden yazılmaz).
+    if acik and acik.strip():
+        try:
+            from .soru_cozumleme import acik_mi as _sc_acik, cozumle as _sc_cozumle
+            if _sc_acik():
+                acik = _sc_cozumle(acik, gorev, canli=bool(canli_baglam))
+        except Exception as e:
+            print(f"  ⚠ Açık soru öz-çözümleme atlandı: {e}")
 
     # Yönetici Özeti (TL;DR) — modalda görünür, Jira'ya YAZILMAZ (gorev_jiraya_yaz keser).
     ozet = yonetici_ozeti_olustur(teknik, acik_sorular=acik)

@@ -1018,6 +1018,11 @@ Doküman yükle <span class="arr">→</span> Süreç Analizi <span class="arr">�
       <div class="num">5</div>
       <h4>Analiz sonrası aksiyonlar (önizleme panelindeki düğmeler) <span class="pill new">Yeni</span></h4>
       <ul>
+        <li><strong>Açık Sorular — agent önce kendisi araştırır <span class="pill new">Yeni</span></strong> — analiz bitince agent her
+            açık soru için referansları (Swagger/Confluence/Jira), bağlıysa kodu ve gerekirse canlı uygulamayı tarar. Cevabını bulduğu
+            soruların kutusu <em>önceden dolu</em> gelir (<span class="pill">🤖 agent buldu</span>, üzerine gelince kanıt), kısmen bulduklarında
+            en olası yanıt yazılıdır, yalnız gerçek ürün kararları boş kalır (<em>kararınız gerekli</em> + agent notu). Kontrol edip düzeltin,
+            <strong>Cevapları İşle</strong> ile analiz cevaplara göre yeniden yazılır. Ek maliyet: kısa bir çağrı + gerekirse bir gözlem turu.</li>
         <li><strong>FE+BE Ayrı</strong> — tek task hem FE hem BE içeriyorsa iki ayrı katman analizi üretir (BE sözleşmeyi tanımlar,
             FE onu kullanır). Onayda BE orijinal task'a yazılır, FE için yeni task açılır, BE→FE <em>Blocks</em> bağı kurulur.</li>
         <li><strong>➕ Yeni Task Aç</strong> — kaynak task'a dokunmadan analizden ilişkili yeni Task açar (proje seçimi, opsiyonel

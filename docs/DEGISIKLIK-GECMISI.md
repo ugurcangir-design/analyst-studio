@@ -6,6 +6,12 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## Açık Soru Öz-Çözümleme — Task soruları analistten önce agent'ta ✅
+- Owner: "bu soruları referanslardan ve canlı gözlemden agent çözemez mi?" → `skills/soru_cozumleme.py`: soru başına
+  BM25 referans + tüketici taraması + kod araması → tek AI sınıflandırma (cevaplandı/kısmen/karar gerekli) → gerekenler
+  için tek canlı gözlem turu → soru bloğuna Agent cevabı/kanıtı; UI kutuları ön-dolu, rozetli. Analiz yeniden yazılmaz.
+  `SORU_COZUMLEME=false` kapatır. Test `tests/test_soru_cozumleme.py`. Ayrıntı: MIMARI.md.
+
 ## Kabul Kontrolü — analist promptuyla hizalama (kriter bazlı rapor) ✅
 - Ekip arkadaşının "DEV kabul kriterleri doğrulaması" promptu içeri alındı: kabul kriteri (AC-n) birincil birim +
   kriter bazlı sayım (toplam/karşılanan/karşılanmayan/doğrulanamayan), BE kriterleri endpoint'ten (GET/POST/PUT/DELETE

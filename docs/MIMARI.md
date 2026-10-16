@@ -849,6 +849,32 @@ savunan cümleler, "(… FE'nin kontrolü dışıdır — bkz. …)" hedge paran
 Test: `tests/test_jira_temizle.py` (sentetik örnek; gerçek analiz içeriği tracked dosyaya konmaz).
 
 
+### Açık Soru Öz-Çözümleme (`skills/soru_cozumleme.py`, 2026-10-16)
+**Sorun (owner):** Task Analizi'nin açık soruları (ör. "my-permissions ucunu başka kim tüketiyor?", "dashboard izin kontrolünden
+geçiyor mu?") analistin önüne araştırılmadan geliyordu; oysa cevapları Swagger/Confluence/Jira referanslarında, kodda ya da
+canlı uygulamada vardı. Soru üretimi analizden sonra ucuz bir adımda çalışır ve referanslar soruya göre değil task metnine göre
+seçilmiştir — soruya özel kanıt toplanmıyordu.
+**Akış (`cozumle(acik_md, gorev, canli)` — `gorev_analiz_et` Aşama 2b):**
+1. `_bloklar` `### Q-T-nnn` bloklarını ayırır (Soru/Beklenen/Bağlı; `Agent durumu` varsa "zaten çözümlü" → atlanır).
+2. `kanit_topla` (0 token): `_corpus()` referans dosyalarını tipe göre (`services/`→swagger, `live-app/`, `confluence/`, `jira/`)
+   `_ref_dokuman_metinleri` ile okur; soru başına `en_alakali_corpus` (~7k) + `_adaylar` (endpoint yolu `/a|b/...` ayrımı,
+   son segment, camelCase/snake, backtick) ile `degisiklik_etkisi.tuketici_tara` + Kod Kaynağı bağlıysa `kod_kaynagi.ara`.
+3. `_siniflandir` — TEK AI çağrısı (`_SISTEM`, `<soru_cozum>` JSON): `cevaplandi` (net, emir kipi cevap + `[K:]`) · `kismi` ·
+   `karar_gerekli` (ürün kararı; kararı kolaylaştıran özet) + `gozlem_gerekli/gozlem_adimi`. UYDURMA yasak.
+4. `_gozlemle` — yalnız `gozlem_gerekli` ve henüz cevaplanmamış sorular için TEK odaklı canlı tur (`live_app_gorev` hedefi,
+   yoksa `live_app` ANA adresi + `base_url_override`; `canli_uygulama_kapsami` gorev/surec, önbellek kapalı; `<gozlem_cozum>`).
+   `cevaplandi` → durum yükselir, cevaba "Canlı gözlem: …" + kanıt eklenir; `kismi` → karar_gerekli'yi kısmiye çeker;
+   hata/MCP yok → referans sonucu korunur.
+5. `_bloga_yaz` → bloğa `- Agent durumu: cevaplandı|kısmen|karar gerekli` · `- Agent cevabı` · `- Agent kanıtı` ·
+   `- Agent gözlemi` (eski Agent satırları silinip yenilenir → cevap turunda çoğalmaz). Analiz YENİDEN YAZILMAZ.
+**UI (`index.html`):** `_jgSorulariAyristir` → `agentDurum/agentCevap/agentKanit/agentGozlem`; `_jgSorulariRender`: özet bandı
+("🤖 Agent N sorunun M'ini … cevapladı — kutular önceden dolu"), kart rozeti (`.jg-sk-agent ok|kismi|karar`, tooltip kanıt),
+sol kenar rengi, cevap kutusu **agent cevabıyla ön-dolu** (karar gerekli → boş + "Agent notu" satırı); analistin kendi cevabı
+(FE/BE geçişi `entry.cevaplar`) agent cevabına ÜSTÜN. "Cevapları İşle" değişmedi (ön-dolu kutular da gönderilir → analiz
+cevaplarla yeniden yazılır, sorular yakınsar). Köprü yorumu aynı md → Agent satırları Jira'da da görünür.
+**Kapatma/maliyet:** `SORU_COZUMLEME=false` ya da `HIZLI_MOD=true`; task başına 1 kısa AI çağrısı + gerekirse 1 canlı tur.
+Test: `tests/test_soru_cozumleme.py`.
+
 ## Bilinen Kısıtlamalar
 - CLI modu görsel (PNG/JPG) analiz EDEMEZ (text-only); görsel BRD için API modu gerekir.
 - `markdown_to_adf` nested list'leri düzleştirir.

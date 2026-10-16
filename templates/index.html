@@ -1950,6 +1950,15 @@ html[data-theme="light"] .suspend-overlay { background: rgba(245,247,250,.92); }
 .jg-soru-kart .jg-sk-detay { font-size: 11.5px; color: var(--text3); line-height: 1.5; }
 .jg-soru-kart .jg-sk-cevap { width: 100%; box-sizing: border-box; margin-top: 8px; min-height: 60px; resize: vertical; }
 .jg-soru-kart.cevapli { border-color: var(--green); }
+.jg-sk-agent { display:inline-block; margin-left:6px; padding:1px 8px; border-radius:999px; font-size:11px; font-weight:600; border:1px solid var(--border-strong); color: var(--text2); background: var(--surface2); }
+.jg-sk-agent.ok { color: var(--green); border-color: var(--green); background: var(--green-soft); }
+.jg-sk-agent.kismi { color: var(--yellow); border-color: var(--yellow); }
+.jg-sk-agent.karar { color: var(--red); border-color: var(--red); }
+.jg-soru-kart.agent-ok { border-left: 3px solid var(--green); }
+.jg-soru-kart.agent-kismi { border-left: 3px solid var(--yellow); }
+.jg-soru-kart.agent-karar { border-left: 3px solid var(--red); }
+.jg-sk-agent-not { color: var(--text2) !important; }
+.jg-sk-agent-ozet { font-size: 12.5px; color: var(--text2); background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; line-height: 1.5; }
 #jg-preview-sorular-wrap #jg-preview-sorular { min-height: 200px; }
 /* İteratif düzelt sohbeti (aksiyon barında) */
 .jg-duzelt-row { display: flex; gap: 6px; align-items: center; flex: 1 1 320px; min-width: 260px; }
@@ -5873,6 +5882,8 @@ function _jgSorulariAyristir(md) {
       soru: al('Soru') || (m[2] || '').trim(),
       beklenen: al('Beklenen yanıt') || al('Beklenen'),
       zorunlu: /^\**\s*(evet|yes|true|e\b)/i.test(al('Zorunlu')),
+      // Öz-çözümleme (agent araştırması): durum cevaplandı|kısmen|karar gerekli · cevap · kanıt · gözlem
+      agentDurum: al('Agent durumu'), agentCevap: al('Agent cevabı'), agentKanit: al('Agent kanıtı'), agentGozlem: al('Agent gözlemi'),
     });
   }
   return sorular;
@@ -5923,14 +5934,23 @@ function _jgSorulariRender(md, cevaplar) {
   }
   document.getElementById('jg-preview-sorular').style.display = 'none';
   const onemSinif = o => /kritik/i.test(o) ? 'kritik' : /yüksek|yuksek/i.test(o) ? 'yuksek' : '';
-  kap.innerHTML = sorular.map(s => {
-    const cv = cevaplar[s.id] || '';   // önceden girilmiş cevabı geri yükle (FE/BE geçişi)
+  const agentSinif = d => /^cevap/i.test(d) ? 'ok' : /^k[ıi]smen/i.test(d) ? 'kismi' : 'karar';
+  const nCev = sorular.filter(s => /^cevap/i.test(s.agentDurum)).length, nKis = sorular.filter(s => /^k[ıi]smen/i.test(s.agentDurum)).length;
+  const ozet = sorular.some(s => s.agentDurum)
+    ? `<div class="jg-sk-agent-ozet">🤖 Agent ${sorular.length} sorunun <b>${nCev}</b>'ini referans/kod/canlı gözlemle cevapladı${nKis ? `, <b>${nKis}</b>'ini kısmen` : ''} — cevap kutuları önceden dolu; kontrol edip düzeltin, sonra <b>Cevapları İşle</b>. Boş kalanlar sizin kararınızı bekliyor.</div>`
+    : '';
+  kap.innerHTML = ozet + sorular.map(s => {
+    // Önceden girilmiş cevabı geri yükle (FE/BE geçişi); yoksa agent'ın bulduğu cevabı ÖN-DOLDUR (karar gerekli → boş).
+    const agentOn = s.agentCevap && !/^karar/i.test(s.agentDurum) ? s.agentCevap : '';
+    const cv = cevaplar[s.id] || agentOn;
     return `
-    <div class="jg-soru-kart ${cv.trim() ? 'cevapli' : ''}" data-qid="${escHtml(s.id)}">
-      <div><span class="jg-sk-id">${escHtml(s.id)}</span>${s.zorunlu ? '<span class="jg-sk-onem zorunlu">ZORUNLU</span>' : ''}${s.onem ? `<span class="jg-sk-onem ${onemSinif(s.onem)}">${escHtml(s.onem)}</span>` : ''}</div>
+    <div class="jg-soru-kart ${cv.trim() ? 'cevapli' : ''} ${s.agentDurum ? 'agent-' + agentSinif(s.agentDurum) : ''}" data-qid="${escHtml(s.id)}">
+      <div><span class="jg-sk-id">${escHtml(s.id)}</span>${s.zorunlu ? '<span class="jg-sk-onem zorunlu">ZORUNLU</span>' : ''}${s.onem ? `<span class="jg-sk-onem ${onemSinif(s.onem)}">${escHtml(s.onem)}</span>` : ''}${s.agentDurum ? `<span class="jg-sk-agent ${agentSinif(s.agentDurum)}" title="${escHtml(s.agentKanit || '')}">🤖 ${escHtml(/^cevap/i.test(s.agentDurum) ? 'agent buldu' : /^k[ıi]smen/i.test(s.agentDurum) ? 'agent kısmen buldu' : 'kararınız gerekli')}</span>` : ''}</div>
       <div class="jg-sk-soru">${escHtml(s.soru || s.baslik)}</div>
       ${(s.bagli || s.beklenen) ? `<div class="jg-sk-detay">${s.bagli ? 'Bağlı: ' + escHtml(s.bagli) : ''}${s.bagli && s.beklenen ? ' · ' : ''}${s.beklenen ? 'Beklenen: ' + escHtml(s.beklenen) : ''}</div>` : ''}
-      <textarea class="jg-editor jg-sk-cevap" data-qid="${escHtml(s.id)}" placeholder="Bu soruya cevabınız (boş = atla)"
+      ${s.agentDurum && /^karar/i.test(s.agentDurum) && s.agentCevap ? `<div class="jg-sk-detay jg-sk-agent-not">🤖 Agent notu: ${escHtml(s.agentCevap)}</div>` : ''}
+      ${s.agentKanit || s.agentGozlem ? `<div class="jg-sk-detay jg-sk-agent-not">${s.agentKanit ? 'Kanıt: ' + escHtml(s.agentKanit) : ''}${s.agentKanit && s.agentGozlem ? ' · ' : ''}${s.agentGozlem ? 'Gözlem: ' + escHtml(s.agentGozlem) : ''}</div>` : ''}
+      <textarea class="jg-editor jg-sk-cevap" data-qid="${escHtml(s.id)}" placeholder="${/^karar/i.test(s.agentDurum || '') ? 'Kararınız (agent kanıtla cevaplayamadı)' : 'Bu soruya cevabınız (boş = atla)'}"
         oninput="this.closest('.jg-soru-kart').classList.toggle('cevapli', !!this.value.trim())">${escHtml(cv)}</textarea>
     </div>`;
   }).join('');
