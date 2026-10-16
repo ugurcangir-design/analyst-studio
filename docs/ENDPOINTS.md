@@ -48,6 +48,11 @@ UI: `screens/sohbet.html` (nav "İnteraktif Analiz", Analiz grubu). Global süre
 
 ## Çıktı / Referans
 ```
+GET  /api/live-app/giris-durum     ?kapsam=gorev|surec → {url, var, giris{ok,neden,ekran,ts,taze}|null, gerekli, mesaj} (0 token;
+                                   imzalı önbellek: URL+kullanıcı+şifre değişince geçersiz, GIRIS_TEST_GECERLILIK sn)
+POST /api/live-app/giris-test      {kapsam} → arka plan giriş denemesi (1 CLI/Playwright) → {job}; URL yoksa 400
+GET  /api/live-app/giris-test/durum ?job= → {durum:calisiyor|bitti|hata, sonuc{ok,neden,ekran,menu,url}, gecen_sn}
+                                   (Task Analizi analiz öncesi KAPI: giriş başarısızsa analiz başlamaz; hedef yoksa gözlemsiz başlar)
 GET  /api/live-app/status          Canlı uygulama hazırlığı {hazir, npx, profil, cli_modu, claude_var} (yalnız CLI yolunda çalışır)
 GET  /api/outputs              Mevcut çıktıları listele
 GET  /api/output/<ad>          İçerik oku

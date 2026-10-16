@@ -875,6 +875,25 @@ cevaplarla yeniden yazılır, sorular yakınsar). Köprü yorumu aynı md → Ag
 **Kapatma/maliyet:** `SORU_COZUMLEME=false` ya da `HIZLI_MOD=true`; task başına 1 kısa AI çağrısı + gerekirse 1 canlı tur.
 Test: `tests/test_soru_cozumleme.py`.
 
+### Canlı Uygulama Giriş Kapısı (`skills/canli_giris.py`, 2026-10-16)
+**Owner isteri (Task Analizi):** canlı hedef tanımlıyken giriş yapılamıyorsa analiz başlamasın (yanlış şifre dakikalarca boşa
+gözlem + token yakıyordu); hedef yoksa "canlı gözlem yapılmadan analiz yapılacak" bilgisiyle başlasın.
+- **Modül:** `hedef_url(kapsam)` (gorev → `live_app_gorev`, surec → `live_app`) · `durum(kapsam)` → `{url, var, giris{ok,neden,
+  ekran,ts,taze}, gerekli, mesaj}` (0 token) · `test_et(kapsam)` → 1 CLI/Playwright çağrısı (`giris_calistir`: ana adres, kayıtlı
+  hesap, `<giris_sonuc>` JSON; oturum zaten açıksa ok) → `output/.giris-durum-<kapsam>.json` **imzalı** (sha1 URL+kullanıcı+şifre)
+  · taze = imza aynı ve `GIRIS_TEST_GECERLILIK` (3600 sn) içinde · `gerekli` = URL var ve taze başarılı sonuç yok.
+- **Uçlar (app.py):** `GET /api/live-app/giris-durum?kapsam=` · `POST /api/live-app/giris-test {kapsam}` → arka plan iş
+  (`_giris_isler`, aynı kapsamda süren iş varsa o döner) · `GET /api/live-app/giris-test/durum?job=`. `_arka_plan_isleri_calisiyor`
+  listesine eklendi (restart/kapanma kesmez).
+- **UI (`index.html`):** `_jgIsBaslat` → `_jgCanliKapi(adimlar)`: canlı modlar (`_JG_CANLI_MODLAR`: analiz/fe-be-ayir/bff-kesif/
+  kabul-kontrol) için kapsam = adımda `canli_hedef` varsa 'surec' (ekran bazlı iş, Süreç mirası) yoksa 'gorev'. Hedef yok → toast
+  bilgi + başla. Gerekli → "Canlı uygulamaya giriş doğrulanıyor" HUD + iş polling (3 sn, 5 dk tavan) → ok: toast + başla ·
+  başarısız: ⛔ neden + "Girişi tekrar dene ve başlat" (`jgCanliTekrar`, `_jgBekleyenBaslat`) + "Ayarlara git"; analiz başlamaz.
+  Canlı-app durum satırında "Girişi Doğrula" düğmesi (`jgGirisDogrula`) + son durum (`_jgGirisDurumGoster`, boot/yenilemede).
+- **Ortak çekirdek:** İnteraktif Analiz'in "Girişi Test Et"i (`sohbet_analiz.giris_testi`) artık `test_et('surec')` çağırır →
+  sonuç imzalı dosyaya da yazılır; iki ekran aynı doğrulamayı paylaşır.
+- Test: `tests/test_canli_giris.py` + `smoke_test` (4 uç kontrolü).
+
 ## Bilinen Kısıtlamalar
 - CLI modu görsel (PNG/JPG) analiz EDEMEZ (text-only); görsel BRD için API modu gerekir.
 - `markdown_to_adf` nested list'leri düzleştirir.

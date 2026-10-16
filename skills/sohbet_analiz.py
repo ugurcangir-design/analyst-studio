@@ -219,34 +219,12 @@ def sohbet_mesaj(metin: str, gozlem: bool = False) -> dict:
 
 def giris_testi() -> dict:
     """Miras canlı uygulamaya kayıtlı test hesabıyla giriş dener; sonucu oturuma yazar + sohbete mesaj ekler.
-    Dönen: {ok, neden, ekran, menu}. 'Wrong Password' gibi sorunlar gözlem/üretim öncesi yakalanır."""
-    canli = _canli_tabanli_baglam("GİRİŞ TESTİ — yalnız giriş yap ve açılan ilk ekranı/üst menüyü bildir; başka ekran gezme.")
-    if not canli:
-        sonuc = {"ok": False, "neden": "Canlı uygulama URL'i tanımlı değil (Süreç/Teknik ekranı → Bağlam Filtresi).", "ekran": "", "menu": []}
-    else:
-        sistem = ("Canlı uygulama ERİŞİM testçisisin. Tek görevin: ana adrese gidip kayıtlı hesapla giriş yapmak ve "
-                  "sonucu bildirmek. Gezme, analiz yapma, varsayım üretme.")
-        icerik = [{"type": "text", "text": canli}, {"type": "text", "text": (
-            "### GÖREV\n1) Ana adrese git. 2) Giriş formu varsa kayıtlı hesapla giriş yap (bir kez). 3) Sonucu bildir.\n"
-            "Çıktı YALNIZ şu blok:\n<giris_sonuc>{\"ok\": true, \"neden\": \"\", \"ekran\": \"giriş sonrası sayfa başlığı/route\", "
-            "\"menu\": [\"üst menü öğeleri\"]}</giris_sonuc>\nGiriş reddedildiyse ok=false ve neden'e ekrandaki hata metnini AYNEN yaz. "
-            "Şifreyi yazma.")}]
-        try:
-            yanit = _api_cagri(sistem, [{"role": "user", "content": icerik}], max_tokens=MAX_TOKENS_KISA, thinking=False,
-                               onbellek=False, canli_uygulama_kapsami="surec")
-            ham = _xml_ayir(_metin_sikistir(yanit or ""), "giris_sonuc")
-            try:
-                d = json.loads(ham)
-            except Exception:
-                a, b = ham.find("{"), ham.rfind("}")
-                d = json.loads(ham[a:b + 1]) if a != -1 and b > a else {}
-            sonuc = {"ok": bool(d.get("ok")), "neden": str(d.get("neden") or "").strip(),
-                     "ekran": str(d.get("ekran") or "").strip(),
-                     "menu": [str(x) for x in (d.get("menu") or []) if str(x).strip()][:30]}
-            if not d:
-                sonuc["neden"] = "Giriş sonucu okunamadı (tarayıcı aracı çalışmamış olabilir)."
-        except Exception as e:
-            sonuc = {"ok": False, "neden": f"Giriş testi çalıştırılamadı: {str(e)[:200]}", "ekran": "", "menu": []}
+    Çekirdek `canli_giris.test_et('surec')` (Task Analizi'nin analiz-öncesi giriş kapısıyla ORTAK; sonuç imzalı
+    önbelleğe yazılır → Süreç/Teknik analizleri de aynı doğrulamayı kullanır). Dönen: {ok, neden, ekran, menu}."""
+    from .canli_giris import test_et as _giris_test_et
+    sonuc = _giris_test_et("surec")
+    if not sonuc.get("url") and not sonuc.get("ok"):
+        sonuc["neden"] = "Canlı uygulama URL'i tanımlı değil (Süreç/Teknik ekranı → Bağlam Filtresi)."
     sonuc["ts"] = time.time()
     oturum = oturum_oku()
     oturum["giris"] = sonuc

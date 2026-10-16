@@ -1018,6 +1018,12 @@ Doküman yükle <span class="arr">→</span> Süreç Analizi <span class="arr">�
       <div class="num">5</div>
       <h4>Analiz sonrası aksiyonlar (önizleme panelindeki düğmeler) <span class="pill new">Yeni</span></h4>
       <ul>
+        <li><strong>Analiz öncesi giriş kapısı <span class="pill new">Yeni</span></strong> — bu ekranda Canlı Uygulama URL'i doluysa
+            analiz başlamadan agent kayıtlı test hesabıyla <em>giriş dener</em> (≈1 dk; sonuç bir saat geçerli, URL/şifre değişince
+            yenilenir). Giriş başarısızsa <strong>analiz başlamaz</strong>: panelde neden (örn. <em>Wrong Password</em>) ve
+            "Girişi tekrar dene ve başlat" düğmesi görünür; Bağlam Filtresi → Giriş Bilgileri'ni düzeltin. URL boşsa analiz
+            "canlı gözlem yapılmadan üretilecek" bilgisiyle hemen başlar. Durum satırındaki <strong>Girişi Doğrula</strong> ile
+            önceden de deneyebilirsiniz.</li>
         <li><strong>Açık Sorular — agent önce kendisi araştırır <span class="pill new">Yeni</span></strong> — analiz bitince agent her
             açık soru için referansları (Swagger/Confluence/Jira), bağlıysa kodu ve gerekirse canlı uygulamayı tarar. Cevabını bulduğu
             soruların kutusu <em>önceden dolu</em> gelir (<span class="pill">🤖 agent buldu</span>, üzerine gelince kanıt), kısmen bulduklarında

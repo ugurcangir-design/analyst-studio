@@ -262,6 +262,12 @@ kontrol("sohbet/ekran-gorevleri secilen yok → 400",
 kontrol("sohbet/mesaj gözlem boş metin → 400",
         istemci.post("/api/sohbet/mesaj", json={"metin": "", "gozlem": True}, headers=ORIGIN).status_code == 400)
 kontrol("sohbet/oturum giris+ekranlar alanları", {"giris", "ekranlar"} <= set((_so.get("oturum") or {}).keys()))
+# Canlı uygulama giriş kapısı (analiz öncesi) — deterministik uçlar
+kontrol("live-app/giris-durum geçersiz kapsam → 400", istemci.get("/api/live-app/giris-durum?kapsam=x").status_code == 400)
+_gd = json_al(istemci.get("/api/live-app/giris-durum?kapsam=gorev"))
+kontrol("live-app/giris-durum gorev → ok + var/gerekli/mesaj alanları", _gd.get("ok") and {"var", "gerekli", "mesaj", "url"} <= set(_gd))
+kontrol("live-app/giris-test geçersiz kapsam → 400", istemci.post("/api/live-app/giris-test", json={"kapsam": "x"}, headers=ORIGIN).status_code == 400)
+kontrol("live-app/giris-test/durum bilinmeyen iş → 404", istemci.get("/api/live-app/giris-test/durum?job=yok").status_code == 404)
 kontrol("sohbet/bff-kesif ekran yok → 400",
         istemci.post("/api/sohbet/bff-kesif", json={}, headers=ORIGIN).status_code == 400)
 kontrol("sohbet/bff-rapor geçersiz anahtar → 400", istemci.get("/api/sohbet/bff-rapor?anahtar=x").status_code == 400)

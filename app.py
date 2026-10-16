@@ -973,7 +973,8 @@ def _arka_plan_isleri_calisiyor() -> str | None:
                        ("_febe_preview_isler", "FE/BE bölme"),
                        ("_gorev_mockup_isler", "ekran mockup'ı üretimi"),
                        ("_kopru_isler", "Jira köprüsü işlemi"),
-                       ("_sohbet_isler", "sohbet analizi üretimi")):
+                       ("_sohbet_isler", "sohbet analizi üretimi"),
+                       ("_giris_isler", "canlı uygulama giriş doğrulaması")):
         store = globals().get(ad)
         if isinstance(store, dict):
             try:
@@ -5963,6 +5964,63 @@ def _sohbet_is_baslat(hedef: str, metin: str = "") -> dict:
         _sohbet_isler[job_id] = {"durum": "calisiyor", "hedef": hedef, "bas_ts": time.time(), "metin": metin}
     threading.Thread(target=_sohbet_uret_calistir, args=(job_id, hedef), daemon=True).start()
     return {"ok": True, "job": job_id, "hedef": hedef}
+
+
+# ─── Canlı uygulama GİRİŞ KAPISI (analiz öncesi) ──────────────────────────────
+# Owner isteri: Task Analizi'nde canlı hedef varsa analiz başlamadan giriş doğrulanır; başarısızsa analiz BAŞLAMAZ;
+# hedef yoksa "gözlemsiz analiz" bilgisiyle başlar. Sonuç imzalı önbellekte (URL/şifre değişince geçersiz).
+_giris_isler: dict = {}
+
+
+@app.route("/api/live-app/giris-durum", methods=["GET"])
+def live_app_giris_durum():
+    from skills import canli_giris
+    kapsam = (request.args.get("kapsam") or "gorev").strip()
+    if kapsam not in canli_giris.KAPSAMLAR:
+        return jsonify({"ok": False, "error": "kapsam gorev|surec olmalı"}), 400
+    return jsonify({"ok": True, **canli_giris.durum(kapsam)})
+
+
+def _giris_is_calistir(job_id: str, kapsam: str) -> None:
+    from skills import canli_giris
+    job = _giris_isler[job_id]
+    try:
+        job["sonuc"] = canli_giris.test_et(kapsam)
+        job["durum"] = "bitti"
+    except Exception as e:
+        job["durum"] = "hata"
+        job["hata"] = str(e)[:300]
+
+
+@app.route("/api/live-app/giris-test", methods=["POST"])
+def live_app_giris_test():
+    """Arka plan giriş testi → {job}. Aynı kapsamda süren iş varsa onu döner (çift çağrı yok)."""
+    from skills import canli_giris
+    data = request.get_json(silent=True) or {}
+    kapsam = (data.get("kapsam") or "gorev").strip()
+    if kapsam not in canli_giris.KAPSAMLAR:
+        return jsonify({"ok": False, "error": "kapsam gorev|surec olmalı"}), 400
+    if not canli_giris.hedef_url(kapsam):
+        return jsonify({"ok": False, "error": "Canlı uygulama hedefi tanımlı değil (Bağlam Filtresi)."}), 400
+    for jid, j in _giris_isler.items():
+        if j.get("kapsam") == kapsam and j.get("durum") == "calisiyor":
+            return jsonify({"ok": True, "job": jid, "mevcut": True})
+    job_id = f"giris-{int(time.time() * 1000)}"
+    _giris_isler[job_id] = {"durum": "calisiyor", "kapsam": kapsam, "bas_ts": time.time(), "sonuc": None}
+    for eski in [k for k in list(_giris_isler)[:-12]]:
+        if _giris_isler[eski].get("durum") != "calisiyor":
+            _giris_isler.pop(eski, None)
+    threading.Thread(target=_giris_is_calistir, args=(job_id, kapsam), daemon=True).start()
+    return jsonify({"ok": True, "job": job_id})
+
+
+@app.route("/api/live-app/giris-test/durum", methods=["GET"])
+def live_app_giris_test_durum():
+    job = _giris_isler.get((request.args.get("job") or "").strip())
+    if not job:
+        return jsonify({"ok": False, "error": "İş bulunamadı (yeniden başlatılmış olabilir)."}), 404
+    return jsonify({"ok": True, "durum": job["durum"], "kapsam": job["kapsam"], "sonuc": job.get("sonuc"),
+                    "hata": job.get("hata"), "gecen_sn": int(time.time() - job["bas_ts"])})
 
 
 @app.route("/api/sohbet/giris-test", methods=["POST"])

@@ -82,20 +82,28 @@ g = SA._uretim_girdisi(SA.oturum_oku())[0]["text"]
 chk("üretim girdisine de girer", "Analistin kesin cevapları" in g and "CSV ve Excel" in g)
 
 print("3) giriş testi")
+# Çekirdek artık skills.canli_giris (Task Analizi giriş kapısıyla ORTAK) → mock'lar o modüle
+from skills import canli_giris as CG  # noqa: E402
+CG.OUTPUT_DIR = tmp
+CG.live_app_urls = lambda: ["https://dev-ornek.local/app"]
+CG.canli_uygulama_baglami_hazirla = lambda **kw: f"### CANLI base={kw.get('base_url_override')}"
+CG.load_context_filter = lambda: {"live_app_auth": {"username": "u", "password": "p"}}
 SA.live_app_urls = lambda: ["https://dev-ornek.local/app"]
-SA._api_cagri = sahte_ai('<giris_sonuc>{"ok": true, "neden": "", "ekran": "/dashboard", "menu": ["Sports", "Markets"]}</giris_sonuc>')
+CG._api_cagri = sahte_ai('<giris_sonuc>{"ok": true, "neden": "", "ekran": "/dashboard", "menu": ["Sports", "Markets"]}</giris_sonuc>')
 r = SA.giris_testi()
 o = SA.oturum_oku()
 chk("başarılı: oturum.giris + sistem mesajı", r["ok"] and o["giris"]["ekran"] == "/dashboard" and o["mesajlar"][-1].get("sistem")
     and "başarılı" in o["mesajlar"][-1]["metin"])
 chk("giriş testi kapsam surec + önbellek kapalı", yakala["kw"].get("canli_uygulama_kapsami") == "surec" and yakala["kw"].get("onbellek") is False)
-SA._api_cagri = sahte_ai('<giris_sonuc>{"ok": false, "neden": "Wrong Password !!!"}</giris_sonuc>')
+CG._api_cagri = sahte_ai('<giris_sonuc>{"ok": false, "neden": "Wrong Password !!!"}</giris_sonuc>')
 r = SA.giris_testi()
 chk("reddedildi: neden aynen + yönlendirme", not r["ok"] and r["neden"] == "Wrong Password !!!" and "Bağlam Filtresi" in SA.oturum_oku()["mesajlar"][-1]["metin"])
-SA._api_cagri = sahte_ai("tarayıcı açılmadı")
+CG._api_cagri = sahte_ai("tarayıcı açılmadı")
 chk("bozuk çıktı → ok=False, net neden", not SA.giris_testi()["ok"])
+chk("sonuç imzalı önbelleğe yazıldı (Task kapısı da okur)", (tmp / ".giris-durum-surec.json").exists() and CG.durum("surec")["giris"] is not None)
+CG.live_app_urls = lambda: []
 SA.live_app_urls = lambda: []
-SA._api_cagri = lambda *a, **k: (_ for _ in ()).throw(AssertionError("AI çağrılmamalı"))
+CG._api_cagri = lambda *a, **k: (_ for _ in ()).throw(AssertionError("AI çağrılmamalı"))
 chk("URL yoksa AI çağrılmaz", not SA.giris_testi()["ok"] and "tanımlı değil" in SA.oturum_oku()["giris"]["neden"])
 
 print("4) ekran envanteri + ekran görevleri")

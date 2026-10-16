@@ -2830,6 +2830,10 @@ function temaDegistir() {
               <button class="btn btn-outline btn-sm" type="button" id="jg-la-login-btn" onclick="jgLiveAppGiris()">
                 Tarayıcıda Giriş Yap
               </button>
+              <button class="btn btn-outline btn-sm" type="button" id="jg-la-giris-test-btn" onclick="jgGirisDogrula()" title="Kayıtlı test hesabıyla giriş denemesi (≈1 dk). Analiz başlatılırken otomatik de yapılır; başarısızsa analiz başlamaz.">
+                Girişi Doğrula
+              </button>
+              <span id="jg-la-giris" class="la-metin" style="font-size:12px"></span>
               <button class="btn btn-outline btn-sm" type="button" onclick="jgLiveAppDurumYenile()" title="Durumu yenile">↻</button>
             </div>
             <div class="la-ipucu" id="jg-la-ipucu"></div>
@@ -5173,7 +5177,35 @@ async function jgLiveAppKaydet(showToastMsg) {
   }
 }
 
+async function jgGirisDogrula() {
+  const btn = document.getElementById('jg-la-giris-test-btn'); const out = document.getElementById('jg-la-giris');
+  btn.disabled = true; out.textContent = '🔐 giriş deneniyor…';
+  try {
+    const r = await (await fetch('/api/live-app/giris-test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kapsam: 'gorev' }) })).json();
+    if (!r.ok) { out.textContent = '⚠ ' + (r.error || 'başlatılamadı'); btn.disabled = false; return; }
+    const bas = Date.now();
+    while (Date.now() - bas < 300000) {
+      await new Promise(res => setTimeout(res, 3000));
+      let s; try { s = await (await fetch('/api/live-app/giris-test/durum?job=' + encodeURIComponent(r.job))).json(); } catch (e) { continue; }
+      if (!s.ok || s.durum !== 'calisiyor') { await _jgGirisDurumGoster(); break; }
+    }
+  } catch (e) { out.textContent = '⚠ ' + _jgHataMetni(e); }
+  btn.disabled = false;
+}
+async function _jgGirisDurumGoster() {
+  const out = document.getElementById('jg-la-giris'); if (!out) return;
+  try {
+    const d = await (await fetch('/api/live-app/giris-durum?kapsam=gorev')).json();
+    if (!d.ok || !d.var) { out.textContent = ''; return; }
+    const g = d.giris;
+    out.textContent = !g ? '· giriş henüz doğrulanmadı (analiz öncesi otomatik denenir)'
+      : g.ok ? `· ✓ giriş doğrulandı${g.taze ? '' : ' (eski — yeniden denenecek)'}${g.ekran ? ' · ' + g.ekran : ''}`
+      : `· ⛔ giriş başarısız${g.taze ? '' : ' (eski)'}: ${g.neden || ''}`;
+    out.style.color = g && g.ok ? 'var(--green)' : g ? 'var(--red)' : 'var(--text3)';
+  } catch (e) { out.textContent = ''; }
+}
 async function jgLiveAppDurumYenile() {
+  _jgGirisDurumGoster();
   const nokta = document.getElementById('jg-la-nokta');
   const metin = document.getElementById('jg-la-metin');
   const ipucu = document.getElementById('jg-la-ipucu');
@@ -5707,8 +5739,71 @@ function _jgSwitcherRender() {
 }
 
 // İş başlat (adimlar) → arka planda çalışır; polling ile izlenir. temizle=true ise seti sıfırlanır.
+// ── Canlı uygulama GİRİŞ KAPISI (analiz öncesi) ─────────────────────────────────────────────
+// Owner isteri: canlı hedef varsa giriş doğrulanmadan analiz BAŞLAMAZ (yanlış şifre dakikalarca boşa gözlem yapıyordu);
+// hedef yoksa "canlı gözlem yapılmadan analiz yapılacak" bilgisiyle başlar. Sonuç imzalı önbellekte (URL/şifre değişince yenilenir).
+const _JG_CANLI_MODLAR = new Set(['analiz', 'fe-be-ayir', 'bff-kesif', 'kabul-kontrol']);
+let _jgBekleyenBaslat = null;
+function _jgCanliKapsam(adimlar) {
+  if (!(adimlar || []).some(a => _JG_CANLI_MODLAR.has(a.mode || 'analiz'))) return null;
+  return (adimlar || []).some(a => a.canli_hedef) ? 'surec' : 'gorev';   // ekran bazlı iş → Süreç'in miras hedefi
+}
+async function _jgCanliKapi(adimlar) {
+  const kapsam = _jgCanliKapsam(adimlar);
+  if (!kapsam) return true;
+  let d;
+  try { d = await (await fetch('/api/live-app/giris-durum?kapsam=' + kapsam)).json(); } catch (e) { return true; }
+  if (!d.ok) return true;
+  if (!d.var) { toast('ℹ Canlı uygulama hedefi tanımlı değil — analiz canlı gözlem YAPILMADAN üretilecek.', 'info'); return true; }
+  if (!d.gerekli) return true;
+  _jgProcBaslat('Canlı uygulamaya giriş doğrulanıyor');
+  _jgMsg('jg-preview-msg', `🔐 Analizden önce <b>${escHtml(d.url)}</b> adresine kayıtlı hesapla giriş deneniyor (≈1 dk)…`, '');
+  let job;
+  try {
+    const r = await (await fetch('/api/live-app/giris-test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kapsam }) })).json();
+    if (!r.ok) { _jgProcBitir(); _jgMsg('jg-preview-msg', r.error || 'Giriş testi başlatılamadı', 'err'); return false; }
+    job = r.job;
+  } catch (e) { _jgProcBitir(); _jgMsg('jg-preview-msg', _jgHataMetni(e), 'err'); return false; }
+  const bas = Date.now();
+  while (Date.now() - bas < 300000) {
+    await new Promise(res => setTimeout(res, 3000));
+    let s;
+    try { s = await (await fetch('/api/live-app/giris-test/durum?job=' + encodeURIComponent(job))).json(); } catch (e) { continue; }
+    if (!s.ok) break;
+    if (s.durum === 'calisiyor') continue;
+    const g = s.sonuc || {};
+    if (s.durum === 'bitti' && g.ok) {
+      _jgProcBitir();
+      toast(`✓ Giriş doğrulandı${g.ekran ? ' · ' + g.ekran : ''} — analiz başlıyor`, 'success');
+      _jgMsg('jg-preview-msg', '', '');
+      jgLiveAppDurumYenile && jgLiveAppDurumYenile();
+      return true;
+    }
+    _jgProcBitir();
+    const neden = escHtml(g.neden || s.hata || 'neden belirlenemedi');
+    _jgMsg('jg-preview-msg', `⛔ <b>Canlı uygulamaya giriş başarısız</b> — ${neden}<br>`
+      + `Analiz <b>başlatılmadı</b>: canlı hedef tanımlıyken giriş olmadan gözlem yapılamaz. Bağlam Filtresi → <b>Giriş Bilgileri</b>'ni (kullanıcı adı/şifre) ve bu ekrandaki Canlı Uygulama URL'ini düzeltin.`
+      + ` <button class="btn btn-outline btn-xs" style="margin-left:6px" onclick="jgCanliTekrar()">Girişi tekrar dene ve başlat</button>`
+      + ` <button class="btn btn-outline btn-xs" onclick="document.getElementById('jg-live-target').scrollIntoView({behavior:'smooth',block:'center'})">Ayarlara git</button>`, 'err');
+    jgLiveAppDurumYenile && jgLiveAppDurumYenile();
+    return false;
+  }
+  _jgProcBitir();
+  _jgMsg('jg-preview-msg', '⚠ Giriş testi zaman aşımına uğradı (5 dk). Analiz başlatılmadı — VPN/ağ bağlantısını kontrol edip tekrar deneyin.', 'err');
+  return false;
+}
+function jgCanliTekrar() {
+  if (!_jgBekleyenBaslat) { toast('Bekleyen analiz yok', 'info'); return; }
+  const b = _jgBekleyenBaslat; _jgBekleyenBaslat = null;
+  _jgIsBaslat(b.adimlar, b.procBaslik, b.gosterKey, b.temizle);
+}
+
 async function _jgIsBaslat(adimlar, procBaslik, gosterKey, temizle) {
   await _jgFiltreKaydet();
+  _jgPanelAc();
+  _jgBekleyenBaslat = { adimlar, procBaslik, gosterKey, temizle };
+  if (!(await _jgCanliKapi(adimlar))) return;   // giriş doğrulanmadı → analiz BAŞLAMAZ (mesaj panelde)
+  _jgBekleyenBaslat = null;
   if (temizle) { _jgAnalizSeti = {}; _jgAktifAnalizKey = null; _jgSetKaydet(); }
   _jgIsGosterKey = gosterKey || (adimlar[0] && adimlar[0].key) || null;
   _jgPanelAc();

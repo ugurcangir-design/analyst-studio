@@ -6,6 +6,12 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## Canlı Uygulama Giriş Kapısı — giriş doğrulanmadan analiz başlamaz ✅
+- Owner (Task Analizi): canlı hedef varken giriş başarısızsa analiz BAŞLAMAZ (⛔ neden + tekrar dene); hedef yoksa
+  "canlı gözlem yapılmadan üretilecek" bilgisiyle başlar. `skills/canli_giris.py` (imzalı önbellek, `GIRIS_TEST_GECERLILIK`),
+  `/api/live-app/giris-durum|giris-test|giris-test/durum`, UI `_jgCanliKapi` + "Girişi Doğrula". İnteraktif "Girişi Test Et"
+  aynı çekirdek. Test `tests/test_canli_giris.py`. Ayrıntı: MIMARI.md.
+
 ## Açık Soru Öz-Çözümleme — Task soruları analistten önce agent'ta ✅
 - Owner: "bu soruları referanslardan ve canlı gözlemden agent çözemez mi?" → `skills/soru_cozumleme.py`: soru başına
   BM25 referans + tüketici taraması + kod araması → tek AI sınıflandırma (cevaplandı/kısmen/karar gerekli) → gerekenler
