@@ -30,13 +30,25 @@ POST /api/sohbet/sifirla       Yeni oturum (sohbet temizlenir; çıktı dosyalar
 POST /api/sohbet/uret          Kilometre taşı: {hedef:'surec'|'teknik'} → ARKA PLAN üretim (canlı gözlem DAHİL);
                                surec_analizi_yap(icerik_override=sohbet, ozel_atla=True) / teknik_analiz_yap(ozel_atla=True)
                                → output/surec-analizi.md · teknik-analiz.md (Çıktılar/Revizyon/Jira aynen akar). {ok, job}
-GET  /api/sohbet/uret/durum    ?job=<id> → {durum:calisiyor|bitti|hata, hedef, sonuc?, hata?}
+GET  /api/sohbet/uret/durum    ?job=<id> → {durum:calisiyor|bitti|hata|durduruldu|iptal, hedef, sonuc?, hata?, gecen_sn}
+POST /api/sohbet/uret/durdur   {job, iptal?} → süren claude CLI process-grubuyla öldürülür; iş durduruldu|iptal
+POST /api/sohbet/uret/devam    {job} → yalnız 'durduruldu' işte AYNI hedefle yeni iş (tamamlanan aşamalar önbellekten)
+POST /api/sohbet/mesaj         {metin, gozlem:true} → ARKA PLAN iş (hedef 'gozlem'): canlı gözlemli yanıt (miras live_app ANA adresi)
+POST /api/sohbet/giris-test    → iş hedef 'giris': kayıtlı test hesabıyla giriş denemesi → oturum.giris {ok, neden, ekran, menu}
+POST /api/sohbet/ekranlar      → iş hedef 'ekranlar': sohbet+BRD'den ekran envanteri → oturum.ekranlar[]
+POST /api/sohbet/ekran-gorevleri {secilen:[index…]} → seçilen ekranlar için sentetik EKRAN-n görevleri (mode fe-be-ayir,
+                               canli_hedef) Task Analizi iş sistemine (/api/jira/gorev/is/baslat) verilir → {ok, job}
+POST /api/sohbet/bff-kesif     {ekran} → iş hedef 'bff': bff_kesif.kesfet(miras ANA adres, ekran) → oturum.bff[] + sistem mesajı
+GET  /api/sohbet/bff-rapor     ?anahtar=<12 hex> → {ok, md, ts, ekran} (400 geçersiz anahtar, 404 yok)
 ```
+`GET /api/sohbet/oturum` ayrıca: `aktif_is` (sürmekte olan iş — ekran yeniden bağlanır), `durdurulmus_is`, `giris`, `ekranlar`,
+`bff`, `surec_var/teknik_var` (yalnız bu oturuma ait TAZE çıktı). `/api/workflow-state.sohbet_is` → üst-bar çipi/HUD.
 Bağlam Filtresi + uygulama girişi Süreç'ten miras (paylaşılan context_filter.json). Özel prompt YOK (hep varsayılan).
 UI: `screens/sohbet.html` (nav "İnteraktif Analiz", Analiz grubu). Global süreç workflow'una DOKUNMAZ.
 
 ## Çıktı / Referans
 ```
+GET  /api/live-app/status          Canlı uygulama hazırlığı {hazir, npx, profil, cli_modu, claude_var} (yalnız CLI yolunda çalışır)
 GET  /api/outputs              Mevcut çıktıları listele
 GET  /api/output/<ad>          İçerik oku
 POST /api/output/delete        Çıktıyı sil
@@ -68,7 +80,8 @@ POST /api/jira/gorev/analiz        Özellik 2: görevi teknik analizle detayland
                                    odaklı analiz), `iliskili_keys[]` (karşı-katman bağlı task'lar bağlam olarak çekilir → 'Bağımlılık
                                    ve Arayüz (FE↔BE)' sözleşmesi). `gorev` (tam) yerine `gorev_key` verilirse Jira'dan çekilir.
                                    Analist Notu (context_filter → gorev_analist_notu) doluysa dikkate alır
-POST /api/jira/gorev/is/baslat     ARKA PLAN iş başlat: {adimlar:[{key, mode:analiz|duzelt|formatla, katman?, cevaplar?,
+POST /api/jira/gorev/is/baslat     ARKA PLAN iş başlat: {adimlar:[{key, mode:analiz|duzelt|formatla|fe-be-ayir|akis-kapat|
+                                   kabul-kontrol|bff-kesif, katman?, cevaplar?, canli_hedef?,
                                    iliskili_keys?, onceki_sorular?, markdown?, talimat?, gorev?}]} → thread; {ok, job}. Panel kapansa/geçilse de sürer.
                                    `onceki_sorular` (cevaplar ile) → soru YAKINSAMASI: cevaplanan sorular tekrar sorulmaz.
 GET  /api/jira/gorev/is/durum      ?job=<id> → {durum:calisiyor|bitti|durduruldu, aktif_key, aktif_index, toplam, sonuclar{}}
@@ -76,6 +89,19 @@ POST /api/jira/gorev/is/durdur     {job} → kalan adımlar çalışmaz + o an s
 POST /api/jira/gorev/duzelt        İteratif düzelt (önizleme, YAZMAZ): {gorev, markdown, talimat} → yalnız ilgili kısmı
                                    düzeltilmiş tam analiz (HTML prototip 'sohbetle düzelt' deseninin görev karşılığı)
 POST /api/jira/gorev/guncelle      Onaydan sonra görev description'ını Jira'da güncelle (markdown→ADF)
+                                   Jira'ya giden kopya `base.jira_icin_temizle`'den geçer (özet/gözlem/RAG yorumu/[K:]/alıntı/
+                                   meta-gerekçe temizlenir, bölüm numaraları ardışık) — fe-be-olustur, yeni-task ve köprü de aynı kapı.
+GET  /api/jira/gorev/getir         ?key=… → task açıklaması (kurtarma: içerik bellekte yoksa editöre yükle)
+GET  /api/jira/gorev/analiz-kayit  ?key=… → sunucu deposundaki son Task analizi (output/gorev-analizleri; 30 gün)
+POST /api/jira/gorev/egitime-ekle  {key, markdown, summary?, katman?, acik_sorular?} → nihai içerik ortak örnek havuzu + depo
+POST /api/jira/gorev/kabul-yorum   {key, markdown} → Kabul Kontrolü raporunu task'a YORUM olarak yazar (durum değişmez)
+                                   (kabul-kontrol iş modu: adım `talimat` = opsiyonel ekran URL + odak; sonuc.kabul{markdown, sonuc,
+                                   sayim, kriter_sayim, ortam, maddeler})
+POST /api/jira/gorev/mockup        {iste, analiz, baslik, hedef_tarif} → ARKA PLAN ekran mockup'ı (output/gorev-mockup.html) → {job_id}
+GET  /api/jira/gorev/mockup/durum/<job_id>  polling {durum, gecen_sn, adim_gecen_sn, tasarim_kaynagi}
+POST /api/jira/gorev/mockup/duzelt {talimat} → yalnız mockup'ı düzeltir (analize dokunmaz) · POST …/mockup/geri-al (yedekten)
+GET  /api/jira/gorev/mockup/mevcut diskteki son mockup (restart/yenileme sonrası) · POST …/mockup/jira {key, mode:ek|yeni-task,
+                                   baslik?, ust?} → PNG + HTML attachment (ek) ya da ilişkili "Tasarım - …" Task'ı
 POST /api/jira/gorev/fe-be-olustur FE+BE ayrı analizi yazar (Option A): BE→ORİJİNAL task ('BE - '), FE→YENİ Task ('FE - '),
                                    BE→FE Blocks bağı. {key, be_markdown, fe_markdown, summary?}
 GET  /api/jira/projeler            Yeni Task Aç dropdown'ı — YALNIZ agent'a eklenmiş projeler (`_agent_jira_projeleri`:

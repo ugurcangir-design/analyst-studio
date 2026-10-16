@@ -199,6 +199,7 @@
       <a href="#a-jira"    class="h2">6.6 Jira'da FE/BE Task açma</a>
       <a href="#a-gorevler" class="h2">6.7 Task Analizi (triyaj)</a>
       <a href="#a-backlog" class="h2">6.8 UAT Mutabakat</a>
+      <a href="#a-sohbet"  class="h2">6.9 İnteraktif Analiz (sohbetle)</a>
       <a href="#akis-brd"  class="h1">7. BRD Akışı</a>
       <a href="#sorular"   class="h1">8. Soru Defteri</a>
       <a href="#s-banner"  class="h2">8.1 Banner ve sekme</a>
@@ -1013,7 +1014,64 @@ Doküman yükle <span class="arr">→</span> Süreç Analizi <span class="arr">�
     </div>
 
     <!-- ============== 6.8 BACKLOG SENKRON ============== -->
-    <h3 id="a-backlog">6.8 UAT Mutabakat <span class="pill new">Yeni</span></h3>
+        <div class="step">
+      <div class="num">5</div>
+      <h4>Analiz sonrası aksiyonlar (önizleme panelindeki düğmeler) <span class="pill new">Yeni</span></h4>
+      <ul>
+        <li><strong>FE+BE Ayrı</strong> — tek task hem FE hem BE içeriyorsa iki ayrı katman analizi üretir (BE sözleşmeyi tanımlar,
+            FE onu kullanır). Onayda BE orijinal task'a yazılır, FE için yeni task açılır, BE→FE <em>Blocks</em> bağı kurulur.</li>
+        <li><strong>➕ Yeni Task Aç</strong> — kaynak task'a dokunmadan analizden ilişkili yeni Task açar (proje seçimi, opsiyonel
+            Epic/Story üst öğesine <em>Relates</em>). FE+BE aktifse iki task açar ve birbirine bağlar.</li>
+        <li><strong>🔌 BFF Keşfi (CRUD)</strong> — agent hedef ekranda <em>kendisi</em> kayıt oluşturur (<code>AI-TEST-…</code>), doğrulama
+            hatası dener, günceller, ayrı bir kaydı siler ve her adımın gerçek isteğini (method/path/payload/status) yakalayıp
+            <strong>BFF sözleşme raporu</strong> çıkarır. Analiz öncesi <em>otomatik</em> çalışır (7 gün önbellek; Bağlam Filtresi →
+            "BFF keşfi otomatik" kutusuyla kapatılır). Manuel düğme her zaman yeniden gözler. Elle kayıt açıp servis toplamanıza gerek kalmaz.</li>
+        <li><strong>🧪 Kabul Kontrolü</strong> — geliştirmesi biten (ANALIZ CHECK) task'ı <em>testçi gibi</em> test ortamında doğrular:
+            task'taki <strong>kabul kriterleri</strong> (AC-1…) birer birer fiilen denenir — BE kriterleri endpoint'ten
+            (method/path/status/hata kodu), FE kriterleri ekrandan; GET/POST/PUT/DELETE AI-TEST kayıtlarıyla serbest.
+            Düğmeye basınca <em>opsiyonel</em> talimat sorulur: doğrulanacak ekranın tam URL'i ve/veya odak notu
+            (örn. <code>https://dev-…/event-management/x — BE kriterlerini endpoint'ten doğrula</code>); boş bırakılırsa Bağlam
+            Filtresi'ndeki Task canlı hedefi kullanılır. Rapor: <em>Task · Konu · Ortam · İlgili task</em> → <strong>Doğrulama Sonucu</strong>
+            (toplam / karşılanan / karşılanmayan / doğrulanamayan kriter) → Genel değerlendirme → Öne çıkan bulgular → kriter tablosu →
+            Netleştirilmesi gereken konular → <strong>Sonuç</strong> cümlesi. Jira durumu <strong>değişmez</strong>; "Raporu Jira'ya yorum
+            olarak yaz" ile task'a yorum düşer, teste iletme / geri gönderme kararı sizindir. Aynı iş Jira yorumuyla:
+            <code>/analyst_agent kontrol [ekran URL / odak]</code>.</li>
+        <li><strong>Akışı Kapat</strong> — analizdeki akış boşluklarını tespit edip bilgi kaynakta varsa ilgili bölümü minimal düzeltir,
+            yoksa açık soru açar (tek revizyon, Geri Al mümkün).</li>
+        <li><strong>🎨 Ekran Mockup'ı</strong> — yeni isteyi yazın; mevcut uygulamanın tasarım dilini koruyan çalışan HTML mockup üretilir,
+            sohbetle düzeltilir, Jira'ya PNG+HTML ek olarak ya da "Tasarım Task'ı" olarak eklenir.</li>
+        <li><strong>Eğitime Ekle</strong> — editördeki nihai analizi ortak örnek havuzuna yazar (Jira'ya yazmasanız da). Tamamlanan
+            Task analizleri zaten otomatik toplanır; bu düğme düzenlenmiş son hâli gönderir.</li>
+      </ul>
+      <div class="box info">
+        <strong>Jira'ya ne gider, ne gitmez?</strong> Task gövdesine yalnız gerçek analiz yazılır: Yönetici Özeti, Canlı Gözlem
+        Kapsamı, <code>[K: …]</code> kanıt etiketleri, RAG notu, "Confluence'a göre / Analist notu doğrular" türü kaynak alıntıları ve
+        yaklaşım gerekçeleri otomatik temizlenir; atlanan bölümler yüzünden kopuk kalan numaralar (1-2-3-7-11) ardışık yapılır.
+        Ekrandaki analiz dosyası değişmez.
+      </div>
+    </div>
+
+    <h3 id="a-sohbet">6.9 İnteraktif Analiz (sohbetle — doküman yüklemeden) <span class="pill new">Yeni</span></h3>
+    <p>Sol menü → <strong>İnteraktif Analiz</strong>. Bir isteri/fikri yazarsınız; agent referanslardaki BRD/Confluence/Swagger'a
+       dayanarak <em>sırayla</em> soru sorar, yöntem önerir, birlikte olgunlaştırırsınız. Hazır olunca
+       <strong>Süreç Analizi Üret</strong> → <strong>Teknik Analiz Üret</strong> ile formal çıktılar üretilir (Çıktı Dosyaları,
+       Revizyon ve Jira akışları aynen çalışır). Bağlam Filtresi ve uygulama giriş bilgileri Süreç ekranından miras alınır.</p>
+    <ul>
+      <li><strong>Girişi Test Et</strong> — canlı uygulamaya kayıtlı test hesabıyla giriş denenir; "Wrong Password" gibi sorunlar
+          üretim öncesi yakalanır (başarısızsa Bağlam Filtresi → Giriş Bilgileri'ni düzeltin).</li>
+      <li><strong>🌐 Canlı gözlemle yanıtla</strong> — mesaj kutusundaki kutucuk işaretliyse agent o soru için uygulamaya girip ekranı
+          gerçekten gezer (dakikalar sürer, arka planda çalışır; normal turlar hızlı, gözlemsizdir).</li>
+      <li><strong>Sıralı açık sorular</strong> — üretilen analizlerin açık soruları tek tek sorulur (Cevapla / Varsayım / Atla),
+          sonunda "Cevapları analize uygula" ile hedefli işlenir; cevaplanan soru bir daha sorulmaz.</li>
+      <li><strong>Ekran Task'ları Üret</strong> — sohbet + BRD'den ekran envanteri çıkarılır, seçtiğiniz ekranlar için canlı gözlemli
+          FE+BE analizleri Task Analizi iş sistemine gider; oradan "Yeni Task Aç" ile Jira'ya.</li>
+      <li><strong>BFF Keşfi (CRUD)</strong> — ekran adı verirsiniz (veya envanter satırındaki 🔌), agent o ekranda CRUD yapıp servis
+          sözleşmesini çıkarır; rapor sohbete ve sonraki üretimlere gerçek sözleşme olarak girer (üretim öncesi otomatik keşif yoktur).</li>
+      <li><strong>Üretim arka planda</strong> — üst-bar işlem çipi ve HUD her ekranda görünür; ekran değiştirmek/yenilemek kesmez.
+          <strong>Durdur</strong> çalışan CLI'ı anında keser, <strong>Devam Ettir</strong> kesilen aşamadan sürdürür, <strong>İptal</strong> işi kapatır.</li>
+    </ul>
+
+<h3 id="a-backlog">6.8 UAT Mutabakat <span class="pill new">Yeni</span></h3>
     <p>
       Product'ın <strong>UAT board'unda</strong> (MBSUATEAM) açtığı taskları bizim
       <strong>TRADE/OPS board</strong> (MBSTRADE/MBSOPS) tasklarıyla <strong>karşılaştırır</strong>: hangi
@@ -1312,6 +1370,15 @@ Doküman yükle <span class="arr">→</span> Süreç Analizi <span class="arr">�
       (kaç endpoint/tablo/bölüm), süreç kapsam yüzdesi ve <strong>açık soru sayısı (kaç kritik)</strong>.
       11 bölümü okumadan 10 saniyede durumu görmeniz içindir. Bu özet <strong>Jira'ya yazılmaz</strong>
       — yalnızca ekranda/çıktı dosyasında görünür.
+    </div>
+
+    <div class="box info">
+      <strong>🌐 Canlı gözlem rozeti <span class="pill new">Yeni</span></strong>
+      Süreç/teknik çıktısının Kanıt satırında <em>"Canlı gözlem yapıldı · N tur"</em> (yeşil) ya da
+      <em>"Canlı gözlem YAPILAMADI"</em> (kırmızı) rozeti görünür; makine-doğrulanmıştır (modelin kendi beyanı değil).
+      Kırmızı rozetin üzerine gelince neden yazar: <em>izinli tarayıcı aracı reddedildi</em> ya da <em>model hiç tarayıcı aracı
+      çağırmadı</em>. İkinci durumda agent aynı çağrıyı sertleştirilmiş talimatla <strong>otomatik bir kez daha dener</strong>;
+      yine olmazsa URL'lere dayalı iddiaları doğrulanmamış sayın.
     </div>
 
     <div class="box info">
@@ -1629,6 +1696,13 @@ pip install -r requirements.txt   # gerekirse</code></pre>
     <table>
       <tr><th>Belirti</th><th>Olası neden ve çözüm</th></tr>
       <tr>
+        <td>Çıktıda <strong>"Canlı gözlem YAPILAMADI"</strong> rozeti / BFF keşfi rapor üretmedi / Kabul Kontrolü hep "doğrulanamadı"</td>
+        <td>Önce <strong>İnteraktif Analiz → Girişi Test Et</strong>: "Wrong Password / Bad credentials" dönüyorsa Bağlam Filtresi'ndeki
+        test hesabı yanlıştır — gözlem login duvarında kalır. Rozet tooltip'i "model hiç tarayıcı aracı çağırmadı" diyorsa agent zaten
+        bir kez daha denemiştir; analizi tekrar çalıştırın. "Browser is already in use" benzeri hata: açık kalan "Tarayıcıda Giriş Yap"
+        penceresini kapatın (yeni sürüm bunu kendisi temizler). Teşhis için owner: <code>~/Library/Caches/claude-cli-nodejs/…/mcp-logs-playwright/</code>.</td>
+      </tr>
+      <tr>
         <td>Kurulumda "swiftc bulunamadı" / masaüstü ikonu oluşmadı</td>
         <td>Xcode Command Line Tools yok. Kurulum yine de tamamdır — <code>./start.sh</code> ile başlatın. İkon isterseniz: <code>xcode-select --install</code> → <code>bash create_app.sh</code></td>
       </tr>
@@ -1865,6 +1939,7 @@ pip install -r requirements.txt   # gerekirse</code></pre>
         <tr><td style="padding:6px 8px; border-bottom:1px solid var(--border);"><code>güncelle</code></td><td style="padding:6px 8px; border-bottom:1px solid var(--border);">Son analizi gövdeye yeniden yazar (taze ise 0-token).</td></tr>
         <tr><td style="padding:6px 8px; border-bottom:1px solid var(--border);"><code>ilişkili-aç</code></td><td style="padding:6px 8px; border-bottom:1px solid var(--border);">İlişkili YENİ task <strong>önerir (taslak)</strong> — henüz açmaz.</td></tr>
         <tr><td style="padding:6px 8px; border-bottom:1px solid var(--border);"><code>onayla</code></td><td style="padding:6px 8px; border-bottom:1px solid var(--border);">Bekleyen taslağı uygular → Jira'da açar + bağlar.</td></tr>
+        <tr><td style="padding:6px 8px; border-bottom:1px solid var(--border);"><code>kontrol [ekran URL / odak]</code></td><td style="padding:6px 8px; border-bottom:1px solid var(--border);"><strong>Kabul Kontrolü</strong>: geliştirmesi biten task'ın kabul kriterlerini test ortamında fiilen dener (BE kriterleri endpoint'ten, FE ekrandan; AI-TEST kayıtlarıyla); kriter bazlı raporu yorum olarak yazar, <strong>durumu değiştirmez</strong>. URL verirseniz gözlem o ekrandan başlar.</td></tr>
         <tr><td style="padding:6px 8px; border-bottom:1px solid var(--border);"><code>iptal</code> / <code>yardım</code></td><td style="padding:6px 8px; border-bottom:1px solid var(--border);">Taslağı iptal eder / komut listesini yazar.</td></tr>
       </tbody>
     </table>

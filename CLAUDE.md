@@ -489,8 +489,9 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   Jira yorumu ile AYNI beyin (`jira_kopru.ui_komut`→`_komut_uygula`+`jira_yorum_ekle`, `_TUR_LOCK`);
   `GET /api/jira-kopru/liste` + arka plan iş `POST /api/jira-kopru/is`→`GET /api/jira-kopru/is/<id>` (`_kopru_isler`).
   Test: `tests/test_jira_kopru.py` (offline durum-makinesi, 0 token). Tam uç dökümü → `docs/ENDPOINTS.md` "Jira Köprüsü".
-  **Ekip/kullanıcı hızlı rehberi + SSS → `docs/JIRA-KULLANIM.md`; uygulama-içi kılavuz `KILAVUZ.html`
-  §18 (Jira Köprüsü) + §19 (Bildirimler).**
+  **Ekip/kullanıcı hızlı rehberi + SSS → `docs/JIRA-KULLANIM.md` (`kontrol [URL/odak]` dahil); uygulama-içi kılavuz `KILAVUZ.html`
+  §6.7 adım 5 (Task Analizi aksiyonları: FE+BE Ayrı · Yeni Task · BFF Keşfi · Kabul Kontrolü · Akışı Kapat · Mockup · Eğitime Ekle +
+  'Jira'ya ne gider' kutusu) · §6.9 (İnteraktif Analiz) · §10 (canlı gözlem rozeti) · §16 (gözlem yapılamadı) · §18 (Jira Köprüsü) + §19 (Bildirimler).**
 - **FE/BE düz Task bölme (`skills/jira_fe_be.py` — süreç ekranı onay→Jira):** Süreç→Teknik akışında
   teknik analiz onaylanınca "Evet — FE/BE Task'larını Öner" (`teknikOnaylaFeBe`) → **önizleme modalı**
   (`#febe-modal`) açılır; workflow YALNIZ task'lar açıldıktan sonra bitirilir (auto tek-Task YOK) — iptal

@@ -46,6 +46,7 @@ Bir Jira task'ının **yorum** satırına yaz:
 | `/analyst_agent güncelle` | Son analizi gövdeye yeniden yazar (taze ise 0-token). |
 | `/analyst_agent ilişkili-aç` | İlişkili YENİ task **önerir (taslak)** — henüz açmaz. |
 | `/analyst_agent onayla` | Bekleyen taslağı (ilişkili task) **uygular** → Jira'da açar + bağlar. |
+| `/analyst_agent kontrol [ekran URL / odak]` | **Kabul Kontrolü** — geliştirmesi biten task'ın kabul kriterlerini test ortamında testçi gibi fiilen dener (BE kriterleri endpoint'ten, FE ekrandan; GET/POST/PUT/DELETE AI-TEST kayıtlarıyla). Kriter bazlı rapor (toplam/karşılanan/doğrulanamayan, öne çıkan bulgular, netleştirilecek konular, sonuç) **yorum** olarak gelir; **durum değişmez** — teste iletme kararı senin. URL yazarsan gözlem o ekrandan başlar. |
 | `/analyst_agent iptal` | Bekleyen taslağı iptal eder. |
 | `/analyst_agent yardım` | Komut listesini yorum olarak yazar. (`/analyst_agent` tek başına da yardım verir.) |
 
@@ -64,6 +65,7 @@ Bir Jira task'ının **yorum** satırına yaz:
 6. **Cevapla:** `/analyst_agent cevap Q-T-001: … Q-T-002: …` → analiz güncellenir, cevaplanan sorular düşer.
 7. **İlişkili task (opsiyonel):** `/analyst_agent ilişkili-aç` → öneri taslağı → `/analyst_agent onayla` → gerçek task açılır + bağlanır.
 8. **Bildirim:** analiz bitince kendi bilgisayarında masaüstü bildirimi alırsın (aşağı bak).
+9. **Geliştirme bitince (opsiyonel):** `/analyst_agent kontrol https://dev-…/ekran` → agent kriterleri ortamda dener, raporu yorum olarak yazar; sen teste iletirsin ya da geri gönderirsin.
 
 > Alternatif: aynı işi uygulama içi **Jira Köprüsü** ekranından da yapabilirsin (aynı beyin) —
 > açık soruları oradan tek tek cevaplayıp "Cevapla & Devam Et" diyebilirsin.
