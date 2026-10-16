@@ -5658,19 +5658,27 @@ def jira_gorev_fe_be_olustur():
     be_md = data.get("be_markdown") or ""
     fe_md = data.get("fe_markdown") or ""
     summary = (data.get("summary") or "").strip()
-    if not key or not be_md.strip() or not fe_md.strip():
-        return jsonify({"ok": False, "error": "key, be_markdown ve fe_markdown gerekli"}), 400
+    # Katman seçimi (owner isteri): ["be","fe"] (vars.) · ["fe"] yalnız FE task'ı aç · ["be"] yalnız BE'yi yaz
+    katmanlar = [str(k).strip().lower() for k in (data.get("katmanlar") or ["be", "fe"]) if str(k).strip().lower() in ("be", "fe")]
+    if not key or not katmanlar:
+        return jsonify({"ok": False, "error": "key ve en az bir katman (be/fe) gerekli"}), 400
+    if "be" in katmanlar and not be_md.strip():
+        return jsonify({"ok": False, "error": "BE analizi boş — 'BE'yi yaz' seçildi"}), 400
+    if "fe" in katmanlar and not fe_md.strip():
+        return jsonify({"ok": False, "error": "FE analizi boş — 'FE task'ı aç' seçildi"}), 400
     hata = _jira_baglanti_eksik()
     if hata:
         return jsonify({"ok": False, "error": hata}), 400
     _bas = time.time()
     try:
         from skills.jira_gorevleri import gorev_fe_be_task_olustur
-        r = gorev_fe_be_task_olustur(key, be_md, fe_md, summary=summary)
-        # BE + FE analizlerini ayrı örnekler olarak ortak havuza (few-shot).
+        r = gorev_fe_be_task_olustur(key, be_md, fe_md, summary=summary, katmanlar=katmanlar)
+        # Yazılan katmanların analizleri ayrı örnekler olarak ortak havuza (few-shot).
         _pr = key.split("-")[0].upper()
-        _ornek_yakala_md("teknik", be_md, ozet=("BE " + (summary or key.upper())), proje=_pr, jira_key=r.get("be_key", key.upper()))
-        _ornek_yakala_md("teknik", fe_md, ozet=("FE " + (summary or key.upper())), proje=_pr, jira_key=r.get("fe_key", ""))
+        if r.get("be_key"):
+            _ornek_yakala_md("teknik", be_md, ozet=("BE " + (summary or key.upper())), proje=_pr, jira_key=r.get("be_key"))
+        if r.get("fe_key"):
+            _ornek_yakala_md("teknik", fe_md, ozet=("FE " + (summary or key.upper())), proje=_pr, jira_key=r.get("fe_key"))
         _telemetri_olay("gorev_guncelle", "ok", int((time.time() - _bas) * 1000),
                         baglam={"gorev": key.upper(), "islem": "fe-be-ayir"},
                         jira={"toplam": 1, "keyler": [r["be_key"], r["fe_key"]], "islem": "fe-be açıldı"})
@@ -5773,11 +5781,13 @@ def jira_gorev_yeni_task():
     mode = (data.get("mode") or "tek").strip()
     if not proje:
         return jsonify({"ok": False, "error": "Proje seçin."}), 400
+    if mode not in ("tek", "fe-be", "be", "fe"):
+        return jsonify({"ok": False, "error": "mode tek|fe-be|be|fe olmalı."}), 400
     if mode == "fe-be":
         if not (data.get("be_markdown") or "").strip() or not (data.get("fe_markdown") or "").strip():
             return jsonify({"ok": False, "error": "BE ve FE analizleri gerekli."}), 400
     elif not (data.get("markdown") or "").strip():
-        return jsonify({"ok": False, "error": "Analiz içeriği boş."}), 400
+        return jsonify({"ok": False, "error": f"{mode.upper() if mode in ('be', 'fe') else 'Analiz'} içeriği boş."}), 400
     hata = _jira_baglanti_eksik()
     if hata:
         return jsonify({"ok": False, "error": hata}), 400

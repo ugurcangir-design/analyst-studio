@@ -1030,9 +1030,15 @@ Doküman yükle <span class="arr">→</span> Süreç Analizi <span class="arr">�
             en olası yanıt yazılıdır, yalnız gerçek ürün kararları boş kalır (<em>kararınız gerekli</em> + agent notu). Kontrol edip düzeltin,
             <strong>Cevapları İşle</strong> ile analiz cevaplara göre yeniden yazılır. Ek maliyet: kısa bir çağrı + gerekirse bir gözlem turu.</li>
         <li><strong>FE+BE Ayrı</strong> — tek task hem FE hem BE içeriyorsa iki ayrı katman analizi üretir (BE sözleşmeyi tanımlar,
-            FE onu kullanır). Onayda BE orijinal task'a yazılır, FE için yeni task açılır, BE→FE <em>Blocks</em> bağı kurulur.</li>
+            FE onu kullanır). Onay satırında <strong>katman kutuları</strong> çıkar: <em>BE → kaynak task'a yaz</em> ve <em>FE → yeni task
+            aç</em>. İkisi işaretliyse BE orijinal task'a yazılır, FE için yeni task açılır, BE→FE <em>Blocks</em> bağı kurulur; yalnız FE
+            işaretliyse kaynak task'a dokunulmadan "FE - …" task'ı açılıp kaynağa <em>Relates</em> ile bağlanır; yalnız BE işaretliyse
+            sadece kaynak güncellenir. Varsayılan bakmakta olduğunuz sekmedir; analizin başındaki <code>Bu katmanda iş: VAR / YOK</code>
+            satırına göre agent "bu katmanda iş yok" dediği kutuyu boş bırakır. Önce tek katmanı yazıp sonra diğerini de aynı setten
+            yazabilirsiniz. <span class="pill new">Yeni</span></li>
         <li><strong>➕ Yeni Task Aç</strong> — kaynak task'a dokunmadan analizden ilişkili yeni Task açar (proje seçimi, opsiyonel
-            Epic/Story üst öğesine <em>Relates</em>). FE+BE aktifse iki task açar ve birbirine bağlar.</li>
+            Epic/Story üst öğesine <em>Relates</em>). FE+BE setinde <em>BE + FE / Yalnız BE / Yalnız FE</em> seçimi vardır; iki
+            seçilirse task'lar birbirine bağlanır, tek seçilirse yalnız o katmanın önekli task'ı açılır.</li>
         <li><strong>🔌 BFF Keşfi (CRUD)</strong> — agent hedef ekranda <em>kendisi</em> kayıt oluşturur (<code>AI-TEST-…</code>), doğrulama
             hatası dener, günceller, ayrı bir kaydı siler ve her adımın gerçek isteğini (method/path/payload/status) yakalayıp
             <strong>BFF sözleşme raporu</strong> çıkarır. Analiz öncesi <em>otomatik</em> çalışır (7 gün önbellek; Bağlam Filtresi →

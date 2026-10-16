@@ -6,6 +6,12 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## Katman seçimli Jira yazımı — yalnız FE / yalnız BE task'ı ✅
+- FE+BE setinde onay satırına BE/FE kutuları (varsayılan bakılan sekme; agent "Bu katmanda iş: YOK" → işaretsiz; yazılan
+  katman işaretsiz), düğme metni seçime göre; `fe-be-olustur {katmanlar}` (yalnız FE → kaynak task'a Relates); Yeni Task Aç
+  panelinde BE+FE / yalnız BE / yalnız FE (`mode be|fe`); katman promptuna "Bu katmanda iş: VAR|YOK" satırı. Test
+  `tests/test_katman_secimi.py`. Ayrıntı: MIMARI.md.
+
 ## Profil Havuzu — paralel canlı gözlem (Task + İnteraktif + Kabul + Süreç aynı anda) ✅
 - "Browser is already in use" çakışması çözüldü: her canlı çağrı `.live-app-profiles/slot-N` kilitler (pid'li lock,
   süreçler arası), ana profilin oturumu (çerez/localStorage) slota kopyalanır, finally ile serbest bırakılır; ana profil

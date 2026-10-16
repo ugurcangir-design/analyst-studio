@@ -944,6 +944,9 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
                   "BE'nin FE'ye SUNACAĞI endpoint/alan/yanıt sözleşmesi (method/path, istek/yanıt alanları, "
                   "durum kodları) ve hangi FE task'ının tükettiği. FE'nin nasıl render edeceğini YAZMA.")
                if iliskili else "Karşı katman işini bu analize KATMA.")
+            + "\n\nANALİZİN EN BAŞINA TEK SATIR yaz: `**Bu katmanda iş:** VAR — <tek cümle: ne>` ya da, bu görev için "
+              f"{kat_et} tarafında HİÇ değişiklik gerekmiyorsa `**Bu katmanda iş:** YOK — <tek cümle gerekçe>` (o zaman kalan "
+              "analizi 2-3 cümleyle sınırla; dolgu bölüm açma). Analist bu satıra bakarak yalnız gereken katmanın task'ını açar."
         )})
     # HATA/BASİT İŞ MODU — çıktıyı işin boyutuna göre ÖLÇEKLE. Küçük iş, task'ta büyük iş gibi durmasın.
     if _hata_gorev_mi(gorev):
@@ -1041,56 +1044,89 @@ def gorev_fe_be_analiz(gorev: dict, cevaplar: str = "", onceki_sorular: str = ""
     fe = gorev_analiz_et(gorev, cevaplar=cevaplar, katman="fe", iliskili=[be_baglam],
                          onceki_sorular=onceki_sorular, ekran_baglami=ekran_baglami,
                          rag_ctx=rag_ctx, canli_baglam_override=canli_baglam_override, bff_rapor=bff_rapor)
-    return {"be": {"markdown": be.get("markdown", ""), "acik_sorular": be.get("acik_sorular", "")},
-            "fe": {"markdown": fe.get("markdown", ""), "acik_sorular": fe.get("acik_sorular", "")}}
+    return {"be": {"markdown": be.get("markdown", ""), "acik_sorular": be.get("acik_sorular", ""),
+                   "is_var": katman_is_var_mi(be.get("markdown", ""))},
+            "fe": {"markdown": fe.get("markdown", ""), "acik_sorular": fe.get("acik_sorular", ""),
+                   "is_var": katman_is_var_mi(fe.get("markdown", ""))}}
+
+
+_KATMAN_IS = re.compile(r"\*\*\s*Bu katmanda iş\s*:?\s*\*\*\s*:?\s*(VAR|YOK)\b", re.I)
+
+
+def katman_is_var_mi(markdown: str):
+    """FE+BE ayrı analizin başındaki `**Bu katmanda iş:** VAR|YOK` satırı → True/False; satır yoksa None.
+    UI bu değere göre katman kutusunu ön-işaretler (YOK → işaretsiz + 'agent: bu katmanda iş yok' notu)."""
+    m = _KATMAN_IS.search(markdown or "")
+    if not m:
+        return None
+    return m.group(1).upper() == "VAR"
 
 
 def gorev_fe_be_task_olustur(key: str, be_markdown: str, fe_markdown: str,
-                             summary: str = "") -> dict:
-    """FE+BE bölünmüş analizi Jira'ya yazar (Option A — iki bağlı task):
-    - **BE** analizi ORİJİNAL task'a yazılır, başlık 'BE - <özet>' önekli.
-    - **FE** analizi YENİ bir Task olarak açılır, başlık 'FE - <özet>'.
-    - **BE → FE Blocks** bağı kurulur (BE bloklar, FE bloklanan).
-    Her task YALNIZ kendi katman analizini içerir (tekrar yok; ortak olan arayüz sözleşmesi).
-    Dönen: {be_key, fe_key, link, link_uyari?}."""
+                             summary: str = "", katmanlar=("be", "fe")) -> dict:
+    """FE+BE bölünmüş analizi Jira'ya yazar — KATMAN SEÇİMLİ (owner isteri: bazen yalnız FE ya da yalnız BE):
+    - 'be' seçiliyse **BE** analizi ORİJİNAL task'a yazılır, başlık 'BE - <özet>' önekli.
+    - 'fe' seçiliyse **FE** analizi YENİ bir Task olarak açılır, başlık 'FE - <özet>'.
+    - İKİSİ seçiliyse **BE → FE Blocks** bağı kurulur; YALNIZ FE'de yeni task kaynak task'a **Relates** ile bağlanır
+      (izlenebilirlik; BE task'ı olmadığından Blocks yok). Yalnız BE'de yeni task açılmaz.
+    Her task YALNIZ kendi katman analizini içerir. Dönen: {be_key|None, fe_key|None, link, link_uyari, katmanlar}."""
     from .jira_tasks import _issue_olustur, _proje_bilgi, _katman_prefix
     from .jira_fe_be import _blocks_bagla, _blocks_link_tipi
     key = (key or "").strip().upper()
     if not _ID_DESENI.match(key):
         raise ValueError(f"Geçersiz Jira anahtarı: '{key}'")
+    kat = [k for k in ("be", "fe") if k in {str(x).strip().lower() for x in (katmanlar or ())}]
+    if not kat:
+        raise ValueError("En az bir katman seçilmeli (BE ve/veya FE).")
+    if "be" in kat and not (be_markdown or "").strip():
+        raise ValueError("BE analizi boş — 'BE'yi yaz' seçildi.")
+    if "fe" in kat and not (fe_markdown or "").strip():
+        raise ValueError("FE analizi boş — 'FE task'ı aç' seçildi.")
     orig = gorev_getir(key) or {}
     ozet = (summary or orig.get("summary", "")).strip() or key
     cloud_id = _cloud_id()
+    be_key = fe_key = None
+    link_ok, link_uyari = False, ""
 
     # 1) BE → orijinal task (başlık 'BE - ' önekli, idempotent)
-    gorev_jiraya_yaz(key, be_markdown, summary=_katman_prefix("be", ozet))
+    if "be" in kat:
+        gorev_jiraya_yaz(key, be_markdown, summary=_katman_prefix("be", ozet))
+        be_key = key
 
     # 2) FE → yeni Task (aynı temizlik: TL;DR + canlı gözlem + [K:] etiketleri çıkarılır)
-    fe_temiz = jira_icin_temizle(fe_markdown or "")
-    adf = markdown_to_adf(fe_temiz)
-    if not adf:
-        raise ValueError("FE içeriği boş; yeni task açılamadı.")
-    proje = key.split("-")[0]
-    pbilgi = _proje_bilgi(proje, cloud_id)
-    task_id = pbilgi.get("task_id")
-    if not task_id:
-        raise ValueError(f"'{proje}' projesinde Task tipi bulunamadı.")
-    fe_key = _issue_olustur(_katman_prefix("fe", ozet),
-                            {"type": "doc", "version": 1, "content": adf},
-                            task_id, proje, cloud_id)
-
-    # 3) BE (orijinal) → FE Blocks bağı (link tipi runtime doğrulanır; yoksa uyarıyla atlanır)
-    link_ok, link_uyari = False, ""
-    tip = _blocks_link_tipi(cloud_id)
-    if tip:
-        try:
-            _blocks_bagla(key, fe_key, tip, cloud_id)
-            link_ok = True
-        except Exception as e:
-            link_uyari = f"Blocks bağı kurulamadı: {str(e)[:120]}"
-    else:
-        link_uyari = "Projede 'Blocks' link tipi yok — bağ atlandı."
-    return {"be_key": key, "fe_key": fe_key, "link": link_ok, "link_uyari": link_uyari}
+    if "fe" in kat:
+        fe_temiz = jira_icin_temizle(fe_markdown or "")
+        adf = markdown_to_adf(fe_temiz)
+        if not adf:
+            raise ValueError("FE içeriği boş; yeni task açılamadı.")
+        proje = key.split("-")[0]
+        pbilgi = _proje_bilgi(proje, cloud_id)
+        task_id = pbilgi.get("task_id")
+        if not task_id:
+            raise ValueError(f"'{proje}' projesinde Task tipi bulunamadı.")
+        fe_key = _issue_olustur(_katman_prefix("fe", ozet),
+                                {"type": "doc", "version": 1, "content": adf},
+                                task_id, proje, cloud_id)
+        if "be" in kat:
+            # 3) BE (orijinal) → FE Blocks bağı (link tipi runtime doğrulanır; yoksa uyarıyla atlanır)
+            tip = _blocks_link_tipi(cloud_id)
+            if tip:
+                try:
+                    _blocks_bagla(key, fe_key, tip, cloud_id)
+                    link_ok = True
+                except Exception as e:
+                    link_uyari = f"Blocks bağı kurulamadı: {str(e)[:120]}"
+            else:
+                link_uyari = "Projede 'Blocks' link tipi yok — bağ atlandı."
+        else:
+            # Yalnız FE: kaynak task'a Relates (BE task'ı yok → Blocks anlamsız)
+            try:
+                from .jira_kopru import jira_issue_link
+                jira_issue_link(fe_key, key, tip="Relates")
+                link_ok = True
+            except Exception as e:
+                link_uyari = f"Kaynak task bağı kurulamadı: {str(e)[:120]}"
+    return {"be_key": be_key, "fe_key": fe_key, "link": link_ok, "link_uyari": link_uyari, "katmanlar": kat}
 
 
 def _analiz_adf(markdown: str) -> dict:
@@ -1131,6 +1167,7 @@ def gorev_yeni_task_olustur(proje: str, mode: str = "tek", markdown: str = "",
     - mode='tek'   → tek Task; gövde=markdown.
     - mode='fe-be' → İKİ yeni Task (BE + FE, başlıkları 'BE - '/'FE - ' önekli);
                      ikisi birbirine (Blocks varsa Blocks, yoksa Relates) bağlanır.
+    - mode='be'|'fe' → FE+BE setinden YALNIZ o katman için tek yeni Task (önekli); gövde=markdown.
     Her açılan task, verilmişse üst öğeye (ust_key) ve kaynak analiz task'ına
     (kaynak_key) Relates ile bağlanır. Üst öğe hiyerarşi 'parent'ı DEĞİL — Task,
     Story'nin child'ı olamaz; 'ilişkili' istendiği için issue-link kullanılır.
@@ -1198,6 +1235,15 @@ def gorev_yeni_task_olustur(proje: str, mode: str = "tek", markdown: str = "",
         _baglan(be_key)
         _baglan(fe_key)
         return {"tasklar": tasklar, "ust_key": ust_key, "febe_link": febe_link, "uyarilar": uyarilar}
+
+    if mode in ("be", "fe"):
+        # TEK KATMAN (FE+BE setinden yalnız biri): katman önekli tek yeni task; üst öğe + kaynak task'a Relates
+        if not (markdown or "").strip():
+            raise ValueError(f"{mode.upper()} analizi boş.")
+        yeni_key = _issue_olustur(_katman_prefix(mode, ozet), _analiz_adf(markdown), task_id, proje, cloud_id)
+        tasklar.append({"key": yeni_key, "katman": mode.upper(), "summary": _katman_prefix(mode, ozet)})
+        _baglan(yeni_key)
+        return {"tasklar": tasklar, "ust_key": ust_key, "febe_link": None, "uyarilar": uyarilar}
 
     # mode == "tek"
     if not (markdown or "").strip():

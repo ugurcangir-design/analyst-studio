@@ -916,6 +916,27 @@ gözlem + token yakıyordu); hedef yoksa "canlı gözlem yapılmadan analiz yap�
 - Kanıt: iki eşzamanlı headless gözlem (example.com) ayrı slotlarda çakışmadan tamamlandı.
 Test: `tests/test_live_app_slot.py`.
 
+### Katman seçimli Jira yazımı — FE+BE setinden yalnız FE / yalnız BE (2026-10-16)
+**Sorun (owner):** FE+BE ayrı analizde "Onayla" her zaman iki işi birden yapıyordu (BE'yi kaynak task'a yaz + FE için yeni
+task + Blocks); "Yeni Task Aç" da hep iki task açıyordu. Oysa iş bazen tek katmandadır (FE analizi "BE'de düzenleme gerekmez"
+diyordu) ve içerik sonradan değişebilir.
+**Çözüm:**
+- **Onay satırı:** FE+BE setinde `#jg-katman-sec` (BE → kaynak'a yaz · FE → yeni task aç). `_jgKatmanSecimHazirla`: varsayılan
+  bakılan sekmenin katmanı; agent `is_var === false` dediyse o katman işaretsiz + not; `entry.jiraYazildi` olan katman işaretsiz.
+  `_jgKatmanEtiketGuncelle` düğme metnini seçime göre yazar; sıfır seçimde düğme kapalı.
+- **Backend:** `gorev_fe_be_task_olustur(key, be_md, fe_md, summary, katmanlar)` — `be`: `gorev_jiraya_yaz` ('BE - ' başlık) ·
+  `fe`: `_issue_olustur` ('FE - ') · ikisi: `_blocks_bagla` (BE→FE) · yalnız FE: `jira_issue_link(fe_key, key, Relates)`
+  (izlenebilirlik; BE task'ı yok → Blocks yok) · yalnız BE: task açılmaz. Eksik katman içeriği → ValueError. Uç `fe-be-olustur`
+  `katmanlar` alır, doğrular, yalnız yazılan katmanları `_ornek_yakala_md`'ye verir. `gorev_yeni_task_olustur(mode='be'|'fe',
+  markdown)` → katman önekli TEK yeni task + üst öğe/kaynak Relates; uç `mode` doğrular (tek|fe-be|be|fe).
+- **Yeni Task Aç paneli:** FE+BE setinde radyo (BE+FE / Yalnız BE / Yalnız FE), varsayılan bakılan sekme (agent "iş yok" dediyse
+  diğerine düşer); not satırı seçimi açıklar; gövde `mode:'fe-be'|'be'|'fe'`.
+- **Agent önerisi:** `gorev_analiz_et` KATMAN ODAĞI bloğu analizin başına `**Bu katmanda iş:** VAR|YOK — gerekçe` ister (YOK ise
+  kalan analiz 2-3 cümle); `katman_is_var_mi` → `gorev_fe_be_analiz` sonucu `is_var` (UI `isVar`). Satır Jira'ya da gider
+  (geliştirici için bilgi); `jira_icin_temizle` dokunmaz.
+- Kısmi yazım kalıcı: `jiraYazildi` sette (`_jgSetKaydet`) → sayfa yenilense de "FE KEY açıldı ✓" görünür, diğer katman
+  sonra yazılabilir. Test: `tests/test_katman_secimi.py`.
+
 ## Bilinen Kısıtlamalar
 - CLI modu görsel (PNG/JPG) analiz EDEMEZ (text-only); görsel BRD için API modu gerekir.
 - `markdown_to_adf` nested list'leri düzleştirir.

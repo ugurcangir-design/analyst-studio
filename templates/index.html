@@ -1987,6 +1987,11 @@ html[data-theme="light"] .suspend-overlay { background: rgba(245,247,250,.92); }
 .jg-yenitask { margin: 4px 22px 0; padding: 14px 16px; border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 10px; }
 .jg-yt-head { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text); margin-bottom: 12px; }
 .jg-yt-head .ico { width: 15px; height: 15px; color: var(--accent); }
+.jg-yt-katman { display:flex; gap:14px; flex-wrap:wrap; align-items:center; font-size:12.5px; color:var(--text2); margin:6px 0 10px; }
+.jg-yt-katman label { display:inline-flex; align-items:center; gap:5px; cursor:pointer; }
+.jg-katman-sec { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12.5px; color: var(--text2); padding: 6px 10px; border: 1px dashed var(--border-strong); border-radius: 8px; margin-right: 6px; }
+.jg-katman-sec label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; white-space: nowrap; }
+.jg-katman-not { font-size: 11.5px; color: var(--yellow); }
 .jg-yt-mode { margin-left: auto; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--accent); background: var(--surface2); border: 1px solid var(--border-strong); padding: 3px 9px; border-radius: 999px; }
 .jg-yt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .jg-yt-field { display: flex; flex-direction: column; gap: 5px; }
@@ -3032,6 +3037,12 @@ function temaDegistir() {
             <strong>Yeni Task Aç</strong>
             <span class="jg-yt-mode" id="jg-yt-mode">Tek Task</span>
           </div>
+          <div class="jg-yt-katman" id="jg-yt-katman-row" style="display:none">
+            <span>Açılacak katman:</span>
+            <label><input type="radio" name="jg-yt-katman" value="fe-be" onchange="_jgYtKatmanNot()"> BE + FE (2 task, birbirine bağlı)</label>
+            <label><input type="radio" name="jg-yt-katman" value="be" onchange="_jgYtKatmanNot()"> Yalnız BE</label>
+            <label><input type="radio" name="jg-yt-katman" value="fe" onchange="_jgYtKatmanNot()"> Yalnız FE</label>
+          </div>
           <div class="jg-yt-grid">
             <label class="jg-yt-field">
               <span>Proje / Board</span>
@@ -3123,8 +3134,13 @@ function temaDegistir() {
           <button class="btn btn-outline" id="jg-mockup-panel-btn" onclick="jgMockupPanelAc()" title="Analiz edilen göreve EK yeni bir isteye göre, mevcut uygulama tasarımını baz alan HTML ekran mockup'ı üretir.">
             <svg class="ico"><use href="#i-zap"/></svg> Ekran Mockup'ı
           </button>
+          <span class="jg-katman-sec" id="jg-katman-sec" style="display:none" title="FE+BE ayrı analiz: hangi katman(lar) Jira'ya yazılsın? Bazen yalnız FE ya da yalnız BE işi vardır.">
+            <label><input type="checkbox" id="jg-kat-be" onchange="_jgKatmanEtiketGuncelle()"> BE → <span id="jg-kat-be-hedef">kaynak task</span>'a yaz</label>
+            <label><input type="checkbox" id="jg-kat-fe" onchange="_jgKatmanEtiketGuncelle()"> FE → yeni task aç</label>
+            <span class="jg-katman-not" id="jg-katman-not"></span>
+          </span>
           <button class="btn btn-success" id="jg-approve-btn" onclick="jgJiraGuncelle()">
-            <svg class="ico"><use href="#i-check"/></svg> Onayla ve Jira'da Güncelle
+            <svg class="ico"><use href="#i-check"/></svg> <span id="jg-approve-lbl">Onayla ve Jira'da Güncelle</span>
           </button>
         </div>
         <div id="jg-preview-msg" class="jg-msg" style="padding:0 22px 14px"></div>
@@ -5536,6 +5552,7 @@ function _jgSonucGoster(key) {
   const _sentetik = /^EKRAN-\d+/.test(key);   // İnteraktif Analiz ekran kaydı — Jira'da task yok
   const _ab = document.getElementById('jg-approve-btn');
   _ab.disabled = !!s.hata || !s.markdown || _sentetik;
+  _jgKatmanSecimHazirla(key, s);   // FE+BE setinde katman kutuları (varsayılan: bakılan sekme; agent 'iş yok' → işaretsiz)
   _ab.title = _sentetik ? "Bu bir ekran analizi (Jira'da task yok) — Jira'ya açmak için 'Yeni Task Aç' kullanın" : '';
   const ytBtn = document.getElementById('jg-yenitask-btn');
   if (ytBtn) ytBtn.disabled = !!s.hata || !s.markdown;
@@ -5837,8 +5854,8 @@ async function _jgPollDurum() {
     if (rs.fe_be) {
       // FE+BE ayrı analiz → İKİ entry: BE (orijinal task'a yazılır) + FE (yeni task açılır)
       const fb = rs.fe_be;
-      _jgAnalizSeti[k] = { markdown: (fb.be || {}).markdown || '', acik_sorular: (fb.be || {}).acik_sorular || '', summary: rs.summary || '', katman: 'be', feBeKaynak: k, hata: rs.hata };
-      _jgAnalizSeti[k + '::FE'] = { markdown: (fb.fe || {}).markdown || '', acik_sorular: (fb.fe || {}).acik_sorular || '', summary: rs.summary || '', katman: 'fe', feBeKaynak: k, feBeYeni: true };
+      _jgAnalizSeti[k] = { markdown: (fb.be || {}).markdown || '', acik_sorular: (fb.be || {}).acik_sorular || '', summary: rs.summary || '', katman: 'be', feBeKaynak: k, hata: rs.hata, isVar: (fb.be || {}).is_var };
+      _jgAnalizSeti[k + '::FE'] = { markdown: (fb.fe || {}).markdown || '', acik_sorular: (fb.fe || {}).acik_sorular || '', summary: rs.summary || '', katman: 'fe', feBeKaynak: k, feBeYeni: true, isVar: (fb.fe || {}).is_var };
     } else {
       const eski = _jgAnalizSeti[k] || {};
       _jgAnalizSeti[k] = { markdown: rs.markdown || '', acik_sorular: rs.acik_sorular || '', summary: rs.summary || '', katman: rs.katman || (d.katmanlar || {})[k] || eski.katman || '', hata: rs.hata,
@@ -6151,30 +6168,86 @@ async function jgJiraGuncelle() {
 
 // FE+BE ayrı analiz onayı: BE → ORİJİNAL task'a yazılır (başlık "BE - "), FE → YENİ Task açılır
 // (başlık "FE - "), BE→FE Blocks bağı kurulur. GERİ DÖNDÜRÜLEMEZ.
+// FE+BE setinde katman seçimi: kutular hangi sekmede olduğunuza göre ön-işaretlenir; agent "Bu katmanda iş: YOK" dediyse
+// o katman işaretsiz gelir (not gösterilir); daha önce yazılan katman da işaretsiz (tekrar yazılmasın). Karar analistin.
+function _jgKatmanIsVar(md) { const m = String(md || '').match(/\*\*\s*Bu katmanda iş\s*:?\s*\*\*\s*:?\s*(VAR|YOK)\b/i); return m ? m[1].toUpperCase() === 'VAR' : null; }
+function _jgKatmanSecimHazirla(key, s) {
+  const kap = document.getElementById('jg-katman-sec'); if (!kap) return;
+  if (!s.feBeKaynak || s.hata) { kap.style.display = 'none'; _jgKatmanEtiketGuncelle(); return; }
+  const be = _jgAnalizSeti[s.feBeKaynak] || {}, fe = _jgAnalizSeti[s.feBeKaynak + '::FE'] || {};
+  const beVar = be.isVar !== undefined ? be.isVar : _jgKatmanIsVar(be.markdown), feVar = fe.isVar !== undefined ? fe.isVar : _jgKatmanIsVar(fe.markdown);
+  const yaz = be.jiraYazildi || fe.jiraYazildi || {};
+  const aktifFe = /::FE$/.test(key);
+  document.getElementById('jg-kat-be-hedef').textContent = s.feBeKaynak;
+  document.getElementById('jg-kat-be').checked = !aktifFe && beVar !== false && !yaz.be;
+  document.getElementById('jg-kat-fe').checked = aktifFe && feVar !== false && !yaz.fe;
+  const notlar = [];
+  if (beVar === false) notlar.push('agent: BE tarafında iş yok');
+  if (feVar === false) notlar.push('agent: FE tarafında iş yok');
+  if (yaz.be) notlar.push(`BE ${s.feBeKaynak}'e yazıldı ✓`);
+  if (yaz.fe) notlar.push(`FE ${yaz.fe} açıldı ✓`);
+  document.getElementById('jg-katman-not').textContent = notlar.join(' · ');
+  kap.style.display = '';
+  _jgKatmanEtiketGuncelle();
+}
+function _jgKatmanSecili() {
+  const kap = document.getElementById('jg-katman-sec');
+  if (!kap || kap.style.display === 'none') return null;
+  const k = []; if (document.getElementById('jg-kat-be').checked) k.push('be'); if (document.getElementById('jg-kat-fe').checked) k.push('fe');
+  return k;
+}
+function _jgKatmanEtiketGuncelle() {
+  const lbl = document.getElementById('jg-approve-lbl'); if (!lbl) return;
+  const k = _jgKatmanSecili();
+  if (k === null) { lbl.textContent = "Onayla ve Jira'da Güncelle"; return; }
+  const kaynak = (document.getElementById('jg-kat-be-hedef') || {}).textContent || 'kaynak task';
+  lbl.textContent = k.length === 2 ? "Onayla: BE'yi yaz + FE task'ı aç" : k[0] === 'be' ? `Onayla: yalnız BE'yi ${kaynak}'e yaz`
+                  : k[0] === 'fe' ? "Onayla: yalnız FE task'ı aç" : 'Katman seçin';
+  const btn = document.getElementById('jg-approve-btn'); if (btn && !btn.dataset.kilit) btn.disabled = k.length === 0;
+}
 async function jgFeBeOnayla() {
   if (_jgMesgul()) { toast('İşlem sürüyor', 'info'); return; }
   // Aktif editör içeriğini (BE ya da FE) sete GÜVENLİ kaydet — analistin düzenlemesi kaybolmasın
   _jgEditorKaydet(_jgAktifAnalizKey);
   const kaynak = (_jgAnalizSeti[_jgAktifAnalizKey] || {}).feBeKaynak;
   const be = _jgAnalizSeti[kaynak] || {}, fe = _jgAnalizSeti[kaynak + '::FE'] || {};
+  const katmanlar = _jgKatmanSecili() || ['be', 'fe'];
+  if (!katmanlar.length) { _jgMsg('jg-preview-msg', 'En az bir katman seçin (BE ve/veya FE).', 'err'); return; }
   let be_md = (be.markdown || '').trim(), fe_md = (fe.markdown || '').trim();
-  if (!be_md || !fe_md) { _jgMsg('jg-preview-msg', 'BE ve FE analizleri dolu olmalı.', 'err'); return; }
-  if (!_jgZorunluKapi([be.acik_sorular || '', fe.acik_sorular || ''], 'BE/FE task\'ları yazılacak')) return;
+  if (katmanlar.includes('be') && !be_md) { _jgMsg('jg-preview-msg', 'BE analizi boş.', 'err'); return; }
+  if (katmanlar.includes('fe') && !fe_md) { _jgMsg('jg-preview-msg', 'FE analizi boş.', 'err'); return; }
+  const acikList = [].concat(katmanlar.includes('be') ? [be.acik_sorular || ''] : [], katmanlar.includes('fe') ? [fe.acik_sorular || ''] : []);
+  if (!_jgZorunluKapi(acikList, 'seçilen katman(lar) Jira\'ya yazılacak')) return;
   be_md += _jgZorunluEk(be.acik_sorular || ''); fe_md += _jgZorunluEk(fe.acik_sorular || '');
-  if (!confirm(`${kaynak}: BE analizi bu task'a yazılacak (başlık "BE - …"), FE analizi YENİ bir Task olarak açılacak (başlık "FE - …") ve BE→FE Blocks bağı kurulacak. Devam edilsin mi?`)) return;
-  const btn = document.getElementById('jg-approve-btn'); btn.disabled = true;
-  _jgMsg('jg-preview-msg', 'İki task işleniyor (BE güncelle + FE aç)…');
+  const aciklama = katmanlar.length === 2
+    ? `${kaynak}: BE analizi bu task'a yazılacak (başlık "BE - …"), FE analizi YENİ bir Task olarak açılacak (başlık "FE - …") ve BE→FE Blocks bağı kurulacak.`
+    : katmanlar[0] === 'be' ? `${kaynak}: YALNIZ BE analizi bu task'ın açıklaması ÜZERİNE yazılacak (başlık "BE - …"). FE task'ı açılmayacak.`
+    : `YALNIZ FE analizi için YENİ bir Task açılacak (başlık "FE - …") ve ${kaynak}'e Relates ile bağlanacak. ${kaynak}'in açıklamasına DOKUNULMAYACAK.`;
+  if (!confirm(aciklama + ' Devam edilsin mi?')) return;
+  const btn = document.getElementById('jg-approve-btn'); btn.disabled = true; btn.dataset.kilit = '1';
+  _jgMsg('jg-preview-msg', katmanlar.length === 2 ? 'İki task işleniyor (BE güncelle + FE aç)…' : (katmanlar[0] === 'be' ? 'BE yazılıyor…' : 'FE task\'ı açılıyor…'));
   try {
     const r = await fetch('/api/jira/gorev/fe-be-olustur', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: kaynak, be_markdown: be_md, fe_markdown: fe_md, summary: be.summary || '' })
+      body: JSON.stringify({ key: kaynak, be_markdown: be_md, fe_markdown: fe_md, summary: be.summary || '', katmanlar })
     });
     const d = await r.json();
+    delete btn.dataset.kilit;
     if (!d.ok) { _jgMsg('jg-preview-msg', d.error || 'Hata', 'err'); btn.disabled = false; return; }
-    const linkTxt = d.link ? ' · BE→FE Blocks ✓' : (d.link_uyari ? ' · ⚠ ' + d.link_uyari : '');
-    _jgMsg('jg-preview-msg', `✓ BE: ${d.be_key} güncellendi · FE: ${d.fe_key} açıldı${linkTxt}`, 'ok');
-    toast(`FE/BE ayrıldı: ${d.be_key} (BE) + ${d.fe_key} (FE)`, 'success');
-  } catch (e) { _jgMsg('jg-preview-msg', _jgHataMetni(e), 'err'); btn.disabled = false; }
+    const yaz = Object.assign({}, be.jiraYazildi || {}, fe.jiraYazildi || {});
+    if (d.be_key) yaz.be = true;
+    if (d.fe_key) yaz.fe = d.fe_key;
+    be.jiraYazildi = yaz; fe.jiraYazildi = yaz; _jgSetKaydet();
+    const parca = [];
+    if (d.be_key) parca.push(`BE: ${d.be_key} güncellendi`);
+    if (d.fe_key) parca.push(`FE: ${d.fe_key} açıldı`);
+    const linkTxt = d.link ? (katmanlar.length === 2 ? ' · BE→FE Blocks ✓' : ` · ${kaynak}'e Relates ✓`) : (d.link_uyari ? ' · ⚠ ' + d.link_uyari : '');
+    const kalan = katmanlar.length === 1 ? (katmanlar[0] === 'fe' ? " · İsterseniz BE'yi de yazabilirsiniz (kutuyu işaretleyip tekrar Onayla)." : " · İsterseniz FE task'ını da açabilirsiniz.") : '';
+    _jgMsg('jg-preview-msg', `✓ ${parca.join(' · ')}${linkTxt}${kalan}`, 'ok');
+    toast(parca.join(' + '), 'success');
+    _jgKatmanSecimHazirla(_jgAktifAnalizKey, _jgAnalizSeti[_jgAktifAnalizKey] || {});
+    btn.disabled = (_jgKatmanSecili() || []).length === 0;
+  } catch (e) { delete btn.dataset.kilit; _jgMsg('jg-preview-msg', _jgHataMetni(e), 'err'); btn.disabled = false; }
 }
 
 // ── Yeni Task Aç — analiz OK sonrası seçilen board/proje'ye, girilen Epic/Story/Task'a
@@ -6201,10 +6274,18 @@ async function jgYeniTaskPanelAc() {
   document.getElementById('jg-yt-btn').disabled = false;
   // Mod etiketi + not
   const fb = _jgYtFebeSet();
-  document.getElementById('jg-yt-mode').textContent = fb ? 'FE + BE → 2 yeni task' : 'Tek Task';
-  document.getElementById('jg-yt-not').innerHTML = fb
-    ? 'Açılacak: <b>BE</b> ve <b>FE</b> iki <b>ayrı Task</b> — ikisi birbirine (Blocks/Relates) bağlanır. Üst öğe girilirse her ikisi de o Epic/Story/Task\'a <b>Relates</b> ile bağlanır. Tip sonra değiştirilebilir.'
-    : 'Açılan task <b>Task</b> tipindedir (tipini sonra değiştirebilirsiniz). Üst öğe girilirse yeni task o Epic/Story/Task\'a <b>Relates</b> ile bağlanır.';
+  const katRow = document.getElementById('jg-yt-katman-row');
+  katRow.style.display = fb ? '' : 'none';
+  if (fb) {
+    // Varsayılan: bakılan sekmenin katmanı; agent o katmanda iş yok dediyse diğerine düş
+    const aktifFe = /::FE$/.test(_jgAktifAnalizKey || '');
+    const beVar = fb.be.isVar !== undefined ? fb.be.isVar : _jgKatmanIsVar(fb.be.markdown), feVar = fb.fe.isVar !== undefined ? fb.fe.isVar : _jgKatmanIsVar(fb.fe.markdown);
+    let sec = aktifFe ? 'fe' : 'be';
+    if (sec === 'fe' && feVar === false && beVar !== false) sec = 'be';
+    if (sec === 'be' && beVar === false && feVar !== false) sec = 'fe';
+    const r = document.querySelector(`input[name="jg-yt-katman"][value="${sec}"]`); if (r) r.checked = true;
+  }
+  _jgYtKatmanNot();
   // Başlık öntanımı (kaynak başlıktan FE-/BE- öneki çıkarılır)
   const bas = document.getElementById('jg-yt-baslik');
   bas.value = (_jgCurrent.summary || '').replace(/^\s*(FE\+BE|FE|BE)\s*[-–—:]\s*/i, '').trim();
@@ -6215,6 +6296,26 @@ async function jgYeniTaskPanelAc() {
   await _jgYtProjelerYukle();
 }
 
+function _jgYtKatman() {
+  const fb = _jgYtFebeSet(); if (!fb) return 'tek';
+  const r = document.querySelector('input[name="jg-yt-katman"]:checked'); return r ? r.value : 'fe-be';
+}
+function _jgYtKatmanNot() {
+  const fb = _jgYtFebeSet(); const m = _jgYtKatman();
+  const notlar = [];
+  if (fb) {
+    const beVar = fb.be.isVar !== undefined ? fb.be.isVar : _jgKatmanIsVar(fb.be.markdown), feVar = fb.fe.isVar !== undefined ? fb.fe.isVar : _jgKatmanIsVar(fb.fe.markdown);
+    if (beVar === false) notlar.push('<span style="color:var(--yellow)">agent: BE tarafında iş yok</span>');
+    if (feVar === false) notlar.push('<span style="color:var(--yellow)">agent: FE tarafında iş yok</span>');
+  }
+  document.getElementById('jg-yt-mode').textContent = m === 'fe-be' ? 'FE + BE → 2 yeni task' : m === 'be' ? 'Yalnız BE → 1 yeni task' : m === 'fe' ? 'Yalnız FE → 1 yeni task' : 'Tek Task';
+  document.getElementById('jg-yt-not').innerHTML = (m === 'fe-be'
+    ? 'Açılacak: <b>BE</b> ve <b>FE</b> iki <b>ayrı Task</b> — ikisi birbirine (Blocks/Relates) bağlanır. Üst öğe girilirse her ikisi de o Epic/Story/Task\'a <b>Relates</b> ile bağlanır. Tip sonra değiştirilebilir.'
+    : (m === 'be' || m === 'fe')
+      ? `Açılacak: yalnız <b>${m.toUpperCase()}</b> analizi için tek yeni Task (başlık "${m.toUpperCase()} - …"); kaynak task'a ve üst öğeye <b>Relates</b> ile bağlanır. Diğer katman için task açılmaz.`
+      : 'Açılan task <b>Task</b> tipindedir (tipini sonra değiştirebilirsiniz). Üst öğe girilirse yeni task o Epic/Story/Task\'a <b>Relates</b> ile bağlanır.')
+    + (notlar.length ? ' · ' + notlar.join(' · ') : '');
+}
 function jgYeniTaskKapat() {
   document.getElementById('jg-yenitask-panel').style.display = 'none';
 }
@@ -6557,13 +6658,21 @@ async function jgYeniTaskAc() {
   const ed = document.getElementById('jg-preview-editor');
   _jgEditorKaydet(_jgAktifAnalizKey);   // güvenli: boş editör doluyu ezmez
   const fb = _jgYtFebeSet();
+  const ytMode = _jgYtKatman();
   let body;
-  if (fb) {
+  if (fb && ytMode === 'fe-be') {
     const be_md = (fb.be.markdown || '').trim(), fe_md = (fb.fe.markdown || '').trim();
     if (!be_md || !fe_md) { _jgMsg('jg-yt-msg', 'BE ve FE analizleri dolu olmalı.', 'err'); return; }
     if (!_jgZorunluKapi([fb.be.acik_sorular || '', fb.fe.acik_sorular || ''], 'yeni task\'lar açılacak')) return;
     body = { proje, mode: 'fe-be', be_markdown: be_md + _jgZorunluEk(fb.be.acik_sorular || ''),
              fe_markdown: fe_md + _jgZorunluEk(fb.fe.acik_sorular || ''), baslik, ust_key: ust, kaynak_key: fb.kaynak };
+  } else if (fb) {
+    // Tek katman (yalnız BE ya da yalnız FE) — o katmanın analizi, katman önekli tek yeni task
+    const kat = fb[ytMode] || {};
+    const md = (kat.markdown || '').trim();
+    if (!md) { _jgMsg('jg-yt-msg', `${ytMode.toUpperCase()} analizi boş.`, 'err'); return; }
+    if (!_jgZorunluKapi([kat.acik_sorular || ''], 'yeni task açılacak')) return;
+    body = { proje, mode: ytMode, markdown: md + _jgZorunluEk(kat.acik_sorular || ''), baslik, ust_key: ust, kaynak_key: fb.kaynak };
   } else {
     const md = (ed ? ed.value : (_jgAnalizSeti[_jgAktifAnalizKey] || {}).markdown || '').trim();
     if (!md) { _jgMsg('jg-yt-msg', 'İçerik boş.', 'err'); return; }
@@ -6572,7 +6681,7 @@ async function jgYeniTaskAc() {
     body = { proje, mode: 'tek', markdown: md + _jgZorunluEk(_acik), baslik, ust_key: ust, kaynak_key: _jgCurrent.key };
   }
   const ustTxt = ust ? ` ve ${ust.toUpperCase()}'a ilişkili` : '';
-  const adet = fb ? '2 yeni Task (BE + FE)' : 'yeni bir Task';
+  const adet = fb ? (ytMode === 'fe-be' ? '2 yeni Task (BE + FE)' : `yalnız ${ytMode.toUpperCase()} için 1 yeni Task`) : 'yeni bir Task';
   if (!confirm(`${proje} projesinde ${adet}${ustTxt} açılacak. Devam edilsin mi?`)) return;
   const btn = document.getElementById('jg-yt-btn'); btn.disabled = true;
   _jgMsg('jg-yt-msg', 'Task açılıyor…');

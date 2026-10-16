@@ -109,13 +109,16 @@ POST /api/jira/gorev/mockup/duzelt {talimat} → yalnız mockup'ı düzeltir (an
 GET  /api/jira/gorev/mockup/mevcut diskteki son mockup (restart/yenileme sonrası) · POST …/mockup/jira {key, mode:ek|yeni-task,
                                    baslik?, ust?} → PNG + HTML attachment (ek) ya da ilişkili "Tasarım - …" Task'ı
 POST /api/jira/gorev/fe-be-olustur FE+BE ayrı analizi yazar (Option A): BE→ORİJİNAL task ('BE - '), FE→YENİ Task ('FE - '),
-                                   BE→FE Blocks bağı. {key, be_markdown, fe_markdown, summary?}
+                                   BE→FE Blocks bağı. {key, be_markdown, fe_markdown, summary?, katmanlar?:['be','fe']}
+                                   katmanlar=['fe'] → yalnız yeni FE task (kaynak task'a Relates, BE yazılmaz) · ['be'] → yalnız
+                                   orijinal güncellenir (task açılmaz). Dönen {be_key|null, fe_key|null, link, link_uyari, katmanlar}
 GET  /api/jira/projeler            Yeni Task Aç dropdown'ı — YALNIZ agent'a eklenmiş projeler (`_agent_jira_projeleri`:
                                    sources.json jira_projects + JIRA_PROJECT_KEY + Jira Köprüsü projeleri; tüm instance DEĞİL).
                                    Adlar eklenen key'ler için hedefli çekilir (best-effort). {ok, projeler:[{key,name}], varsayilan}
 GET  /api/jira/issue-ozet          ?key=… → üst öğe (Epic/Story/Task) doğrulama: {ok, key, summary, tip, proje} (yoksa 404)
 POST /api/jira/gorev/yeni-task     Analiz OK → YENİ Task açar (hep Task tipi; analist sonra değiştirir), verilen Epic/Story/Task'a
-                                   İLİŞKİLİ (Relates). mode='tek' → tek task (markdown); mode='fe-be' → İKİ yeni task (be_markdown+
+                                   İLİŞKİLİ (Relates). mode='tek' → tek task (markdown); mode='be'|'fe' → FE+BE setinden YALNIZ o katman için
+                                   tek önekli task (markdown); mode='fe-be' → İKİ yeni task (be_markdown+
                                    fe_markdown; BE+FE başlıkları 'BE - '/'FE - ', ikisi birbirine Blocks/Relates ile bağlı). Body:
                                    {proje, mode, markdown?|be_markdown+fe_markdown, baslik?, ust_key?, kaynak_key?}. Kaynak task'ın
                                    ÜZERİNE YAZMAZ (fe-be-olustur'dan farkı — orada BE orijinale yazılır). GERİ DÖNDÜRÜLEMEZ.
