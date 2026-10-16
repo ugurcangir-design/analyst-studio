@@ -5279,9 +5279,10 @@ def _gorev_is_calistir(job_id: str) -> None:
             elif mode == "kabul-kontrol":
                 # Kabul Kontrolü: ANALIZ CHECK task'ını canlı ortamda testçi gibi doğrula (Jira durumu DEĞİŞMEZ).
                 from skills.kabul_kontrolu import kabul_kontrolu
-                r = kabul_kontrolu(gorev)
+                r = kabul_kontrolu(gorev, talimat=adim.get("talimat", ""))
                 sonuc = {"markdown": adim.get("markdown", ""), "acik_sorular": adim.get("acik_sorular", ""),
                          "kabul": {"markdown": r["markdown"], "sonuc": r["sonuc"], "sayim": r.get("sayim", {}),
+                                   "kriter_sayim": r.get("kriter_sayim", {}), "ortam": r.get("ortam", ""),
                                    "maddeler": r.get("maddeler", [])}}
             elif mode == "akis-kapat":
                 # Akış Kapatma (Faz 3): boşlukları bul → minimal düzelt / açık soru (Q-T). Geri Al UI'da.

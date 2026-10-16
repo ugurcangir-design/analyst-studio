@@ -470,6 +470,26 @@ FİİLEN dener; eksik varsa iş geliştirmeye döner, tamsa analist test ekibine
   · hiç doğrulanan yok → `dogrulanamadi`. Canlı hedef yoksa AI çağrılmaz, net neden. `rapor_md` → yorum metni
   (sonuç etiketi, madde tablosu + kanıt `[K: Canlı UI/Network]`, "Geliştirmeye dönecek maddeler", yazma
   işlemleri, gezilemeyen, "_Durum değiştirilmedi_").
+- **Analist promptuyla hizalama (2026-10-16 — ekip arkadaşının "DEV kabul kriterleri doğrulaması" promptu içeri
+  alındı):** (1) **Kabul kriteri birimi:** `_LISTE_SISTEM` "KABUL KRİTERLERİ BİRİNCİLDİR" — task'ta AC-n / Kabul
+  Kriterleri varsa her kriter ≥1 madde, `ref`=AC-n; `_kriterler()` madde sonuçlarını kritere toplar (≥1 eksik → eksik ·
+  hepsi ✓ → dogrulandi · yalnız ekran dışı → ekran_disi · aksi → dogrulanamadi; `_kriter_anahtar`: `§5 AC-2` → `AC-2`,
+  ref'siz madde kendi kriteri) → `kriter_sayim` (toplam / karşılanan / karşılanmayan / doğrulanamayan). (2) **BE/FE:**
+  BE task'ı kriterleri ENDPOINT üzerinden (network: method/path/status/alan/hata kodu, ör. silme engeli 409), FE ekran
+  davranışından; GET/POST/PUT/DELETE hepsi test ortamında serbest (AI-TEST). `_kontrol_talimati` çerçevesi: "yeni task
+  önerme, çok başlıklı analiz yazma — TEK çıktı: kriterler karşılanıyor mu". (3) **`talimat` (opsiyonel):** UI
+  `jgKabulKontrol` `prompt()` → adım `talimat`; köprü `kontrol <talimat>`; içinde URL varsa `_hedef_url` → canlı görev
+  o ekrandan BAŞLAR (`base_url_override`=tam URL), yoksa bağlam filtresi ANA adresi; talimat liste promptuna ve
+  kontrol talimatına "ANALİST TALİMATI (öncelikli)" olarak girer. (4) **İlgili task'lar** (`gorev.baglantililar` →
+  `_ilgili_tasklar`): FE/BE bağlı task başlıkları hedef tarifine + rapora ("İlgili task: KEY (FE)"). (5) **Rapor
+  (`rapor_md`, analist yapısı):** başlık bloğu `Task · Konu · Ortam (_ortam_adi: DEV/UAT + host) · İlgili task` →
+  `### Doğrulama Sonucu` (Toplam kabul kriteri / Karşılanan / Karşılanmayan / Doğrulanamayan (AC listesi) / Ekran dışı /
+  Netleştirilmesi gereken konu) → `**Genel değerlendirme:**` (`genel_not`, 2-4 cümle) → `### Öne çıkan bulgular`
+  (`bulgular`, kanıtlı) → `### Kriter bazında sonuç` tablosu (Kriter | Madde | Durum | Kanıt) → Geliştirmeye dönecek
+  maddeler → `### Netleştirilmesi gereken konular` (`acik_konular`) → yazma işlemleri → gezilemeyen → `**Sonuç:** N
+  kabul kriteri karşılanmıştır. [M karşılanmadı → geri.] [AC-x ile doğrulanamayan senaryolar tamamlanmadan tüm kapsamın
+  doğrulandığı kabul edilmemelidir.]` → durum notu. `<kabul_sonuc>` JSON'una `bulgular` + `acik_konular` eklendi. UI
+  özet satırı kriter sayımını + ortamı gösterir.
 - **Kanallar:** Task Analizi önizleme → **"Kabul Kontrolü"** (`jgKabulKontrol`, onaylı; iş modu `kabul-kontrol`
   → `sonuc.kabul{markdown,sonuc,sayim,maddeler}`; analiz içeriğine DOKUNMAZ, eğitim havuzuna GİRMEZ) → `_jgKabulGoster`
   (özet + madde listesi) + **"Raporu Jira'ya yorum olarak yaz"** (`POST /api/jira/gorev/kabul-yorum {key, markdown}` →

@@ -291,7 +291,7 @@ def _yardim_metni(prefix: str) -> str:
         f"- `{prefix} güncelle` — son analizi task açıklamasına yeniden yazar (taze analiz varsa 0-token).\n"
         f"- `{prefix} ilişkili-aç` — analizden ilişkili yeni task'lar **önerir** (taslak) → `{prefix} onayla` açar + Relates bağlar.\n"
         f"- `{prefix} onayla` / `{prefix} iptal` — bekleyen ilişkili-task taslağını uygular / vazgeçer.\n"
-        f"- `{prefix} kontrol` — **Kabul Kontrolü**: geliştirmesi biten task'ı test ortamında testçi gibi fiilen dener "
+        f"- `{prefix} kontrol [ortam URL / odak]` — **Kabul Kontrolü**: geliştirmesi biten task'ı test ortamında testçi gibi fiilen dener "
         f"(alanlar, butonlar, mesajlar, servisler) → ✅/❌ rapor yorum olarak; durum değişmez.\n"
         f"- `{prefix} yardım` — bu liste.\n\n"
         f"_Güvenlik: yorum bir komuttur; YENİ task açma yalnız açık onaydan sonra yapılır._"
@@ -379,13 +379,14 @@ def _analiz_bolumu_ayikla(desc: str) -> str:
     return parcalar[1].strip() if len(parcalar) > 1 else ""
 
 
-def _kontrol_islet(key: str) -> str:
-    """`kontrol` — Kabul Kontrolü: task'ı canlı ortamda doğrula, raporu yorum olarak döndür (durum değişmez)."""
+def _kontrol_islet(key: str, arg: str = "") -> str:
+    """`kontrol [talimat]` — Kabul Kontrolü: task'ı canlı ortamda doğrula, raporu yorum olarak döndür (durum
+    değişmez). `arg`: opsiyonel ortam/ekran URL'i + odak (ör. 'https://dev-…/screen — BE kriterlerini endpoint'ten doğrula')."""
     from .kabul_kontrolu import kabul_kontrolu
     gorev = gorev_getir(key)
     if not gorev:
         return f"{ROBOT_IMZA}\n\n❌ Görev okunamadı: {key}"
-    r = kabul_kontrolu(gorev)
+    r = kabul_kontrolu(gorev, talimat=arg or "")
     return f"{ROBOT_IMZA}\n\n" + r["markdown"]
 
 
@@ -661,7 +662,7 @@ def _komut_uygula(komut: str, arg: str, key: str, prefix: str, durum: dict) -> s
     if komut == "onayla":
         return _onayla_uygula(key, durum, prefix)
     if komut == "kontrol":
-        return _kontrol_islet(key)
+        return _kontrol_islet(key, arg)
     if komut == "iptal":
         vardi = durum.get("taslaklar", {}).pop(key, None) is not None
         return (f"{ROBOT_IMZA}\n\n{'Taslak iptal edildi.' if vardi else 'İptal edilecek bekleyen taslak yok.'}")

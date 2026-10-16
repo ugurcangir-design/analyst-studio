@@ -6,6 +6,13 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## Kabul Kontrolü — analist promptuyla hizalama (kriter bazlı rapor) ✅
+- Ekip arkadaşının "DEV kabul kriterleri doğrulaması" promptu içeri alındı: kabul kriteri (AC-n) birincil birim +
+  kriter bazlı sayım (toplam/karşılanan/karşılanmayan/doğrulanamayan), BE kriterleri endpoint'ten (GET/POST/PUT/DELETE
+  serbest), opsiyonel `talimat` (ekran URL + odak; UI prompt / köprü `kontrol <talimat>`), ilgili FE/BE task'lar,
+  analist rapor yapısı (Doğrulama Sonucu · Genel değerlendirme · Öne çıkan bulgular · Netleştirilmesi gereken konular ·
+  Sonuç cümlesi). Test `tests/test_kabul_kontrolu.py` §6. Ayrıntı: MIMARI.md "Kabul Kontrolü".
+
 ## Jira'ya giden task gövdesi temizliği — tek kapı ✅
 - Owner: "task'ta olmaması gereken bilgiler Jira'ya gidiyor, elle düzeltiyoruz". `base.jira_icin_temizle` TÜM Jira
   yazım yollarında: HTML yorumu, backtick'li `[K:]`, kaynak alıntı cümleleri, "X'e göre" öneki, meta-gerekçe/hedge,

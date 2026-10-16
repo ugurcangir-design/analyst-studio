@@ -5627,9 +5627,10 @@ function jgKabulKontrol() {
   const key = _jgAktifAnalizKey;
   _jgEditorKaydet(key);
   const s = _jgAnalizSeti[key] || {};
-  if (!confirm(`${_jgGercekKey(key)} için Kabul Kontrolü başlatılsın mı?\n\nAgent TEST ortamında uygulamaya girip task'taki maddeleri fiilen dener; kaydet/güncelle/sil işlemleri AI-TEST öneki ile gerçekten yapılır. Bağlam Filtresi'ndeki Task canlı uygulama hedefi test/UAT ortamı olmalı. Jira durumu değişmez.`)) return;
+  const talimat = prompt(`${_jgGercekKey(key)} için Kabul Kontrolü.\n\nAgent TEST ortamında uygulamaya girip task'taki KABUL KRİTERLERİNİ fiilen dener (ekran + endpoint; GET/POST/PUT/DELETE AI-TEST kayıtlarıyla). Jira durumu değişmez.\n\nOpsiyonel: doğrulanacak ekranın tam URL'i ve/veya odak notu (boş = Bağlam Filtresi'ndeki Task canlı hedefi).\nÖrn: https://dev-.../event-management/x — BE kriterlerini endpoint'ten doğrula`, '');
+  if (talimat === null) return;
   _jgIsBaslat([{ key: key, mode: 'kabul-kontrol', markdown: s.markdown || '', acik_sorular: s.acik_sorular || '',
-                 katman: s.katman || '', gorev: _jgGorevCoz(key) }],
+                 katman: s.katman || '', gorev: _jgGorevCoz(key), talimat: (talimat || '').trim() }],
              'Kabul kontrolü — canlı doğrulama', key, false);
 }
 const _JG_KABUL_ETIKET = { teste_hazir: ['✅ TESTE HAZIR', 'ok'], teste_hazir_kismi: ['✅ TESTE HAZIR (kısmi — doğrulanamayan var)', 'ok'],
@@ -5642,7 +5643,9 @@ function _jgKabulGoster(key, k) {
   const satir = (k.maddeler || []).map(x => `<li>${_JG_KABUL_IKON[x.durum] || '•'} <b>${escHtml(x.id)}</b> ${escHtml(x.madde)}`
     + (x.gozlem || x.neden ? ` <i style="color:var(--text2)">— ${escHtml(x.gozlem || x.neden)}</i>` : '') + `</li>`).join('');
   m.className = 'jg-msg ' + cls;
-  m.innerHTML = `🧪 Kabul kontrolü: <b>${et}</b> · ✅ ${sy.dogrulandi || 0} · ❌ ${sy.eksik || 0} · ⚠ ${sy.dogrulanamadi || 0} · ◻ ${sy.ekran_disi || 0} ekran dışı`
+  const ks = k.kriter_sayim || null;
+  const kriterOzet = ks ? ` · kriter: ${(ks.dogrulandi||0)+(ks.eksik||0)+(ks.dogrulanamadi||0)+(ks.ekran_disi||0)} toplam / ${ks.dogrulandi||0} karşılanan / ${ks.eksik||0} karşılanmayan / ${ks.dogrulanamadi||0} doğrulanamayan` : '';
+  m.innerHTML = `🧪 Kabul kontrolü${k.ortam ? ' (' + escHtml(k.ortam) + ')' : ''}: <b>${et}</b>${kriterOzet} · madde: ✅ ${sy.dogrulandi || 0} · ❌ ${sy.eksik || 0} · ⚠ ${sy.dogrulanamadi || 0} · ◻ ${sy.ekran_disi || 0}`
     + ` <button class="btn btn-outline btn-xs" style="margin-left:6px" onclick="jgKabulYorumYaz('${escHtml(key)}')">Raporu Jira'ya yorum olarak yaz</button>`
     + (satir ? `<details style="margin-top:4px" open><summary>Maddeler</summary><ul style="margin:4px 0 0 16px">${satir}</ul></details>` : '');
 }
