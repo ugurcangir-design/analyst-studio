@@ -4210,6 +4210,25 @@ def cagri_ozeti(gun: int = 7) -> dict:
     return {"gun": gun, "toplam": toplam, "asamalar": satirlar}
 
 
+MCP_BOS_CONFIG = BASE_DIR / ".mcp.bos.json"     # canlı olmayan çağrılar: hiçbir MCP sunucusu yüklenmesin
+
+
+def _yalin_cli_argumanlari(mcp_verildi: bool) -> list[str]:
+    """Yerleşik araçları + slash komutlarını kapat; MCP verilmediyse boş strict config → sabit bağlam ~%35 küçülür.
+    `CLI_YALIN=false` → eski davranış (teşhis için)."""
+    if (os.getenv("CLI_YALIN", "true") or "true").strip().lower() in ("false", "0", "hayir", "no"):
+        return []
+    args = ["--tools", "", "--disable-slash-commands"]
+    if not mcp_verildi:
+        try:
+            if not MCP_BOS_CONFIG.exists():
+                MCP_BOS_CONFIG.write_text('{"mcpServers": {}}\n', encoding="utf-8")
+            args += ["--mcp-config", str(MCP_BOS_CONFIG), "--strict-mcp-config"]
+        except Exception:
+            pass
+    return args
+
+
 def _canli_max_tur(varsayilan: int = 40) -> int:
     try:
         return max(5, int(os.getenv("LIVE_APP_MAX_TUR", str(varsayilan))))
@@ -4287,10 +4306,15 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
     if _live_args:
         _tur_tavani = int(max_turns or _canli_max_tur())
         _tur_args = ["--max-turns", str(_tur_tavani)]
+    # YALIN CLI (kota ölçümü 2026-10-19): `claude -p` varsayılan bağlamı ~98k token (yerleşik araç şemaları ~35k +
+    # kullanıcı profilindeki tüm MCP sunucuları). Analizler metin-içi çalışır, yerleşik araç/slash komutu kullanmaz →
+    # `--tools ""` + `--disable-slash-commands`; canlı olmayan çağrıda BOŞ strict MCP config (Playwright/analiz-MCP
+    # verilmişse onlar zaten strict). Ölçüm: 98k → 62k sabit bağlam; canlı turda ~107k → ~69k. CLI_YALIN=false kapatır.
+    _yalin_args = _yalin_cli_argumanlari(bool(_live_args or _analiz_mcp_args))
     _cagri_bas = time.time()
     try:
         proc = _cli_calistir(
-            [claude_yolu, "-p", "--output-format", "json", *_model_args, *_live_args, *_tur_args, *_analiz_mcp_args],
+            [claude_yolu, "-p", "--output-format", "json", *_model_args, *_yalin_args, *_live_args, *_tur_args, *_analiz_mcp_args],
             tam_prompt, cli_env, timeout=_cli_timeout,
         )
         # Tur tavanına takıldıysa (subtype error_max_turns): aynı oturumu sürdür, araçsız tamamlat.
@@ -4304,7 +4328,7 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
             logger.warning("Canlı gözlem tur tavanına (%s) takıldı — oturum sürdürülüp rapor araçsız tamamlatılıyor.", _tur_args[-1])
             print(f"  ⏱ Gözlem tur tavanına ({_tur_args[-1]}) ulaştı — rapor mevcut kanıtla tamamlatılıyor…")
             proc = _cli_calistir(
-                [claude_yolu, "-p", "--output-format", "json", *_model_args, "--resume", str(_v0["session_id"]),
+                [claude_yolu, "-p", "--output-format", "json", *_model_args, *_yalin_args, "--resume", str(_v0["session_id"]),
                  *_live_args, "--max-turns", "3"],
                 _MAX_TUR_TAMAMLA, cli_env, timeout=max(300, _cli_timeout // 3),
             )

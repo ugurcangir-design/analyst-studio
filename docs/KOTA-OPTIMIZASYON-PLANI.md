@@ -95,11 +95,18 @@ Toplam: 10–14 çağrı, 3–5 agentik döngü; döngülerdeki okuma hacmi topl
 - **A5.3** Timeout'ta kaybolan çıktı: `LIVE_APP_CLI_TIMEOUT` dolunca gözlem raporu kısmi de olsa kaydedilir (A1 ile
   mümkün) → tekrar koşuda sıfırdan başlanmaz.
 
+## 3b. Uygulama sırasında ölçülen ek bulgu — Yalın CLI (uygulandı)
+Trivial bir `claude -p` çağrısı bile ~98k token sabit bağlam taşıyor (cache_yaz 67k + cache_oku 31k): Claude Code sistem
+promptu + **yerleşik araç şemaları (~35k)** + profil MCP'leri. Analizler metin-içi çalıştığından `--tools ""` +
+`--disable-slash-commands` + (canlı değilse) boş strict MCP config eklendi → sabit bağlam **62k**; canlı gözlem turu
+**~107k → ~69k** (Playwright araçları dahil, doğrulandı). Düzeltilmiş beklenti: A1 ile birlikte tur başına okuma
+~107k → ~65k (−40%); tur sayısı diyet + tavanla ayrıca düşer; FE+BE'de döngü 2→1.
+
 ## 4. Beklenen etki (Task analizi, FE+BE, canlı hedefli)
 
 | Kalem | Bugün | Plan sonrası |
 |---|---|---|
-| Gözlem döngüsü okuma hacmi | ~2 döngü × (10–35 tur × ~40k) ≈ 1–3M | 1 döngü × (10–30 tur × ~8k) ≈ 0.1–0.25M (**~−85%**) |
+| Gözlem döngüsü okuma hacmi | ~2 döngü × (10–35 tur × ~107k) ≈ 2–7M | 1 döngü × (8–25 tur × ~65k) ≈ 0.5–1.6M (**~−70%**, yalın CLI + ayrım + diyet) |
 | Cevap turu | tam zincir + yeniden gözlem | 1 düzeltme çağrısı (**−90%**) |
 | İkincil çağrılar modeli | Opus | Sonnet/Haiku (kota ağırlığı Opus'un ~1/5'i) |
 | Ana analiz kalitesi | — | **değişmez** (aynı bağlam + açık gözlem raporu) |

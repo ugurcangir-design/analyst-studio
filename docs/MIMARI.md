@@ -985,7 +985,10 @@ bazında toplar → `GET /api/usage/cagri-ozet?gun=` (usage-gate) → Kullanım 
 - **Tur tavanı:** `_api_cagri(max_turns)` → `_api_cagri_cli` canlı çağrıda `--max-turns` (`LIVE_APP_MAX_TUR`, 40);
   `error_max_turns` → `--resume <session_id> --max-turns 3` + "araç kullanma, raporu şimdi yaz" (çıktı kaybolmaz;
   `max_tur_takildi` kaydedilir). Canlı prompt "TUR DİYETİ" kuralları.
-- Etki (beklenen): gözlem döngüsü tur başına ~40k → ~8k token; FE+BE'de iki döngü → bir; cevap turunda gözlem yok.
+- **Yalın CLI (ölçüldü):** `claude -p` sabit bağlamı ~98k token (yerleşik araç şemaları ~35k; kullanıcı MCP'leri küçük pay).
+  `_yalin_cli_argumanlari`: her çağrıda `--tools "" --disable-slash-commands`; canlı/analiz-MCP verilmediyse boş strict
+  `.mcp.bos.json` → sabit bağlam 62k; canlı turda 69k (eski ~107k). `CLI_YALIN=false` eski davranış.
+- Etki (ölçüldü/beklenen): sabit yük tur başına ~98k→62k; gözlem fazı analiz bağlamını (~40k) döngüden çıkarır; FE+BE'de iki döngü → bir; cevap turunda gözlem yok.
   Ölçüm Kullanım Raporu panelinde (aşama "gozlem" vs "gorev:analiz").
 **Test kuralı:** motor çağıran her test `canli_uygulama_baglami_hazirla`'yı mock'lar; aksi hâlde gözlem fazı gerçek
 CLI/Playwright açar (test_katman_secimi bunu yaşadı → düzeltildi). Test: `tests/test_gozlem_fazi.py`.

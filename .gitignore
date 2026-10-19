@@ -60,6 +60,7 @@ reference/domain-kurallari.md
 .mcp.live-app.json
 .live-app-profiles/
 .mcp.live-app.*.json
+.mcp.bos.json
 
 # ── Agent araç artefaktları ──
 # @playwright/mcp sayfa snapshot çıktıları (runtime)

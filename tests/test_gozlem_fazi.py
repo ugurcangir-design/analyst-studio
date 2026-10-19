@@ -156,10 +156,19 @@ cmds.clear()
 yanitlar[:] = [{"result": "## R", "num_turns": 9, "usage": {"input_tokens": 10, "output_tokens": 20, "cache_creation_input_tokens": 30, "cache_read_input_tokens": 400}}]
 B._api_cagri_cli("s", MSJ, canli_uygulama_kapsami="gorev", max_turns=25)
 chk("canlı çağrıda --max-turns 25", "--max-turns" in cmds[0][0] and cmds[0][0][cmds[0][0].index("--max-turns") + 1] == "25")
+chk("canlı çağrıda yalın: --tools '' var, boş MCP config YOK (Playwright strict)", "--tools" in cmds[0][0] and str(B.MCP_BOS_CONFIG) not in cmds[0][0])
 cmds.clear()
 yanitlar[:] = [{"result": "x", "num_turns": 1}]
 B._api_cagri_cli("s", MSJ)
 chk("gözlemsiz çağrıda --max-turns yok", "--max-turns" not in cmds[0][0])
+chk("YALIN CLI: yerleşik araçlar + slash kapalı; gözlemsizde boş strict MCP", "--tools" in cmds[0][0] and cmds[0][0][cmds[0][0].index("--tools") + 1] == ""
+    and "--disable-slash-commands" in cmds[0][0] and "--strict-mcp-config" in cmds[0][0] and str(B.MCP_BOS_CONFIG) in cmds[0][0] and B.MCP_BOS_CONFIG.exists())
+os.environ["CLI_YALIN"] = "false"
+cmds.clear()
+yanitlar[:] = [{"result": "x", "num_turns": 1}]
+B._api_cagri_cli("s", MSJ)
+chk("CLI_YALIN=false → eski davranış", "--tools" not in cmds[0][0] and "--strict-mcp-config" not in cmds[0][0])
+os.environ.pop("CLI_YALIN", None)
 os.environ["LIVE_APP_MAX_TUR"] = "33"
 cmds.clear()
 yanitlar[:] = [{"result": "x", "num_turns": 5}]
