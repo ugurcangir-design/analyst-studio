@@ -44,6 +44,58 @@ def acik_mi() -> bool:
     return (os.getenv("SORU_COZUMLEME", "true") or "true").strip().lower() not in ("false", "0", "hayir", "no")
 
 
+def uygula_acik_mi() -> bool:
+    """Kanıtla CEVAPLANAN sorular analize OTOMATİK işlensin mi? (owner 2026-10-19: 'agent cevap bulduğu soruları neden
+    analize işlemedi de soru olarak gösterdi — ekstra süre/token'). Varsayılan auto: tek ucuz hedefli düzeltme çağrısı
+    (`gorev_analiz_duzelt`: referanssız, gözlemsiz) ile cevaplar ilgili bölümlere işlenir, sorular listeden düşer.
+    `SORU_COZUMLEME_UYGULA=onay` → eski davranış (kutular ön-dolu, analist 'Cevapları İşle' der = TAM yeniden üretim)."""
+    return (os.getenv("SORU_COZUMLEME_UYGULA", "auto") or "auto").strip().lower() not in ("onay", "manuel", "false", "0")
+
+
+COZULEN_BASLIK = "## 🤖 Agent'ın çözüp analize işlediği sorular"
+
+
+def cozulenleri_ayir(acik_md: str) -> tuple[str, list[dict]]:
+    """`Agent durumu: cevaplandı` bloklarını açık sorulardan AYIRIR. Dönen: (kalan_md, [{id, soru, cevap, kanit, gozlem}]).
+    'kısmen' ve 'karar gerekli' bloklar kalır (analist onayı/kararı gerekir)."""
+    kalan = acik_md or ""
+    cozulen: list[dict] = []
+    for b in _bloklar(acik_md or ""):
+        d = re.search(r"(?mi)^-\s*Agent durumu\s*:\s*(.+)$", b["govde"])
+        if not d or not d.group(1).strip().lower().startswith("cevap"):
+            continue
+
+        def alan(ad, _g=b["govde"]):
+            r = re.search(r"(?mi)^-\s*" + re.escape(ad) + r"\s*:\s*(.+)$", _g)
+            return r.group(1).strip() if r else ""
+        cozulen.append({"id": b["id"], "baslik": b["baslik"], "soru": b["soru"], "cevap": alan("Agent cevabı"),
+                        "kanit": alan("Agent kanıtı"), "gozlem": alan("Agent gözlemi"), "bagli": b["bagli"]})
+        kalan = kalan.replace(b["metin"], "", 1)
+    return re.sub(r"\n{3,}", "\n\n", kalan).strip(), cozulen
+
+
+def uygulama_talimati(cozulen: list[dict]) -> str:
+    """`gorev_analiz_duzelt` için talimat: cevapları ilgili bölümlere MINIMAL işle, belirsizlik işaretlerini kaldır."""
+    sat = []
+    for c in cozulen:
+        sat.append(f"- {c['id']} ({c['bagli'] or 'ilgili bölüm'}): SORU: {c['soru']}\n  CEVAP (kanıtlı): {c['cevap']}"
+                   + (f" {c['kanit']}" if c["kanit"] else "") + (f"\n  GÖZLEM: {c['gozlem']}" if c["gozlem"] else ""))
+    return ("Aşağıdaki açık sorular referans/kod/canlı gözlem kanıtıyla CEVAPLANDI. Her cevabı analizin İLGİLİ bölümüne "
+            "(Bağlı bölüm) minimal biçimde işle: bu konudaki `[K: ❓ Belirsiz]`/'belirsiz'/'netleştirilmeli'/'varsayım' "
+            "ifadelerini kaldırıp kesin ifadeye çevir, kanıt etiketini `[K: …]` olarak koru, gerekiyorsa tek cümle/satır ekle. "
+            "Başka bölümlere DOKUNMA, analizi büyütme, yeni bölüm açma, soru listesi yazma.\n\n" + "\n".join(sat))
+
+
+def cozulen_bolumu(cozulen: list[dict]) -> str:
+    """Açık sorular md'sine eklenen şeffaflık bölümü (UI katlanmış gösterir; UI parser Q- başlığı olmadığı için soru saymaz)."""
+    if not cozulen:
+        return ""
+    sat = [COZULEN_BASLIK, "", "_Aşağıdaki sorular agent tarafından kanıtla cevaplanıp analize işlendi; onay gerekmez._", ""]
+    for c in cozulen:
+        sat.append(f"- **{c['id']}** {c['soru']}\n  → {c['cevap']}" + (f" {c['kanit']}" if c["kanit"] else ""))
+    return "\n".join(sat) + "\n"
+
+
 # ── Soru blokları ─────────────────────────────────────────────────────────────
 def _bloklar(md: str) -> list[dict]:
     """`### Q-T-001: Başlık` bloklarını ayırır: {id, baslik, govde, metin, alan()}."""

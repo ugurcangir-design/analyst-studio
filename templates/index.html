@@ -1958,6 +1958,9 @@ html[data-theme="light"] .suspend-overlay { background: rgba(245,247,250,.92); }
 .jg-soru-kart.agent-kismi { border-left: 3px solid var(--yellow); }
 .jg-soru-kart.agent-karar { border-left: 3px solid var(--red); }
 .jg-sk-agent-not { color: var(--text2) !important; }
+.jg-cozulen { font-size: 12.5px; color: var(--text2); background: var(--green-soft); border: 1px solid var(--green); border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; }
+.jg-cozulen summary { cursor: pointer; color: var(--green); font-weight: 500; }
+.jg-cozulen ul { margin: 8px 0 0 16px; } .jg-cozulen li { margin-bottom: 6px; } .jg-cozulen-cevap { color: var(--text2); font-size: 12px; }
 .jg-sk-agent-ozet { font-size: 12.5px; color: var(--text2); background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; line-height: 1.5; }
 #jg-preview-sorular-wrap #jg-preview-sorular { min-height: 200px; }
 /* İteratif düzelt sohbeti (aksiyon barında) */
@@ -5979,6 +5982,21 @@ function jgAnaliz(key) {
 }
 
 // Açık soruları SORU-BAZLI kartlara ayır: her soru için ayrı cevap kutusu. Dönen: soru sayısı.
+// "## 🤖 Agent'ın çözüp analize işlediği sorular" bölümü → katlanmış liste (UI parser Q- başlığı olmadığı için saymaz)
+function _jgCozulenBolumu(md) {
+  const m = String(md || '').match(/##\s*🤖\s*Agent'ın çözüp analize işlediği sorular[\s\S]*$/);
+  if (!m) return '';
+  const maddeler = [];
+  for (const l of m[0].split('\n')) {
+    const q = l.match(/^\s*-\s+\*\*(Q-[A-Za-z0-9-]+)\*\*\s*(.*)$/);
+    if (q) { maddeler.push({ id: q[1], soru: q[2], cevap: '' }); continue; }
+    const c = l.match(/^\s*→\s*(.*)$/);
+    if (c && maddeler.length) maddeler[maddeler.length - 1].cevap = c[1];
+  }
+  if (!maddeler.length) return '';
+  return `<details class="jg-cozulen"><summary>✅ ${maddeler.length} soru agent tarafından kanıtla cevaplanıp <b>analize işlendi</b> — onay gerekmez (ayrıntı için aç)</summary><ul>`
+    + maddeler.map(x => `<li><b>${escHtml(x.id)}</b> ${escHtml(x.soru)}<div class="jg-cozulen-cevap">→ ${escHtml(x.cevap)}</div></li>`).join('') + '</ul></details>';
+}
 function _jgSorulariAyristir(md) {
   const sorular = [];
   // Her "### Q-..." başlığından böl; ilk parçadaki (varsa) giriş metni atlanır.
@@ -6035,7 +6053,13 @@ function _jgSorulariRender(md, cevaplar) {
   cevaplar = cevaplar || {};
   const kap = document.getElementById('jg-sorular-liste');
   const sorular = _jgSorulariAyristir(md);
+  const cozulenHtml = _jgCozulenBolumu(md);   // agent'ın çözüp ANALİZE İŞLEDİĞİ sorular (katlanmış, onay gerekmez)
   if (!sorular.length) {
+    if (cozulenHtml) {   // tüm sorular çözüldü → yalnız katlanmış bilgi
+      kap.innerHTML = cozulenHtml;
+      const yedek0 = document.getElementById('jg-preview-sorular'); yedek0.value = ''; yedek0.style.display = 'none';
+      return 0;
+    }
     // Ayrıştırılamadıysa ham metni yedek göster (tek kutuya cevap)
     kap.innerHTML = '';
     const yedek = document.getElementById('jg-preview-sorular');
@@ -6051,9 +6075,9 @@ function _jgSorulariRender(md, cevaplar) {
   const agentSinif = d => /^cevap/i.test(d) ? 'ok' : /^k[ıi]smen/i.test(d) ? 'kismi' : 'karar';
   const nCev = sorular.filter(s => /^cevap/i.test(s.agentDurum)).length, nKis = sorular.filter(s => /^k[ıi]smen/i.test(s.agentDurum)).length;
   const ozet = sorular.some(s => s.agentDurum)
-    ? `<div class="jg-sk-agent-ozet">🤖 Agent ${sorular.length} sorunun <b>${nCev}</b>'ini referans/kod/canlı gözlemle cevapladı${nKis ? `, <b>${nKis}</b>'ini kısmen` : ''} — cevap kutuları önceden dolu; kontrol edip düzeltin, sonra <b>Cevapları İşle</b>. Boş kalanlar sizin kararınızı bekliyor.</div>`
+    ? `<div class="jg-sk-agent-ozet">🤖 Kalan ${sorular.length} soru: ${nKis ? `<b>${nKis}</b>'i agent'ın kısmen cevapladığı (kutu ön-dolu — kontrol edin), ` : ''}${nCev ? `<b>${nCev}</b>'i cevaplanmış ama analize işlenememiş (kutu ön-dolu), ` : ''}geri kalanı <b>sizin kararınızı</b> bekliyor. Cevaplayıp <b>Cevapları İşle</b> ile analizi güncelleyin.</div>`
     : '';
-  kap.innerHTML = ozet + sorular.map(s => {
+  kap.innerHTML = cozulenHtml + ozet + sorular.map(s => {
     // Önceden girilmiş cevabı geri yükle (FE/BE geçişi); yoksa agent'ın bulduğu cevabı ÖN-DOLDUR (karar gerekli → boş).
     const agentOn = s.agentCevap && !/^karar/i.test(s.agentDurum) ? s.agentCevap : '';
     const cv = cevaplar[s.id] || agentOn;

@@ -119,9 +119,41 @@ chk("varsayılan açık", SC.acik_mi() is True)
 print("6) entegrasyon")
 from skills import jira_gorevleri as JG  # noqa: E402
 src = Path(JG.__file__).read_text(encoding="utf-8")
-chk("gorev_analiz_et: açık sorulardan sonra öz-çözümleme (canlı bayrağıyla)", "_sc_cozumle(acik, gorev, canli=bool(canli_baglam))" in src)
+chk("gorev_analiz_et: açık sorulardan sonra öz-çözümleme (canlı bayrağıyla)", "_sc.cozumle(acik, gorev, canli=bool(canli_baglam))" in src and "_sc.uygula_acik_mi()" in src)
 ui = Path(JG.__file__).parent.parent.joinpath("templates/index.html").read_text(encoding="utf-8")
 chk("UI: Agent alanları parse + ön-doldurma + rozet", "al('Agent durumu')" in ui and "agentOn" in ui and "jg-sk-agent-ozet" in ui)
+
+print("7) çözülenler analize OTOMATİK işlenir (onay gerekmez, tam yeniden üretim yok)")
+kalan, coz = SC.cozulenleri_ayir(out)
+chk("ayır: cevaplanan Q-T-002 ayrıldı, karar gerekli Q-T-001 kaldı", [c["id"] for c in coz] == ["Q-T-002"] and "### Q-T-001" in kalan and "### Q-T-002" not in kalan
+    and coz[0]["cevap"].startswith("Yalnız menü kurulumu") and "Swagger:identity.json" in coz[0]["kanit"], (kalan, coz))
+tal = SC.uygulama_talimati(coz)
+chk("talimat: minimal işle + belirsiz işaretlerini kaldır + bölüm", "minimal" in tal and "Belirsiz" in tal and "Q-T-002 (§Çözüm (BE))" in tal)
+bol = SC.cozulen_bolumu(coz)
+chk("şeffaflık bölümü: başlık + madde + onay gerekmez", bol.startswith(SC.COZULEN_BASLIK) and "- **Q-T-002**" in bol and "onay gerekmez" in bol)
+chk("uygula bayrağı: varsayılan auto, 'onay' kapatır", SC.uygula_acik_mi() is True and (os.environ.__setitem__("SORU_COZUMLEME_UYGULA", "onay") or SC.uygula_acik_mi() is False))
+os.environ.pop("SORU_COZUMLEME_UYGULA", None)
+# gorev_analiz_et entegrasyonu (tam mock): çözülen → gorev_analiz_duzelt talimatla çağrılır, açık sorulardan düşer
+JG.referans_dosyalari_hazirla = lambda *a, **k: []
+JG.canli_uygulama_baglami_hazirla = lambda *a, **k: ""
+JG.load_context_filter = lambda *a, **k: {}
+import skills.ornek_havuzu as OH  # noqa: E402
+OH.ornek_bloklari = lambda *a, **k: []
+JG._api_cagri = lambda s, m, **k: "<teknik_analiz>## 1. Amaç\nx `[K: ❓ Belirsiz]`\n</teknik_analiz>"
+JG._gorev_acik_sorular_uret = lambda *a, **k: MD
+SC.cozumle = lambda md, gorev, canli=True, **k: out          # çözümleme sonucu (Q-T-002 cevaplandı)
+duz: dict = {}
+JG.gorev_analiz_duzelt = lambda gorev, md, talimat: (duz.update({"md": md, "talimat": talimat}) or "## 1. Amaç\nx — menü kurulumu ve dashboard guard tüketir [K: Swagger:identity.json]\n")
+r = JG.gorev_analiz_et({"key": "MBS-1", "summary": "s", "description": "d" * 50, "issuetype": "Görev"})
+chk("duzelt çağrıldı: talimat Q-T-002 cevabını taşır, RAG yorumu gövdeye girmez", "Q-T-002" in duz.get("talimat", "") and "<!-- RAG" not in duz.get("md", ""))
+chk("analiz güncellendi + RAG yorumu korundu", "menü kurulumu ve dashboard guard" in r["markdown"] and "<!-- RAG:" in r["markdown"])
+chk("açık sorular: Q-T-002 düştü, Q-T-001 kaldı, çözülen bölümü eklendi", "### Q-T-002" not in r["acik_sorular"] and "### Q-T-001" in r["acik_sorular"]
+    and SC.COZULEN_BASLIK in r["acik_sorular"], r["acik_sorular"][:300])
+JG.gorev_analiz_duzelt = lambda gorev, md, talimat: (_ for _ in ()).throw(RuntimeError("CLI yok"))
+r = JG.gorev_analiz_et({"key": "MBS-1", "summary": "s", "description": "d" * 50, "issuetype": "Görev"})
+chk("düzeltme hata verirse: sorular ön-dolu kalır (Q-T-002 listede), analiz kırılmaz", "### Q-T-002" in r["acik_sorular"] and "Agent cevabı" in r["acik_sorular"])
+ui2 = Path(JG.__file__).parent.parent.joinpath("templates/index.html").read_text(encoding="utf-8")
+chk("UI: çözülen bölümü katlanmış gösterilir", "_jgCozulenBolumu" in ui2 and "analize işlendi" in ui2)
 
 print()
 if _hata:

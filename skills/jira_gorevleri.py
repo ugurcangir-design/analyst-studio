@@ -1013,9 +1013,26 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
     # ve gerekirse tek canlı gözlem turuyla araştırır; cevaplananlar UI'da önceden dolu gelir (analiz yeniden yazılmaz).
     if acik and acik.strip():
         try:
-            from .soru_cozumleme import acik_mi as _sc_acik, cozumle as _sc_cozumle
-            if _sc_acik():
-                acik = _sc_cozumle(acik, gorev, canli=bool(canli_baglam))
+            from . import soru_cozumleme as _sc
+            if _sc.acik_mi():
+                acik = _sc.cozumle(acik, gorev, canli=bool(canli_baglam))
+                # Aşama 2c — kanıtla CEVAPLANAN sorular analize OTOMATİK işlenir (tek ucuz hedefli düzeltme; referans/
+                # gözlem yok) ve listeden düşer; yalnız 'kısmen' + 'karar gerekli' analiste kalır. (Eskiden kutular ön-dolu
+                # kalıyor, analist 'Cevapları İşle' ile TAM yeniden üretim yapıyordu → gereksiz süre/token.)
+                if _sc.uygula_acik_mi():
+                    kalan, cozulen = _sc.cozulenleri_ayir(acik)
+                    if cozulen:
+                        try:
+                            print(f"  ✍️  {len(cozulen)} çözülen soru analize işleniyor (hedefli düzeltme)...")
+                            _rag, _govde = _rag_yorum_ayir(teknik)
+                            _yeni = gorev_analiz_duzelt(gorev, _govde, _sc.uygulama_talimati(cozulen))
+                            if _yeni and len(_yeni) > 0.5 * len(_govde):
+                                teknik = _rag + _yeni
+                                acik = (kalan + ("\n\n" if kalan else "") + _sc.cozulen_bolumu(cozulen)).strip()
+                            else:
+                                print("  ⚠ Düzeltme çıktısı güvenilmez (çok kısa) — sorular ön-dolu bırakıldı.")
+                        except Exception as e:
+                            print(f"  ⚠ Çözülen sorular analize işlenemedi (ön-dolu bırakıldı): {str(e)[:160]}")
         except Exception as e:
             print(f"  ⚠ Açık soru öz-çözümleme atlandı: {e}")
 
@@ -1261,6 +1278,12 @@ _GOREV_DUZELT_SISTEM = (
     "Doğruluk, gözlemlenebilirlik ve spekülasyon-yasağı kurallarını GEVŞETME (gözleyemediğini uydurma). "
     "Tüm (güncellenmiş) analizi eksiksiz olarak <teknik_analiz>…</teknik_analiz> içinde dön."
 )
+
+
+def _rag_yorum_ayir(teknik: str) -> tuple[str, str]:
+    """Analizin başındaki `<!-- RAG: … -->` satırını gövdeden ayırır (düzeltme çağrısına gitmesin, sonra geri konsun)."""
+    m = re.match(r"\s*(<!--\s*RAG:[^>]*-->\s*)", teknik or "")
+    return (m.group(1), (teknik or "")[m.end():]) if m else ("", teknik or "")
 
 
 def gorev_analiz_duzelt(gorev: dict, mevcut_markdown: str, talimat: str) -> str:

@@ -1029,10 +1029,12 @@ Doküman yükle <span class="arr">→</span> Süreç Analizi <span class="arr">�
             "canlı gözlem yapılmadan üretilecek" bilgisiyle hemen başlar. Durum satırındaki <strong>Girişi Doğrula</strong> ile
             önceden de deneyebilirsiniz.</li>
         <li><strong>Açık Sorular — agent önce kendisi araştırır <span class="pill new">Yeni</span></strong> — analiz bitince agent her
-            açık soru için referansları (Swagger/Confluence/Jira), bağlıysa kodu ve gerekirse canlı uygulamayı tarar. Cevabını bulduğu
-            soruların kutusu <em>önceden dolu</em> gelir (<span class="pill">🤖 agent buldu</span>, üzerine gelince kanıt), kısmen bulduklarında
-            en olası yanıt yazılıdır, yalnız gerçek ürün kararları boş kalır (<em>kararınız gerekli</em> + agent notu). Kontrol edip düzeltin,
-            <strong>Cevapları İşle</strong> ile analiz cevaplara göre yeniden yazılır. Ek maliyet: kısa bir çağrı + gerekirse bir gözlem turu.</li>
+            açık soru için referansları (Swagger/Confluence/Jira), bağlıysa kodu ve gerekirse canlı uygulamayı tarar. Kanıtla
+            cevapladığı soruları <strong>analize kendisi işler</strong> (tek ucuz düzeltme çağrısı; tam yeniden üretim değil) ve
+            bunlar soru listesinden düşer — Açık Sorular sekmesinde katlanmış yeşil "analize işlendi, onay gerekmez" kutusunda
+            görürsünüz. Kısmen bulduklarında kutu en olası yanıtla ön-dolu gelir (<span class="pill">🤖 agent kısmen buldu</span>,
+            kontrol edin), yalnız gerçek ürün kararları boş kalır (<em>kararınız gerekli</em> + agent notu). Kalanları cevaplayıp
+            <strong>Cevapları İşle</strong> deyin. Ek maliyet: kısa bir çağrı + gerekirse bir gözlem turu + bir düzeltme çağrısı.</li>
         <li><strong>FE+BE Ayrı</strong> — tek task hem FE hem BE içeriyorsa iki ayrı katman analizi üretir (BE sözleşmeyi tanımlar,
             FE onu kullanır). Onay satırında <strong>katman kutuları</strong> çıkar: <em>BE → kaynak task'a yaz</em> ve <em>FE → yeni task
             aç</em>. İkisi işaretliyse BE orijinal task'a yazılır, FE için yeni task açılır, BE→FE <em>Blocks</em> bağı kurulur; yalnız FE

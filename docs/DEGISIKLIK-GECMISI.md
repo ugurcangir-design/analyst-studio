@@ -6,6 +6,11 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## Öz-çözümleme: çözülen sorular analize otomatik işlenir ✅
+- Owner: "cevabı bulduysa neden analize işlemedi, onaylamak mı gerekli, ekstra token?" → kanıtla cevaplanan sorular
+  tek ucuz hedefli düzeltmeyle (`gorev_analiz_duzelt`) analize işlenir, listeden düşer, katlanmış "analize işlendi"
+  kutusunda görünür; yalnız kısmen/karar gerekli olanlar kalır. `SORU_COZUMLEME_UYGULA=onay` eski davranış. Test §7.
+
 ## Oturum kalıcılığı — agent bir kez girer, tüm akışlar oturumlu ✅
 - Owner: "her seferinde tarayıcıdan giriş yapmak zorunda kalmasın". Slotta yapılan agent girişi `_slot_birak` ile ana
   profile geri yazılır, diğer slotlar devralır; durum satırı "Oturum kayıtlı (agent girişi · N dk önce)"; prompt

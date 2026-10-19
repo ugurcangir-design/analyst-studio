@@ -872,8 +872,17 @@ seçilmiştir — soruya özel kanıt toplanmıyordu.
 sol kenar rengi, cevap kutusu **agent cevabıyla ön-dolu** (karar gerekli → boş + "Agent notu" satırı); analistin kendi cevabı
 (FE/BE geçişi `entry.cevaplar`) agent cevabına ÜSTÜN. "Cevapları İşle" değişmedi (ön-dolu kutular da gönderilir → analiz
 cevaplarla yeniden yazılır, sorular yakınsar). Köprü yorumu aynı md → Agent satırları Jira'da da görünür.
-**Kapatma/maliyet:** `SORU_COZUMLEME=false` ya da `HIZLI_MOD=true`; task başına 1 kısa AI çağrısı + gerekirse 1 canlı tur.
-Test: `tests/test_soru_cozumleme.py`.
+6. **Otomatik işleme (2026-10-19 — "cevabı bulduysa neden analize işlemedi?"):** `cozulenleri_ayir` cevaplanan
+   blokları ayırır → `uygulama_talimati` ("her cevabı Bağlı bölüme minimal işle, belirsizlik ifadelerini kaldır, başka
+   bölüme dokunma") → `gorev_analiz_duzelt` (mevcut hedefli düzeltme: referans/gözlem yok, tek çağrı; `_rag_yorum_ayir`
+   RAG yorumunu dışarıda tutar; çıktı gövdenin yarısından kısaysa reddedilir) → analiz güncellenir; çözülenler açık
+   sorulardan düşer, `cozulen_bolumu` (`## 🤖 Agent'ın çözüp analize işlediği sorular`) şeffaflık için eklenir. UI
+   `_jgCozulenBolumu` bunu katlanmış yeşil kutu olarak gösterir ("onay gerekmez"); Q- başlığı olmadığından soru sayılmaz,
+   ZORUNLU kapısına takılmaz. Yalnız `kismi` (ön-dolu) ve `karar_gerekli` (boş + not) sorular analiste kalır. Hata →
+   eski davranış (ön-dolu). `SORU_COZUMLEME_UYGULA=onay` eski davranışı seçer. Maliyet kıyası: eski yol "Cevapları İşle"
+   = tam yeniden üretim (referans + canlı gözlem, dakikalar); yeni yol = tek düzeltme çağrısı (analiz uzunluğu kadar token).
+**Kapatma/maliyet:** `SORU_COZUMLEME=false` ya da `HIZLI_MOD=true`; task başına 1 kısa AI çağrısı + gerekirse 1 canlı tur
++ çözülen varsa 1 hedefli düzeltme. Test: `tests/test_soru_cozumleme.py`.
 
 ### Canlı Uygulama Giriş Kapısı (`skills/canli_giris.py`, 2026-10-16)
 **Owner isteri (Task Analizi):** canlı hedef tanımlıyken giriş yapılamıyorsa analiz başlamasın (yanlış şifre dakikalarca boşa
