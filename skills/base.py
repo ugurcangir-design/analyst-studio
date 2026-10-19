@@ -4363,7 +4363,9 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
     # kullanıcı profilindeki tüm MCP sunucuları). Analizler metin-içi çalışır, yerleşik araç/slash komutu kullanmaz →
     # `--tools ""` + `--disable-slash-commands`; canlı olmayan çağrıda BOŞ strict MCP config (Playwright/analiz-MCP
     # verilmişse onlar zaten strict). Ölçüm: 98k → 62k sabit bağlam; canlı turda ~107k → ~69k. CLI_YALIN=false kapatır.
-    _yalin_args = _yalin_cli_argumanlari(bool(_live_args or _analiz_mcp_args), araclar_kapali=not (_live_args and _tekrar))
+    # CANLI çağrıda yerleşik araçlar KAPATILMAZ: `--tools ""` ile soğuk süreçte ilk tur araçsız gidiyordu (2 gerçek koşuda
+    # ilk deneme düştü, araçları açık tekrar başardı); +~30k/tur maliyet güvenilirlik için kabul. Canlı olmayan çağrı yalın.
+    _yalin_args = _yalin_cli_argumanlari(bool(_live_args or _analiz_mcp_args), araclar_kapali=not _live_args)
     _cagri_bas = time.time()
     try:
         proc = _cli_calistir(

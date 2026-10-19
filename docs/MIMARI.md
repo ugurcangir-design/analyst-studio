@@ -986,8 +986,9 @@ bazında toplar → `GET /api/usage/cagri-ozet?gun=` (usage-gate) → Kullanım 
   `error_max_turns` → `--resume <session_id> --max-turns 3` + "araç kullanma, raporu şimdi yaz" (çıktı kaybolmaz;
   `max_tur_takildi` kaydedilir). Canlı prompt "TUR DİYETİ" kuralları.
 - **Yalın CLI (ölçüldü):** `claude -p` sabit bağlamı ~98k token (yerleşik araç şemaları ~35k; kullanıcı MCP'leri küçük pay).
-  `_yalin_cli_argumanlari`: her çağrıda `--tools "" --disable-slash-commands`; canlı/analiz-MCP verilmediyse boş strict
-  `.mcp.bos.json` → sabit bağlam 62k; canlı turda 69k (eski ~107k). `CLI_YALIN=false` eski davranış.
+  `_yalin_cli_argumanlari`: gözlemsiz çağrıda `--tools "" --disable-slash-commands` + boş strict `.mcp.bos.json` → sabit
+  bağlam 62k. CANLI çağrıda `--tools ""` kullanılmaz (soğuk süreçte ilk tur araçsız gidiyordu; gerçek koşularda ilk deneme
+  düştü, araçları açık tekrar başardı) → yalnız slash kapalı (~99k/tur). `CLI_YALIN=false` eski davranış.
 - Etki (ölçüldü/beklenen): sabit yük tur başına ~98k→62k; gözlem fazı analiz bağlamını (~40k) döngüden çıkarır; FE+BE'de iki döngü → bir; cevap turunda gözlem yok.
   Ölçüm Kullanım Raporu panelinde (aşama "gozlem" vs "gorev:analiz").
 - **Araçsız ilk tur / pseudo araç metni:** CLI oturum kayıtlarında başarısız giriş testleri modelin araç çağrısını metin

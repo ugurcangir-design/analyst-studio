@@ -98,9 +98,10 @@ Toplam: 10–14 çağrı, 3–5 agentik döngü; döngülerdeki okuma hacmi topl
 ## 3b. Uygulama sırasında ölçülen ek bulgu — Yalın CLI (uygulandı)
 Trivial bir `claude -p` çağrısı bile ~98k token sabit bağlam taşıyor (cache_yaz 67k + cache_oku 31k): Claude Code sistem
 promptu + **yerleşik araç şemaları (~35k)** + profil MCP'leri. Analizler metin-içi çalıştığından `--tools ""` +
-`--disable-slash-commands` + (canlı değilse) boş strict MCP config eklendi → sabit bağlam **62k**; canlı gözlem turu
-**~107k → ~69k** (Playwright araçları dahil, doğrulandı). Düzeltilmiş beklenti: A1 ile birlikte tur başına okuma
-~107k → ~65k (−40%); tur sayısı diyet + tavanla ayrıca düşer; FE+BE'de döngü 2→1.
+`--disable-slash-commands` + (canlı değilse) boş strict MCP config eklendi → sabit bağlam **62k**; canlı gözlem turu için
+`--tools ""` denendi (~69k) ama soğuk süreçte ilk tur araçsız gidiyordu (gerçek koşularda ilk deneme düştü) → canlıda
+yerleşik araçlar açık bırakıldı (~99k/tur; güvenilirlik öncelikli). Düzeltilmiş beklenti: A1 ile tur başına okuma ~107k → ~99k
+(analiz bağlamı döngüden çıktı), asıl kazanç tur sayısı (diyet+tavan) ve FE+BE'de 2→1 döngü; tur sayısı diyet + tavanla ayrıca düşer; FE+BE'de döngü 2→1.
 
 ## 4. Beklenen etki (Task analizi, FE+BE, canlı hedefli)
 

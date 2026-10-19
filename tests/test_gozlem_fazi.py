@@ -156,7 +156,8 @@ cmds.clear()
 yanitlar[:] = [{"result": "## R", "num_turns": 9, "usage": {"input_tokens": 10, "output_tokens": 20, "cache_creation_input_tokens": 30, "cache_read_input_tokens": 400}}]
 B._api_cagri_cli("s", MSJ, canli_uygulama_kapsami="gorev", max_turns=25)
 chk("canlı çağrıda --max-turns 25", "--max-turns" in cmds[0][0] and cmds[0][0][cmds[0][0].index("--max-turns") + 1] == "25")
-chk("canlı çağrıda yalın: --tools '' var, boş MCP config YOK (Playwright strict)", "--tools" in cmds[0][0] and str(B.MCP_BOS_CONFIG) not in cmds[0][0])
+chk("canlı çağrıda yerleşik araçlar AÇIK (--tools '' YOK), slash kapalı, boş MCP config YOK (Playwright strict)",
+    "--tools" not in cmds[0][0] and "--disable-slash-commands" in cmds[0][0] and str(B.MCP_BOS_CONFIG) not in cmds[0][0])
 cmds.clear()
 yanitlar[:] = [{"result": "x", "num_turns": 1}]
 B._api_cagri_cli("s", MSJ)
