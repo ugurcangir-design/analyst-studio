@@ -66,7 +66,8 @@ Bir Jira task'ının **yorum** satırına yaz:
 5. **Açık sorular:** ayrı bir **yorum** olarak listelenir (Q-T-001…), her biri önem + beklenen yanıt ile.
    Agent her soruyu önce **kendisi araştırır** (Swagger/Confluence/Jira referansları, bağlıysa kod, gerekirse canlı uygulama):
    yorumda `Agent durumu: cevaplandı / kısmen / karar gerekli` + `Agent cevabı` + `Agent kanıtı` satırları görürsün —
-   cevaplananları onaylaman yeter, yalnız "karar gerekli" olanlar senin kararını bekler.
+   kanıtla cevaplananlar analize zaten işlenmiştir (yorumda "Agent'ın çözüp analize işlediği sorular" başlığı altında bilgi
+   amaçlı listelenir, onay gerekmez); "kısmen" olanları kontrol edersin, yalnız "karar gerekli" olanlar senin kararını bekler.
 6. **Cevapla:** `/analyst_agent cevap Q-T-001: … Q-T-002: …` → analiz güncellenir, cevaplanan sorular düşer.
 7. **İlişkili task (opsiyonel):** `/analyst_agent ilişkili-aç` → öneri taslağı → `/analyst_agent onayla` → gerçek task açılır + bağlanır.
 8. **Bildirim:** analiz bitince kendi bilgisayarında masaüstü bildirimi alırsın (aşağı bak).
