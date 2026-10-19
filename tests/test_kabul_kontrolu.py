@@ -169,6 +169,14 @@ chk("köprü: kontrol <talimat> argümanı iletilir", "_kontrol_islet(key, arg)"
 src_app = Path(A.__file__).read_text(encoding="utf-8")
 chk("app: talimat + kriter_sayim/ortam iş sonucunda", 'kabul_kontrolu(gorev, talimat=adim.get("talimat", ""))' in src_app and '"kriter_sayim": r.get("kriter_sayim"' in src_app)
 
+print("7) listeden doğrudan Kabul Kontrolü (analiz üretmeden)")
+ui = Path(A.__file__).parent.joinpath("templates/index.html").read_text(encoding="utf-8")
+chk("kartta 'Kabul Kontrolü' düğmesi (ANALIZ CHECK statüsünde vurgulu) + jgKabulKontrolBaslat mode kabul-kontrol, markdown boş",
+    "jgKabulKontrolBaslat(" in ui and "_jgKabulDurumuMu(g.status)" in ui and "mode: 'kabul-kontrol', markdown: '', acik_sorular: '', gorev: g, talimat" in ui)
+chk("rapor-tek görünüm: kabulOnly → başlık 'Kabul Kontrolü', editörde rapor, Jira yazımı/eğitim/düzelt kapalı",
+    "kabulOnly: !!(rs.kabul" in ui and "'Kabul Kontrolü — ' : 'Teknik Analiz — '" in ui and "_kabulOnly ? (s.kabul.markdown || '')" in ui
+    and "_sentetik || _kabulOnly" in ui and "Kabul kontrolü raporu eğitim örneği değildir" in ui)
+
 print()
 if _hata:
     print(f"KABUL KONTROLÜ TESTLERİ BAŞARISIZ ({_hata} hata)")

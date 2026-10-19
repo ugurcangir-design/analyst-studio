@@ -490,6 +490,12 @@ FİİLEN dener; eksik varsa iş geliştirmeye döner, tamsa analist test ekibine
   kabul kriteri karşılanmıştır. [M karşılanmadı → geri.] [AC-x ile doğrulanamayan senaryolar tamamlanmadan tüm kapsamın
   doğrulandığı kabul edilmemelidir.]` → durum notu. `<kabul_sonuc>` JSON'una `bulgular` + `acik_konular` eklendi. UI
   özet satırı kriter sayımını + ortamı gösterir.
+- **Listeden doğrudan (2026-10-19 — owner: 'ANALIZ CHECK task'ı seçince başlat butonu olsun, tekrar analiz yapmasın'):**
+  görev kartındaki **'🧪 Kabul Kontrolü'** (`jgKabulKontrolBaslat`; statü check/kontrol/test ise yeşil vurgulu 'Başlat') →
+  opsiyonel talimat → `_jgIsBaslat([{mode:'kabul-kontrol', markdown:'', gorev}])` — teknik analiz ÜRETİLMEZ, task
+  içeriğindeki kabul kriterleri + canlı gözlemle doğrulanır (giriş kapısından geçer). Sonuç `kabulOnly` entry: panel
+  başlığı 'Kabul Kontrolü — KEY', editörde rapor markdown'ı, Onayla/Eğitime Ekle/Düzelt kapalı, 'Jira'dan içeriği çek'
+  önerilmez; 'Raporu Jira'ya yorum olarak yaz' çalışır.
 - **Kanallar:** Task Analizi önizleme → **"Kabul Kontrolü"** (`jgKabulKontrol`, onaylı; iş modu `kabul-kontrol`
   → `sonuc.kabul{markdown,sonuc,sayim,maddeler}`; analiz içeriğine DOKUNMAZ, eğitim havuzuna GİRMEZ) → `_jgKabulGoster`
   (özet + madde listesi) + **"Raporu Jira'ya yorum olarak yaz"** (`POST /api/jira/gorev/kabul-yorum {key, markdown}` →

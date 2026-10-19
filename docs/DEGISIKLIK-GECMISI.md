@@ -6,6 +6,11 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## Kabul Kontrolü listeden tek tıkla (analiz üretmeden) ✅
+- Owner: "ANALIZ CHECK task'ı seçince başlat butonu olsun, ekran karışık, tekrar analiz yapmasın". Görev kartına
+  "🧪 Kabul Kontrolü" (check statüsünde vurgulu "Başlat"); analiz üretilmeden task içeriği + canlı gözlemle doğrulama;
+  rapor-tek panel görünümü (`kabulOnly`). Test `tests/test_kabul_kontrolu.py` §7.
+
 ## Öz-çözümleme: çözülen sorular analize otomatik işlenir ✅
 - Owner: "cevabı bulduysa neden analize işlemedi, onaylamak mı gerekli, ekstra token?" → kanıtla cevaplanan sorular
   tek ucuz hedefli düzeltmeyle (`gorev_analiz_duzelt`) analize işlenir, listeden düşer, katlanmış "analize işlendi"

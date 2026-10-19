@@ -1049,7 +1049,10 @@ Doküman yükle <span class="arr">→</span> Süreç Analizi <span class="arr">�
             hatası dener, günceller, ayrı bir kaydı siler ve her adımın gerçek isteğini (method/path/payload/status) yakalayıp
             <strong>BFF sözleşme raporu</strong> çıkarır. Analiz öncesi <em>otomatik</em> çalışır (7 gün önbellek; Bağlam Filtresi →
             "BFF keşfi otomatik" kutusuyla kapatılır). Manuel düğme her zaman yeniden gözler. Elle kayıt açıp servis toplamanıza gerek kalmaz.</li>
-        <li><strong>🧪 Kabul Kontrolü</strong> — geliştirmesi biten (ANALIZ CHECK) task'ı <em>testçi gibi</em> test ortamında doğrular:
+        <li><strong>🧪 Kabul Kontrolü</strong> — geliştirmesi biten (ANALIZ CHECK) task'ı <em>testçi gibi</em> test ortamında doğrular.
+            <strong>Analiz üretmenize gerek yok:</strong> görev listesinde statüyü ANALIZ CHECK'e süzün, karttaki yeşil
+            <em>Kabul Kontrolü Başlat</em> düğmesine basın; agent task içeriğindeki kriterleri okuyup doğrudan doğrular, rapor
+            panelde açılır (düğme diğer statülerde de vardır, vurgusuz). Analiz panelinden de başlatılabilir. Nasıl çalışır:
             task'taki <strong>kabul kriterleri</strong> (AC-1…) birer birer fiilen denenir — BE kriterleri endpoint'ten
             (method/path/status/hata kodu), FE kriterleri ekrandan; GET/POST/PUT/DELETE AI-TEST kayıtlarıyla serbest.
             Düğmeye basınca <em>opsiyonel</em> talimat sorulur: doğrulanacak ekranın tam URL'i ve/veya odak notu

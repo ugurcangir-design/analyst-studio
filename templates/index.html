@@ -1908,6 +1908,7 @@ html[data-theme="light"] .suspend-overlay { background: rgba(245,247,250,.92); }
   font-family: inherit; transition: all .12s;
 }
 .jg-item-actions button:hover { background: var(--surface); color: var(--text); border-color: var(--accent); }
+.jg-item-actions button.kabul-vurgu { border-color: var(--green); color: var(--green); font-weight: 600; background: var(--green-soft); }
 .jg-editor { width: 100%; min-height: 360px; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; line-height: 1.55; padding: 12px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); white-space: pre-wrap; resize: vertical; box-sizing: border-box; }
 /* ── Önizleme modal ────────────────────────────────────────────── */
 .jg-modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); backdrop-filter: blur(2px); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 24px; }
@@ -5344,8 +5345,20 @@ function _jgKartHtml(g, sinif) {
       <button onclick="jgFormatla('${escHtml(g.key)}')">Standart Formatla</button>
       <button onclick="jgAnaliz('${escHtml(g.key)}')">Teknik Analiz Et</button>
       <button onclick="jgFeBeAyir('${escHtml(g.key)}')" title="Görev hem FE hem BE içeriyorsa: iki AYRI katman-özel analiz → BE bu task'a, FE yeni task'a (BE→FE Blocks)">FE+BE Ayrı</button>
+      <button class="${_jgKabulDurumuMu(g.status) ? 'kabul-vurgu' : ''}" onclick="jgKabulKontrolBaslat('${escHtml(g.key)}')" title="Geliştirmesi biten task'ı YENİDEN ANALİZ ETMEDEN doğrular: task içeriğindeki kabul kriterlerini test ortamında ekran + endpoint ile fiilen dener, kriter bazlı rapor üretir. Jira durumu değişmez.">🧪 Kabul Kontrolü${_jgKabulDurumuMu(g.status) ? ' Başlat' : ''}</button>
     </div>
   </div>`;
+}
+// Statü 'ANALIZ CHECK' / 'kontrol' / 'test' ise Kabul Kontrolü düğmesi vurgulu (owner: 'seçince başlat butonu olsun')
+function _jgKabulDurumuMu(status) { return /check|kontrol|test|doğrula|dogrula|verify/i.test(String(status || '')); }
+// Listeden doğrudan Kabul Kontrolü — teknik analiz üretilmez; task içeriği (kabul kriterleri) + canlı gözlemle doğrulanır.
+function jgKabulKontrolBaslat(key) {
+  if (_jgMesgul()) { toast('İşlem sürüyor', 'info'); return; }
+  const g = _jgGorevler[key] || { key };
+  const talimat = prompt(`${key} için Kabul Kontrolü.\n\nTeknik analiz üretilmez: agent task içeriğindeki KABUL KRİTERLERİNİ test ortamında ekran + endpoint ile fiilen dener (GET/POST/PUT/DELETE AI-TEST kayıtlarıyla), kriter bazlı rapor çıkarır. Jira durumu değişmez.\n\nOpsiyonel: doğrulanacak ekranın tam URL'i ve/veya odak notu (boş = Bağlam Filtresi'ndeki Task canlı hedefi).`, '');
+  if (talimat === null) return;
+  _jgIsBaslat([{ key, mode: 'kabul-kontrol', markdown: '', acik_sorular: '', gorev: g, talimat: (talimat || '').trim() }],
+              'Kabul kontrolü — canlı doğrulama · ' + key, key, true);
 }
 
 function jgListeCiz(containerId, liste, hazirMi) {
@@ -5549,28 +5562,31 @@ function _jgSonucGoster(key) {
   _jgCurrent = { key: key, summary: s.summary || '' };
   document.querySelector('.jg-modal-aksiyon').style.display = '';
   document.getElementById('jg-secim').style.display = 'none';
-  document.getElementById('jg-preview-title').textContent = 'Teknik Analiz — ' + key
+  const _kabulOnly = !!s.kabulOnly && !!s.kabul;
+  document.getElementById('jg-preview-title').textContent = (_kabulOnly ? 'Kabul Kontrolü — ' : 'Teknik Analiz — ') + key
     + (s.katman && s.katman !== 'belirsiz' ? ' [' + s.katman.toUpperCase() + ']' : '');
   document.getElementById('jg-preview-sub').textContent = s.summary || '';
   document.getElementById('jg-preview-editor').style.display = '';
-  document.getElementById('jg-preview-editor').value = s.hata ? '' : (s.markdown || '');
+  document.getElementById('jg-preview-editor').value = s.hata ? '' : (_kabulOnly ? (s.kabul.markdown || '') : (s.markdown || ''));
   const _sentetik = /^EKRAN-\d+/.test(key);   // İnteraktif Analiz ekran kaydı — Jira'da task yok
   const _ab = document.getElementById('jg-approve-btn');
-  _ab.disabled = !!s.hata || !s.markdown || _sentetik;
+  _ab.disabled = !!s.hata || !s.markdown || _sentetik || _kabulOnly;
   _jgKatmanSecimHazirla(key, s);   // FE+BE setinde katman kutuları (varsayılan: bakılan sekme; agent 'iş yok' → işaretsiz)
-  _ab.title = _sentetik ? "Bu bir ekran analizi (Jira'da task yok) — Jira'ya açmak için 'Yeni Task Aç' kullanın" : '';
+  _ab.title = _sentetik ? "Bu bir ekran analizi (Jira'da task yok) — Jira'ya açmak için 'Yeni Task Aç' kullanın"
+            : _kabulOnly ? "Kabul kontrolü raporu task açıklamasına YAZILMAZ — 'Raporu Jira'ya yorum olarak yaz' kullanın" : '';
   const ytBtn = document.getElementById('jg-yenitask-btn');
   if (ytBtn) ytBtn.disabled = !!s.hata || !s.markdown;
   jgYeniTaskKapat();   // analiz değişince yeni-task paneli kapansın (içerik yeni analizle yeniden açılır)
   jgMockupKapat();     // analiz değişince mockup paneli de kapansın (farklı görev/analiz)
   if (!s.hata) _jgMockupStaleKontrol(key, s.markdown || '');   // bu entry'nin analizi değiştiyse mockup'ı "eski" işaretle
-  document.getElementById('jg-duzelt-row').style.display = s.hata ? 'none' : '';
+  document.getElementById('jg-duzelt-row').style.display = (s.hata || _kabulOnly) ? 'none' : '';
+  const _egBtn = document.getElementById('jg-egitim-btn'); if (_egBtn) _egBtn.disabled = !!s.hata || _kabulOnly;
   _jgMsg('jg-preview-msg', s.hata ? ('Hata: ' + s.hata) : '', s.hata ? 'err' : '');
   if (!s.hata && s.akis_rapor) _jgAkisRaporGoster(key, s.akis_rapor);
   if (!s.hata && s.kabul) _jgKabulGoster(key, s.kabul);
   if (!s.hata && s.bff) _jgBffGoster(key, s.bff);
   // İçerik bellekte yoksa (güncelleme/yenileme sonrası) → Jira'dan geri yükleme sun
-  if (!s.hata && !((s.markdown || '').trim()) && !_jgMesgul() && /^[A-Z][A-Z0-9]+-\d+$/.test(key)) {
+  if (!s.hata && !s.kabulOnly && !((s.markdown || '').trim()) && !_jgMesgul() && /^[A-Z][A-Z0-9]+-\d+$/.test(key)) {
     const m = document.getElementById('jg-preview-msg');
     m.className = 'jg-msg';
     m.innerHTML = `İçerik bellekte yok (güncelleme/yenileme sonrası kaybolmuş olabilir). `
@@ -5729,6 +5745,7 @@ async function jgKabulYorumYaz(key) {
 async function jgEgitimeEkle() {
   const key = _jgCurrent && _jgCurrent.key;
   if (!key) { toast('Aktif analiz yok', 'info'); return; }
+  if ((_jgAnalizSeti[_jgAktifAnalizKey] || {}).kabulOnly) { toast('Kabul kontrolü raporu eğitim örneği değildir', 'info'); return; }
   const md = (document.getElementById('jg-preview-editor').value || '').trim();
   if (md.length < 300) { toast('İçerik eğitime eklenemeyecek kadar kısa', 'info'); return; }
   const s = _jgAnalizSeti[_jgAktifAnalizKey] || {};
@@ -5868,7 +5885,9 @@ async function _jgPollDurum() {
                            feBeKaynak: eski.feBeKaynak, feBeYeni: eski.feBeYeni,
                            // Akış kapatma: rapor + Geri Al yedeği (yalnız bu sonuç akış kapatmaysa)
                            akis_rapor: rs.akis_rapor, akis_onceki: rs.akis_rapor ? eski.akis_onceki : undefined,
-                           kabul: rs.kabul || eski.kabul, bff: rs.bff || eski.bff };
+                           kabul: rs.kabul || eski.kabul, bff: rs.bff || eski.bff,
+                           // Listeden doğrudan Kabul Kontrolü (analiz yok) → rapor editörde gösterilir, Jira yazımı kapalı
+                           kabulOnly: !!(rs.kabul && !(rs.markdown || '').trim() && !(eski.markdown || '').trim()) };
     }
   }
   if (d.durum === 'calisiyor') {
