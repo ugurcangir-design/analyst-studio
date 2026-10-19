@@ -72,9 +72,22 @@ def _telemetri_emit(mod: str, durum: str, sure_ms: int) -> None:
             token = _tk if _tk.get("cagri") else None
         except Exception:
             token = None
+        # Kalite vekili (0 token): üretilen açık soru / zorunlu soru sayısı (haftalık trend → Kullanım Raporu)
+        kalite = None
+        try:
+            if durum == "ok" and mod in ("surec_analizi", "teknik_analiz"):
+                _cik = BASE_DIR / "output"
+                _yol = _cik / ("surec-analizi.md" if mod == "surec_analizi" else "acik-sorular.md")
+                if _yol.exists():
+                    _md = _yol.read_text(encoding="utf-8")
+                    if mod == "surec_analizi":
+                        _md = _md.split("Açık Sorular", 1)[1] if "Açık Sorular" in _md else ""
+                    kalite = telemetri.soru_sayilari(_md)
+        except Exception:
+            kalite = None
         telemetri.olay_yaz(
             olay=mod, durum=durum, sure_ms=sure_ms,
-            model=model, ai_modu=ai_modu, jira=jira, baglam=baglam or None, token=token,
+            model=model, ai_modu=ai_modu, jira=jira, baglam=baglam or None, token=token, kalite=kalite,
         )
     except Exception:
         pass

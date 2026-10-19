@@ -963,6 +963,20 @@ diyordu) ve içerik sonradan değişebilir.
 - Kısmi yazım kalıcı: `jiraYazildi` sette (`_jgSetKaydet`) → sayfa yenilense de "FE KEY açıldı ✓" görünür, diğer katman
   sonra yazılabilir. Test: `tests/test_katman_secimi.py`.
 
+### Analiz kalitesi vekilleri + ★ iyi örnek (2026-10-19)
+**Kalite:** `telemetri.soru_sayilari(md)` → `{acik_soru (benzersiz Q-/Q-T-/PO- id; yoksa madde sayısı), zorunlu_soru ('Zorunlu: Evet')}`;
+`olay_yaz(kalite=…)` → işarete `aq=,zq=` + `baglam.islem` → `i=` (sink korur; `_olay_normalize` geri çözer). Kaynaklar: app
+`_kalite_vekili(sonuc, mode)` (Task işi — FE+BE toplamı; kabul/BFF/formatla/akış-kapat hariç) + köprüsüz doğrudan analiz;
+`run.py _telemetri_emit` (süreç: surec-analizi.md 'Açık Sorular' sonrası · teknik: acik-sorular.md); `/api/adim/duzelt` →
+`<dosya olayı>` + `islem:duzelt` (0 sn). `kalite_ozeti(olaylar)` → haftalık (ISO) × olay: analiz, duzeltme (islem duzelt|cevap),
+ort_acik_soru, ort_zorunlu, duzeltme_orani → `istatistik().kalite` → Kullanım Raporu "Analiz kalitesi — haftalık vekil
+göstergeler" (`kaliteGrubu`). Yorum: haftalar içinde ort. açık soru ve düzeltme oranı AZALIYORSA few-shot/kurallar işe yarıyor.
+**★ İyi örnek:** `ornek_havuzu.YILDIZ_DOSYA = reference/ornek_yildiz.json` (TRACKED — yalnız id listesi, içerik/PII yok) —
+`yildizlar()`, `yildiz_ayarla(id, acik)`; `ornek_listesi` `yildiz` + `boyut` alanı, işaretliler önce; `ornek_bloklari` BM25
+sırasını korurken işaretlileri öne alır (n dolarsa işaretsiz girmez). `POST /api/ornekler/yildiz {id, yildiz}` (`yetki_gerekli`
+= app-sahibi; owner dosyayı commit'leyince ekip alır). UI: Kullanım Raporu → Ortak Eğitim Havuzu → "Örnekleri yönet"
+(`ornekListeYukle`/`ornekYildiz`/`ornekSil`).
+
 ### Ekip kota ölçümü — token gömme + öncesi/sonrası karşılaştırma (2026-10-19)
 `telemetri`: sink `token`'ı saklamadığından `olay_kaydet` `_tok_gom(token)` işaretini `baglam.dokuman` sonuna ekler (`⟨tok
 g,c,cy,co,n,usd⟩`); `olaylari_oku` ve `uzaktan_cek` her satırı `_olay_normalize` ile geçirir (`_tok_coz` → `token`, doküman

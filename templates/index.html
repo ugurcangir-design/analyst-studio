@@ -3337,6 +3337,12 @@ function temaDegistir() {
             <button class="btn btn-ghost btn-sm" onclick="ornekPaylas()" title="Bu makinenin yerel örneklerini merkezi havuza gönderir (eski işleri ortaklaştır)">Yerelimi Paylaş</button>
             <button class="btn btn-ghost btn-sm" onclick="ornekTani()" title="0 çekiliyorsa nedenini gösterir">Teşhis</button>
           </div>
+          <!-- Kürasyon: örnek listesi + ★ iyi örnek (reference/ornek_yildiz.json — tracked, owner commit'ler) + Sil -->
+          <details id="ku-ornek-liste-d" style="margin-bottom:14px;font-size:12.5px" ontoggle="if(this.open) ornekListeYukle()">
+            <summary style="cursor:pointer;color:var(--text2)">Örnekleri yönet — ★ iyi örnek işaretle / sil (işaretliler few-shot'ta önce gelir)</summary>
+            <div id="ku-ornek-liste" style="margin-top:9px;overflow:auto">Yükleniyor…</div>
+            <div class="field-hint" style="margin-top:6px">★ işareti <code>reference/ornek_yildiz.json</code>'a (yalnız ID) yazılır; commit edince tüm ekibin agent'ı işaretli örnekleri önce kullanır. Sil yalnız bu makinenin yerel kopyasını kaldırır.</div>
+          </details>
           <!-- Yol 2 — geçmiş Jira analizlerini havuza aktar (owner backfill) -->
           <details id="ku-ornek-import" style="margin-bottom:14px;font-size:12.5px">
             <summary style="cursor:pointer;color:var(--text2)">Eski işleri Jira'dan içe aktar (backfill)</summary>
@@ -4345,7 +4351,11 @@ async function kullanimYukle() {
     const ksSatir = Object.keys(ksO).filter(k => (ksO[k].once || ksO[k].sonra)).sort().map(k => { const o = ksO[k].once || {}, s = ksO[k].sonra || {}; const dp = ksO[k].degisim_okuma_pct;
       return `<tr><td>${escHtml(k)}</td><td>${o.n || 0}</td><td>${o.n ? tokFmt(o.ort_okuma) : '·'}</td><td>${o.n ? Math.round(o.ort_sure_sn / 60) + ' dk' : '·'}</td><td>${s.n || 0}</td><td><b>${s.n ? tokFmt(s.ort_okuma) : '·'}</b></td><td>${s.n ? Math.round(s.ort_sure_sn / 60) + ' dk' : '·'}</td><td style="color:${dp == null ? 'var(--text2)' : (dp < 0 ? 'var(--green)' : 'var(--red)')}">${dp == null ? '·' : (dp > 0 ? '+' : '') + dp + '%'}</td></tr>`; }).join('');
     const karsGrubu = ksSatir ? `<div class="ku-grup"><div class="ku-grup-lbl" title="Olay başına ortalama okuma (girdi + cache okuma). Kesim: ${escHtml(ks.esik || '')} (KOTA_OLCUM_BASLANGIC). Ekip verisi 'Uzaktan Çek' ile gelir; güncellemeyi alan analistlerin işleri 'sonra' kovasına düşer.">Kota ölçümü — güncelleme öncesi / sonrası (olay başına ortalama)</div><div style="overflow:auto"><table class="ku-tablo"><thead><tr><th>Olay</th><th>Önce n</th><th>Önce okuma</th><th>Önce süre</th><th>Sonra n</th><th>Sonra okuma</th><th>Sonra süre</th><th>Δ okuma</th></tr></thead><tbody>${ksSatir}</tbody></table></div></div>` : '';
-    const tokenGrubu = karsGrubu + ((tk.cagri || tk.girdi || tk.cikti)
+    // Analiz kalitesi vekilleri (haftalık): açık soru ort., zorunlu ort., düzeltme/cevap oranı — azalış = iyileşme
+    const kh = ((d.kalite || {}).haftalar || []).slice(-24);
+    const kalSatir = kh.map(h => `<tr><td>${escHtml(h.hafta)}</td><td>${escHtml(h.olay)}</td><td>${h.analiz}</td><td>${h.ort_acik_soru == null ? '·' : h.ort_acik_soru}</td><td>${h.ort_zorunlu == null ? '·' : h.ort_zorunlu}</td><td>${h.duzeltme}</td><td>${h.duzeltme_orani == null ? '·' : Math.round(h.duzeltme_orani * 100) + '%'}</td></tr>`).join('');
+    const kaliteGrubu = kalSatir ? `<div class="ku-grup"><div class="ku-grup-lbl" title="Vekil göstergeler: analiz başına ortalama açık soru / zorunlu soru (yeni sürüm olaylarından) ve analistin Düzelt / Cevapları İşle kullanma oranı. Haftalar içinde AZALMA = analiz kalitesinde iyileşme sinyali.">Analiz kalitesi — haftalık vekil göstergeler</div><div style="overflow:auto"><table class="ku-tablo"><thead><tr><th>Hafta</th><th>Olay</th><th>Analiz</th><th>Ort. açık soru</th><th>Ort. zorunlu</th><th>Düzelt/Cevap</th><th>Düzeltme oranı</th></tr></thead><tbody>${kalSatir}</tbody></table></div></div>` : '';
+    const tokenGrubu = karsGrubu + kaliteGrubu + ((tk.cagri || tk.girdi || tk.cikti)
       ? `<div class="ku-grup"><div class="ku-grup-lbl" title="AI çağrılarında harcanan token ve tahmini maliyet (CLI JSON usage + API usage). Cache okuma girdiden düşülür.">Token / Maliyet</div><div class="ku-cards">${kart(tokFmt(tk.girdi), 'Girdi Token')}${kart(tokFmt(tk.cikti), 'Çıktı Token')}${kart(tokFmt(tk.cache_oku), 'Cache Okuma', true)}${kart(usdFmt(tk.maliyet_usd), 'Tahmini Maliyet')}</div></div>`
       : '');
     document.getElementById('ku-ozet').innerHTML =
@@ -4464,6 +4474,32 @@ async function ornekDurumYukle() {
   } catch (e) { el.textContent = 'Durum alınamadı.'; }
 }
 
+async function ornekListeYukle() {
+  const kap = document.getElementById('ku-ornek-liste'); if (!kap) return;
+  try {
+    const d = await (await fetch('/api/ornekler')).json();
+    const L = d.ornekler || [];
+    if (!L.length) { kap.innerHTML = '<span style="color:var(--text2)">Havuzda örnek yok.</span>'; return; }
+    const yetki = true;   // yetki sunucuda (yetki_gerekli → 403 → toast)
+    kap.innerHTML = `<table class="ku-tablo"><thead><tr><th>★</th><th>Tip</th><th>Proje</th><th>Task</th><th>Analist</th><th>Tarih</th><th>Boyut</th><th></th></tr></thead><tbody>`
+      + L.map(o => `<tr><td><button class="btn btn-ghost btn-sm" ${yetki ? '' : 'disabled'} title="${o.yildiz ? 'İyi örnek işaretini kaldır' : 'İyi örnek olarak işaretle (few-shot önceliği)'}" onclick="ornekYildiz('${escHtml(o.id)}', ${o.yildiz ? 'false' : 'true'})" style="font-size:16px;line-height:1">${o.yildiz ? '★' : '☆'}</button></td><td>${escHtml(o.tip || '')}</td><td>${escHtml(o.proje || '')}</td><td>${escHtml(o.jira_key || '')}</td><td>${escHtml(o.analist || '')}</td><td>${escHtml(String(o.ts || '').slice(0, 10))}</td><td>${Math.round((o.boyut || 0) / 1000)}k</td><td><button class="btn btn-ghost btn-sm" onclick="ornekSil('${escHtml(o.id)}')" title="Yerel havuzdan sil">Sil</button></td></tr>`).join('')
+      + '</tbody></table>';
+  } catch (e) { kap.innerHTML = '<span style="color:var(--red)">Liste alınamadı.</span>'; }
+}
+async function ornekYildiz(id, acik) {
+  try {
+    const r = await (await fetch('/api/ornekler/yildiz', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, yildiz: acik }) })).json();
+    if (!r.ok) { toast(r.error || 'İşaretlenemedi (yalnız uygulama sahibi)', 'error'); return; }
+    toast(acik ? 'İyi örnek işaretlendi — commit edince ekibe yayılır' : 'İşaret kaldırıldı', 'success');
+    ornekListeYukle();
+  } catch (e) { toast('İşaretlenemedi', 'error'); }
+}
+async function ornekSil(id) {
+  try {
+    const r = await (await fetch('/api/ornekler/sil', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })).json();
+    toast(r.ok ? 'Örnek silindi' : 'Silinemedi', r.ok ? 'success' : 'error'); ornekListeYukle(); ornekDurumYukle();
+  } catch (e) { toast('Silinemedi', 'error'); }
+}
 async function ornekCek() {
   const btn = document.getElementById('ku-ornek-cek-btn');
   const el = document.getElementById('ku-ornek-ozet');

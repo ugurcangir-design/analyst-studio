@@ -22,6 +22,9 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).parent.parent
 ORNEK_DIR = BASE_DIR / "reference" / "ornekler"
+# ★ İyi örnek işareti (owner kürasyonu, 2026-10-19): yalnız örnek ID'leri — TRACKED dosya (içerik/PII yok) → analistler
+# güncelleme ile alır; few-shot seçiminde işaretli örnekler ÖNCE gelir, işaretsizler yalnız boş kalan yeri doldurur.
+YILDIZ_DOSYA = BASE_DIR / "reference" / "ornek_yildiz.json"
 _DURUM_DOSYA = ORNEK_DIR / ".durum.json"   # son çekim bilgisi (görünürlük; few-shot'ı etkilemez)
 _MAX_ORNEK = 80          # yerel havuz üst sınırı (en yeni tutulur)
 _MAX_ICERIK = 45000      # örnek başına içerik tavanı (Sheet hücre limiti ~50k)
@@ -321,11 +324,31 @@ def _oku_hepsi() -> list[dict]:
     return out
 
 
+def yildizlar() -> set[str]:
+    try:
+        d = json.loads(YILDIZ_DOSYA.read_text(encoding="utf-8")) if YILDIZ_DOSYA.exists() else {}
+        return {str(x) for x in (d.get("ids") or []) if str(x).strip()}
+    except Exception:
+        return set()
+
+
+def yildiz_ayarla(ornek_id: str, acik: bool) -> set[str]:
+    """Owner: örneği 'iyi örnek' olarak işaretler/kaldırır (reference/ornek_yildiz.json — tracked; owner commit'ler)."""
+    ids = yildizlar()
+    (ids.add(ornek_id) if acik else ids.discard(ornek_id))
+    YILDIZ_DOSYA.parent.mkdir(parents=True, exist_ok=True)
+    YILDIZ_DOSYA.write_text(json.dumps({"ids": sorted(ids)}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return ids
+
+
 def ornek_listesi() -> list[dict]:
-    """Kürasyon için özet liste (içeriksiz): [{id, tip, proje, jira_key, analist, ts, ozet}]."""
-    liste = [{k: o.get(k, "") for k in ("id", "tip", "proje", "jira_key", "analist", "ts", "ozet")}
+    """Kürasyon için özet liste (içeriksiz): [{id, tip, proje, jira_key, analist, ts, ozet, yildiz, boyut}]."""
+    y = yildizlar()
+    liste = [{**{k: o.get(k, "") for k in ("id", "tip", "proje", "jira_key", "analist", "ts", "ozet")},
+              "yildiz": str(o.get("id", "")) in y, "boyut": len(o.get("icerik", "") or "")}
              for o in _oku_hepsi()]
-    return sorted(liste, key=lambda x: str(x.get("ts", "")), reverse=True)
+    # ★ işaretliler önce, her grup içinde en yeni önce
+    return sorted(liste, key=lambda x: (0 if x["yildiz"] else 1, "".join(chr(255 - ord(c)) if ord(c) < 255 else c for c in str(x.get("ts", "")))))
 
 
 def ornek_sil(ornek_id: str) -> bool:
@@ -360,6 +383,11 @@ def ornek_bloklari(sorgu_metni: str, tip: str | None = None, n: int = 2,
             skor = [(i, len(q & set(re.findall(r"\w+", o.get("icerik", "").lower()))))
                     for i, o in enumerate(havuz)]
             sirali_idx = [i for i, _s in sorted(skor, key=lambda x: x[1], reverse=True)]
+        # ★ işaretli örnekler (owner kürasyonu) alaka sırası korunarak ÖNE alınır; işaretsizler yalnız kalan yeri doldurur
+        y = yildizlar()
+        if y:
+            sirali_idx = [i for i in sirali_idx if str(havuz[i].get("id", "")) in y] + \
+                         [i for i in sirali_idx if str(havuz[i].get("id", "")) not in y]
         bloklar: list[dict] = []
         kalan = butce
         for i in sirali_idx[:max(1, n)]:

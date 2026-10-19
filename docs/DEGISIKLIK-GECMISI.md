@@ -6,6 +6,14 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## Analiz kalitesi vekilleri + ★ iyi örnek kürasyonu ✅
+- Telemetri olayına `kalite {acik_soru, zorunlu_soru}` (`soru_sayilari`, 0 token) + `baglam.islem` dokümana gömülür (sink korur);
+  `kalite_ozeti` haftalık: analiz n, ort açık/zorunlu soru, düzelt+cevap oranı → Kullanım Raporu "Analiz kalitesi" tablosu.
+  Süreç/teknik (run.py), Task (iş + köprü), adım düzeltme (`/api/adim/duzelt`) olayları besler.
+- `reference/ornek_yildiz.json` (TRACKED, yalnız id): owner Kullanım Raporu → "Örnekleri yönet" ★ ile iyi örnek işaretler
+  (`POST /api/ornekler/yildiz`, app-sahibi); `ornek_bloklari` işaretlileri alaka sırasıyla ÖNE alır; commit ile ekibe yayılır.
+  Test `tests/test_ornek_yildiz.py`, `test_telemetri_olcum.py`.
+
 ## Ekip kota ölçümü — token sink'e gömülü + güncelleme öncesi/sonrası karşılaştırma ✅
 - Sink `token` alanını düşürüyordu (ekip verisinde token boş) → `telemetri.olay_yaz` token özetini `dokuman`'a `⟨tok …⟩`
   gömer, okuma/Uzaktan Çek `_olay_normalize` ile geri çözer (Apps Script değişmez). `kota_karsilastirma` olay bazında

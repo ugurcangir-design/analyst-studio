@@ -249,8 +249,10 @@ def olay_yaz(
     jira: dict | None = None,
     baglam: dict | None = None,
     token: dict | None = None,
+    kalite: dict | None = None,
 ) -> None:
     """Tek kullanım olayını lokal JSONL'e yazar + uzak sink'e gönderir. Asla hata fırlatmaz.
+    `kalite`: {acik_soru, zorunlu_soru} — analiz kalitesi vekili (soru_sayilari). `baglam.islem` ile birlikte dokümana gömülür.
 
     `token`: {girdi, cikti, cache_yaz, cache_oku, cagri, maliyet_usd} — o işlemde harcanan
     AI token/maliyet birikimi (base.token_delta). Yoksa None (0-token deterministik işlemler)."""
@@ -265,9 +267,12 @@ def olay_yaz(
             "model": model,
             "ai_modu": ai_modu,
             "jira": jira or None,
-            "baglam": (({**(baglam or {}), "dokuman": ((baglam or {}).get("dokuman") or "") + " " + _tok_gom(token)})
-                       if isinstance(token, dict) and token else (baglam or None)),
+            "baglam": (({**(baglam or {}), "dokuman": ((baglam or {}).get("dokuman") or "") + " "
+                         + _tok_gom(token if isinstance(token, dict) else None, kalite, (baglam or {}).get("islem"))})
+                       if ((isinstance(token, dict) and token) or isinstance(kalite, dict) or (baglam or {}).get("islem"))
+                       else (baglam or None)),
             "token": token or None,
+            "kalite": kalite or None,
             "makine": socket.gethostname(),
             "app_versiyon": _app_versiyon(),
         }
@@ -285,45 +290,81 @@ def olay_yaz(
 # dokunmadan güncelleme sonrası tüm analistlerin token tüketimi Kullanım Raporu'na gelir. ─────────────────────────────
 _TOK_DESEN = re.compile(r"\s*⟨tok ([^⟩]*)⟩\s*")
 _TOK_ALANLAR = (("g", "girdi"), ("c", "cikti"), ("cy", "cache_yaz"), ("co", "cache_oku"), ("n", "cagri"), ("usd", "maliyet_usd"))
+# Aynı işarete KALİTE vekilleri (sink bunları da düşürür): i=işlem (analiz/duzelt/cevap/fe-be-ayir…), aq=açık soru, zq=zorunlu soru
+_KALITE_ALANLAR = (("aq", "acik_soru"), ("zq", "zorunlu_soru"))
 
 
-def _tok_gom(token: dict) -> str:
+def _tok_gom(token: dict | None, kalite: dict | None = None, islem: str | None = None) -> str:
     parca = []
     for kisa, uzun in _TOK_ALANLAR:
-        v = token.get(uzun, 0) or 0
+        v = (token or {}).get(uzun, 0) or 0
         parca.append(f"{kisa}={round(float(v), 4) if uzun == 'maliyet_usd' else int(v)}")
+    for kisa, uzun in _KALITE_ALANLAR:
+        if isinstance(kalite, dict) and kalite.get(uzun) is not None:
+            parca.append(f"{kisa}={int(kalite.get(uzun) or 0)}")
+    if islem:
+        parca.append("i=" + re.sub(r"[^A-Za-z0-9_-]", "", str(islem))[:24])
     return "⟨tok " + ",".join(parca) + "⟩"
 
 
-def _tok_coz(metin: str) -> tuple[str, dict | None]:
+def _tok_coz(metin: str) -> tuple[str, dict | None, dict | None, str | None]:
+    """→ (doküman_temiz, token|None, kalite|None, islem|None)."""
     m = _TOK_DESEN.search(metin or "")
     if not m:
-        return (metin or ""), None
-    tok = {}
+        return (metin or ""), None, None, None
+    tok, kal, islem = {}, {}, None
     for parca in m.group(1).split(","):
-        if "=" in parca:
-            k, v = parca.split("=", 1)
-            uzun = dict(_TOK_ALANLAR).get(k.strip())
-            if uzun:
-                try:
-                    tok[uzun] = float(v) if uzun == "maliyet_usd" else int(float(v))
-                except ValueError:
-                    pass
-    return (metin[:m.start()] + metin[m.end():]).strip(), (tok or None)
+        if "=" not in parca:
+            continue
+        k, v = parca.split("=", 1)
+        k = k.strip()
+        if k == "i":
+            islem = v.strip() or None
+            continue
+        uzun = dict(_TOK_ALANLAR).get(k)
+        if uzun:
+            try:
+                tok[uzun] = float(v) if uzun == "maliyet_usd" else int(float(v))
+            except ValueError:
+                pass
+            continue
+        uzun = dict(_KALITE_ALANLAR).get(k)
+        if uzun:
+            try:
+                kal[uzun] = int(float(v))
+            except ValueError:
+                pass
+    return (metin[:m.start()] + metin[m.end():]).strip(), (tok or None), (kal or None), islem
 
 
 def _olay_normalize(e: dict) -> dict:
-    """Gömülü token işaretini `token` alanına geri taşır (yoksa), dokümandan siler. Her okuma/çekme yolunda uygulanır."""
+    """Gömülü işareti `token`/`kalite`/`baglam.islem` alanlarına geri taşır (yoksa), dokümandan siler. Her okuma/çekme yolunda."""
     try:
         b = e.get("baglam")
         if isinstance(b, dict) and isinstance(b.get("dokuman"), str) and "⟨tok " in b["dokuman"]:
-            temiz, tok = _tok_coz(b["dokuman"])
+            temiz, tok, kal, islem = _tok_coz(b["dokuman"])
             b["dokuman"] = temiz
-            if tok and not isinstance(e.get("token"), dict):
+            if tok and any(tok.values()) and not isinstance(e.get("token"), dict):
                 e["token"] = tok
+            if kal and not isinstance(e.get("kalite"), dict):
+                e["kalite"] = kal
+            if islem and not b.get("islem"):
+                b["islem"] = islem
     except Exception:
         pass
     return e
+
+
+_SORU_ID = re.compile(r"\b(?:Q-T-|Q-|PO-)\d{1,3}\b")
+
+
+def soru_sayilari(md: str) -> dict:
+    """Açık soru metninden kalite vekilleri: benzersiz soru id sayısı + 'Zorunlu: Evet' sayısı (0 token)."""
+    md = md or ""
+    ids = set(_SORU_ID.findall(md))
+    if not ids and md.strip() and "tespit edilmedi" not in md.lower():
+        ids = {f"#{i}" for i, _ in enumerate(re.findall(r"^\s*(?:[-*•]|\d+[.)])\s+\S", md, re.M))}
+    return {"acik_soru": len(ids), "zorunlu_soru": len(re.findall(r"Zorunlu:\s*Evet", md, re.I))}
 
 
 def kimlik_bildir() -> None:
@@ -426,6 +467,44 @@ def kota_karsilastirma(olaylar: list[dict]) -> dict:
         satir["degisim_okuma_pct"] = (round((s["ort_okuma"] - o["ort_okuma"]) * 100 / o["ort_okuma"]) if o and s and o["ort_okuma"] else None)
         out[olay] = satir
     return {"esik": esik, "olaylar": out}
+
+
+_ANALIZ_OLAYLARI = ("gorev_analiz", "surec_analizi", "teknik_analiz")
+_DUZELTME_ISLEMLERI = ("duzelt", "cevap")
+
+
+def kalite_ozeti(olaylar: list[dict]) -> dict:
+    """Analiz kalitesi vekilleri — haftalık, olay tipi bazında: analiz sayısı, ort. açık soru, ort. zorunlu soru,
+    düzeltme/cevap oranı (düzelt+cevap işlemi ÷ analiz). Yalnız `kalite` taşıyan (yeni sürüm) olaylar soru ortalamasına
+    girer; düzeltme işlemleri `baglam.islem` ile sayılır. Azalan açık soru + düzeltme oranı = iyileşme sinyali."""
+    grup: dict[tuple, dict] = {}
+    for e in olaylar:
+        olay = e.get("olay") or ""
+        if olay not in _ANALIZ_OLAYLARI:
+            continue
+        ts = str(e.get("ts", ""))[:10]
+        try:
+            hafta = datetime.strptime(ts, "%Y-%m-%d").strftime("%G-W%V")
+        except ValueError:
+            continue
+        g = grup.setdefault((hafta, olay), {"hafta": hafta, "olay": olay, "analiz": 0, "duzeltme": 0, "soru_n": 0, "acik": 0, "zorunlu": 0})
+        islem = str((e.get("baglam") or {}).get("islem") or "analiz") if isinstance(e.get("baglam"), dict) else "analiz"
+        if islem in _DUZELTME_ISLEMLERI:
+            g["duzeltme"] += 1
+            continue
+        g["analiz"] += 1
+        k = e.get("kalite")
+        if isinstance(k, dict):
+            g["soru_n"] += 1
+            g["acik"] += int(k.get("acik_soru") or 0)
+            g["zorunlu"] += int(k.get("zorunlu_soru") or 0)
+    out = []
+    for g in sorted(grup.values(), key=lambda x: (x["hafta"], x["olay"])):
+        out.append({"hafta": g["hafta"], "olay": g["olay"], "analiz": g["analiz"], "duzeltme": g["duzeltme"],
+                    "ort_acik_soru": (round(g["acik"] / g["soru_n"], 1) if g["soru_n"] else None),
+                    "ort_zorunlu": (round(g["zorunlu"] / g["soru_n"], 1) if g["soru_n"] else None),
+                    "duzeltme_orani": (round(g["duzeltme"] / g["analiz"], 2) if g["analiz"] else None)})
+    return {"haftalar": out}
 
 
 def _olaylari_filtrele(gun: int, analist: str | None = None) -> list[dict]:
@@ -538,6 +617,7 @@ def istatistik(gun: int = 90, donem: str = "gun", analist: str | None = None) ->
         "ozet": ozet,
         "token_ozet": {**token_ozet, "maliyet_usd": round(token_ozet["maliyet_usd"], 4)},
         "karsilastirma": kota_karsilastirma(filtreli),
+        "kalite": kalite_ozeti(filtreli),
         "analistler": sirali,
         "tum_analistler": list(tum_analistler),
         "tip_toplam": tip_toplam,

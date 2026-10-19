@@ -560,7 +560,7 @@ def _token_bas() -> bool:
 def _telemetri_olay(olay: str, durum: str, sure_ms: int,
                     model: str | None = None, ai_modu: str | None = None,
                     baglam: dict | None = None, jira: dict | None = None,
-                    token_bas: bool | None = None) -> None:
+                    token_bas: bool | None = None, kalite: dict | None = None) -> None:
     """In-process analizler (görev analiz, mutabakat, görev güncelle) için emit — fail-safe.
     `token_bas`: _token_bas() ile bu thread'de capture başlatıldıysa True; biriken token olaya eklenir."""
     try:
@@ -575,9 +575,27 @@ def _telemetri_olay(olay: str, durum: str, sure_ms: int,
             except Exception:
                 token = None
         telemetri.olay_yaz(olay=olay, durum=durum, analist=analist, sure_ms=sure_ms,
-                           model=model, ai_modu=ai_modu, baglam=baglam, jira=jira, token=token)
+                           model=model, ai_modu=ai_modu, baglam=baglam, jira=jira, token=token, kalite=kalite)
     except Exception:
         pass
+
+
+def _kalite_vekili(sonuc, mode: str) -> dict | None:
+    """Task analizi sonucundan kalite vekili (açık/zorunlu soru sayısı; FE+BE'de iki katman toplamı). Kabul/BFF/formatla → None."""
+    try:
+        if mode in ("kabul-kontrol", "bff-kesif", "formatla", "akis-kapat") or not isinstance(sonuc, dict):
+            return None
+        from skills.telemetri import soru_sayilari
+        if isinstance(sonuc.get("fe_be"), dict):
+            t = {"acik_soru": 0, "zorunlu_soru": 0}
+            for k in ("be", "fe"):
+                s = soru_sayilari((sonuc["fe_be"].get(k) or {}).get("acik_sorular", ""))
+                t["acik_soru"] += s["acik_soru"]
+                t["zorunlu_soru"] += s["zorunlu_soru"]
+            return t
+        return soru_sayilari(sonuc.get("acik_sorular", ""))
+    except Exception:
+        return None
 
 
 @app.before_request
@@ -2047,6 +2065,9 @@ def adim_duzelt():
     Arka planda çalışır; ilerleme GET /api/revizyon/<dosya> (`calisiyor`) ile izlenir."""
     data = request.get_json(silent=True) or {}
     dosya = (data.get("dosya") or "").strip()
+    if dosya:   # kalite vekili: analist bu adımı düzeltti (düzeltme oranı) — 0 token, fail-safe
+        _olay = {"surec-analizi.md": "surec_analizi", "teknik-analiz.md": "teknik_analiz"}.get(dosya, "brd_analizi")
+        _telemetri_olay(_olay, "ok", 0, baglam={"islem": "duzelt", "dokuman": dosya})
     talimat = (data.get("talimat") or "").strip()
     if dosya not in IZIN_VERILEN_CIKTILAR or not dosya.endswith(".md"):
         return jsonify({"ok": False, "error": "Geçersiz dosya"}), 400
@@ -3618,6 +3639,19 @@ def ornekler_jira_import():
 @usage_gerekli
 def ornekler_jira_import_durum():
     return jsonify({"ok": True, **_jira_import_durum})
+
+
+@app.route("/api/ornekler/yildiz", methods=["POST"])
+@yetki_gerekli
+def ornekler_yildiz():
+    """App-sahibi: örneği 'iyi örnek' işaretler/kaldırır → reference/ornek_yildiz.json (tracked; commit'le ekibe yayılır). {id, yildiz}."""
+    data = request.get_json(silent=True) or {}
+    oid = (data.get("id") or "").strip()
+    if not oid:
+        return jsonify({"ok": False, "error": "id gerekli"}), 400
+    from skills.ornek_havuzu import yildiz_ayarla
+    ids = yildiz_ayarla(oid, bool(data.get("yildiz", True)))
+    return jsonify({"ok": True, "yildiz": oid in ids, "toplam": len(ids)})
 
 
 @app.route("/api/ornekler/sil", methods=["POST"])
@@ -5362,7 +5396,7 @@ def _gorev_is_calistir(job_id: str) -> None:
                 _gorev_egitim_topla(key, gorev.get("summary", ""), adim.get("katman", ""), mode, sonuc)
             _telemetri_olay("gorev_analiz", "ok", int((time.time() - _bas) * 1000),
                             model=_model, ai_modu=_ai_modu, baglam={"gorev": key, "islem": adim.get("mode", "analiz")},
-                            token_bas=_tbas)
+                            token_bas=_tbas, kalite=_kalite_vekili(sonuc, mode))
         except _DurdurulduError:
             # Analist 'Durdur' → süren claude CLI öldürüldü. Hata sayma; işi iptal işaretle.
             logger.info("Görev analizi durduruldu (analist) — adım %s yarıda kesildi.", key)
@@ -5607,7 +5641,7 @@ def jira_gorev_analiz():
                                 onceki_sorular=(data.get("onceki_sorular") or ""))
         _telemetri_olay("gorev_analiz", "ok", int((time.time() - _bas) * 1000),
                         model=_model, ai_modu=_ai_modu,
-                        baglam={"gorev": gorev.get("key")}, token_bas=_tbas)
+                        baglam={"gorev": gorev.get("key")}, token_bas=_tbas, kalite=_kalite_vekili(sonuc, "analiz"))
         # Geriye uyumlu: hem markdown (teknik analiz) hem acik_sorular ayrı sekme için
         return jsonify({"ok": True, "key": gorev["key"],
                         "markdown": sonuc.get("markdown", ""),

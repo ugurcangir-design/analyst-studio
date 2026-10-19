@@ -35,9 +35,9 @@ T._analist_belirle = lambda a: "Test Analist"
 tok = {"girdi": 12, "cikti": 345, "cache_yaz": 6789, "cache_oku": 123456, "cagri": 3, "maliyet_usd": 1.2345}
 isaret = T._tok_gom(tok)
 chk("gömme biçimi", isaret.startswith("⟨tok g=12,c=345,cy=6789,co=123456,n=3,usd=1.2345⟩"), isaret)
-temiz, geri = T._tok_coz("surec-dokumani.docx " + isaret)
+temiz, geri, _k, _i = T._tok_coz("surec-dokumani.docx " + isaret)
 chk("çözme: doküman temiz + token geri", temiz == "surec-dokumani.docx" and geri == {"girdi": 12, "cikti": 345, "cache_yaz": 6789, "cache_oku": 123456, "cagri": 3, "maliyet_usd": 1.2345}, (temiz, geri))
-chk("işaret yoksa dokunulmaz", T._tok_coz("x.docx") == ("x.docx", None))
+chk("işaret yoksa dokunulmaz", T._tok_coz("x.docx") == ("x.docx", None, None, None))
 
 T.olay_yaz("gorev_analiz", "ok", sure_ms=60000, baglam={"proje": "P", "dokuman": ""}, token=tok)
 T.olay_yaz("surec_analizi", "ok", sure_ms=120000, baglam={"proje": "P", "dokuman": "brd.docx"}, token={"girdi": 5, "cikti": 6, "cache_yaz": 7, "cache_oku": 8, "cagri": 1, "maliyet_usd": 0.1})
@@ -71,6 +71,36 @@ chk("yalnız 'sonra' olan olay: Δ yok", k["olaylar"]["surec_analizi"].get("once
 chk("token'sız olay tabloya girmez", "mutabakat" not in k["olaylar"])
 chk("ozet() karşılaştırmayı döner", "karsilastirma" in T.istatistik(gun=30) and T.istatistik(gun=30)["karsilastirma"]["esik"] == "2026-10-19T18:00:00")
 os.environ.pop("KOTA_OLCUM_BASLANGIC", None)
+
+# ── Kalite vekilleri ──
+chk("soru_sayilari: Q-T id'leri + zorunlu", T.soru_sayilari("### Q-T-001: a\n- Zorunlu: Evet\n### Q-T-002: b\n- Zorunlu: Hayır\nbkz Q-T-001") == {"acik_soru": 2, "zorunlu_soru": 1})
+chk("soru_sayilari: 'tespit edilmedi' → 0", T.soru_sayilari("Açık soru tespit edilmedi.") == {"acik_soru": 0, "zorunlu_soru": 0})
+chk("soru_sayilari: id'siz madde listesi → madde sayısı", T.soru_sayilari("- x nedir?\n- y nedir?")["acik_soru"] == 2)
+T.olay_yaz("gorev_analiz", "ok", sure_ms=1000, baglam={"gorev": "K-1", "islem": "analiz"}, token=tok, kalite={"acik_soru": 3, "zorunlu_soru": 1})
+T.olay_yaz("gorev_analiz", "ok", sure_ms=500, baglam={"gorev": "K-1", "islem": "duzelt"})
+ham = [json.loads(sat) for sat in T.EVENTS_DOSYA.read_text(encoding="utf-8").splitlines()]
+chk("kalite + işlem dokümana gömülü (aq/zq/i)", "aq=3" in ham[-2]["baglam"]["dokuman"] and "zq=1" in ham[-2]["baglam"]["dokuman"] and "i=analiz" in ham[-2]["baglam"]["dokuman"]
+    and "i=duzelt" in ham[-1]["baglam"]["dokuman"], ham[-1]["baglam"])
+sink2 = {"ts": "2026-10-20T09:00:00", "olay": "gorev_analiz", "baglam": {"proje": "", "dokuman": ham[-2]["baglam"]["dokuman"]}}
+n2 = T._olay_normalize(dict(sink2))
+chk("sink satırı: kalite + islem geri geldi", n2["kalite"] == {"acik_soru": 3, "zorunlu_soru": 1} and n2["baglam"]["islem"] == "analiz" and n2["token"]["cache_oku"] == 123456)
+sink3 = T._olay_normalize({"ts": "x", "olay": "gorev_analiz", "baglam": {"dokuman": ham[-1]["baglam"]["dokuman"]}})
+chk("token'sız düzeltme satırı: token alanı yok, islem=duzelt", "token" not in sink3 and sink3["baglam"]["islem"] == "duzelt")
+ko = T.kalite_ozeti([
+    {"ts": "2026-10-13T10:00:00", "olay": "gorev_analiz", "baglam": {"islem": "analiz"}, "kalite": {"acik_soru": 6, "zorunlu_soru": 2}},
+    {"ts": "2026-10-14T10:00:00", "olay": "gorev_analiz", "baglam": {"islem": "fe-be-ayir"}, "kalite": {"acik_soru": 2, "zorunlu_soru": 0}},
+    {"ts": "2026-10-14T11:00:00", "olay": "gorev_analiz", "baglam": {"islem": "duzelt"}},
+    {"ts": "2026-10-14T12:00:00", "olay": "gorev_analiz", "baglam": {"islem": "cevap"}},
+    {"ts": "2026-10-20T10:00:00", "olay": "surec_analizi", "kalite": {"acik_soru": 4, "zorunlu_soru": 1}},
+    {"ts": "2026-10-20T10:00:00", "olay": "surec_analizi", "baglam": {"islem": "duzelt"}},
+    {"ts": "2026-10-20T10:00:00", "olay": "mutabakat"},
+])["haftalar"]
+g1 = [h for h in ko if h["olay"] == "gorev_analiz"][0]
+chk("kalite_ozeti: haftalık ort açık soru 4.0, zorunlu 1.0, düzeltme 2/2 analiz = 100%", g1["hafta"] == "2026-W42" and g1["analiz"] == 2
+    and g1["ort_acik_soru"] == 4.0 and g1["ort_zorunlu"] == 1.0 and g1["duzeltme"] == 2 and g1["duzeltme_orani"] == 1.0, g1)
+g2 = [h for h in ko if h["olay"] == "surec_analizi"][0]
+chk("süreç analizi satırı + mutabakat hariç", g2["analiz"] == 1 and g2["duzeltme_orani"] == 1.0 and all(h["olay"] != "mutabakat" for h in ko))
+chk("istatistik() kalite döner", "kalite" in T.istatistik(gun=30))
 
 print()
 if HATA:
