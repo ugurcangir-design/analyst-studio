@@ -20,7 +20,7 @@ from urllib.parse import urlparse
 from .base import (
     MAX_TOKENS_KISA, MAX_TOKENS_COMBINED,
     _api_cagri, _xml_ayir, _metin_sikistir, load_context_filter,
-    canli_uygulama_baglami_hazirla, extended_thinking_acik,
+    canli_uygulama_baglami_hazirla, extended_thinking_acik, asama_ayarla,
 )
 
 _MAX_MADDE = 25
@@ -130,6 +130,7 @@ def _ilgili_metni(gorev: dict) -> str:
 
 
 def kabul_listesi_cikar(gorev: dict, _ai=None, talimat: str = "") -> list[dict]:
+    asama_ayarla("kabul:liste")
     ai = _ai or (lambda s, m: _api_cagri(s, m, max_tokens=MAX_TOKENS_KISA, thinking=False))
     icerik = [{"type": "text", "text": f"### Jira Görevi: {gorev.get('key', '')}\n\n**Başlık:** {gorev.get('summary', '')}\n"
                                        f"{_ilgili_metni(gorev)}\n"
@@ -297,6 +298,7 @@ def canli_dogrula(gorev: dict, maddeler: list[dict], _ai=None, talimat: str = ""
     icerik = [{"type": "text", "text": canli},
               {"type": "text", "text": f"### Task: {gorev.get('key', '')} — {gorev.get('summary', '')}"},
               {"type": "text", "text": _kontrol_talimati(maddeler, talimat)}]
+    asama_ayarla("kabul:dogrula")
     ai = _ai or (lambda s, m: _api_cagri(s, m, max_tokens=MAX_TOKENS_COMBINED, thinking=extended_thinking_acik(),
                                          onbellek=False, canli_uygulama_kapsami="gorev"))
     yanit = _metin_sikistir(ai(sistem, [{"role": "user", "content": icerik}]))

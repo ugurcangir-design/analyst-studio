@@ -22,7 +22,7 @@ from pathlib import Path
 
 from .base import (
     REF_DIR, MAX_TOKENS_KISA, MAX_TOKENS_COMBINED,
-    _api_cagri, _xml_ayir, _metin_sikistir, hizli_mod_acik,
+    _api_cagri, _xml_ayir, _metin_sikistir, hizli_mod_acik, asama_ayarla,
     referans_dosyalari_hazirla, _ref_dokuman_metinleri,
     canli_uygulama_baglami_hazirla, gorev_live_app_urls, live_app_urls,
 )
@@ -267,6 +267,7 @@ def _json_dizi(metin: str, tag: str):
 
 
 def _siniflandir(gorev: dict, sorular: list[dict], kanitlar: dict[str, str], _ai=None) -> dict[str, dict]:
+    asama_ayarla("soru:cozum")
     ai = _ai or (lambda s, m: _api_cagri(s, m, max_tokens=MAX_TOKENS_KISA, thinking=False))
     parcalar = [f"### Jira Görevi: {gorev.get('key', '')} — {gorev.get('summary', '')}"]
     for s in sorular:
@@ -312,6 +313,7 @@ def _gozlemle(gorev: dict, sorular_gozlem: list[tuple[dict, dict]], _ai=None) ->
     icerik = [{"type": "text", "text": canli},
               {"type": "text", "text": f"### Task: {gorev.get('key', '')} — {gorev.get('summary', '')}"}]
     kapsam = "gorev" if gorev_live_app_urls() else "surec"
+    asama_ayarla("soru:gozlem")
     ai = _ai or (lambda s, m, k=kapsam: _api_cagri(s, m, max_tokens=MAX_TOKENS_COMBINED, thinking=False, onbellek=False,
                                                   canli_uygulama_kapsami=k))
     yanit = _metin_sikistir(ai(sistem, [{"role": "user", "content": icerik}]))

@@ -22,7 +22,7 @@ from urllib.parse import urlparse
 
 from .base import (
     OUTPUT_DIR, MAX_TOKENS_KISA,
-    _api_cagri, _xml_ayir, _metin_sikistir, load_context_filter,
+    _api_cagri, _xml_ayir, _metin_sikistir, load_context_filter, asama_ayarla,
     canli_uygulama_baglami_hazirla, gorev_live_app_urls, live_app_urls,
 )
 
@@ -104,6 +104,7 @@ def giris_calistir(canli: str, kapsam: str, _ai=None) -> dict:
         "Çıktı YALNIZ şu blok:\n<giris_sonuc>{\"ok\": true, \"neden\": \"\", \"ekran\": \"giriş sonrası sayfa başlığı/route\", "
         "\"menu\": [\"üst menü öğeleri\"]}</giris_sonuc>\nGiriş reddedildiyse ok=false ve neden'e ekrandaki hata metnini AYNEN yaz. "
         "Giriş formu hiç çıkmadıysa (oturum zaten açık) ok=true. Şifreyi yazma.")}]
+    asama_ayarla("giris")
     ai = _ai or (lambda s, m, k=kapsam: _api_cagri(s, m, max_tokens=MAX_TOKENS_KISA, thinking=False, onbellek=False,
                                                   canli_uygulama_kapsami=k))
     try:

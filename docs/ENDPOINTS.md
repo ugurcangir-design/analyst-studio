@@ -143,6 +143,8 @@ eski takip-Excel senkron akışının yerini board-to-board mutabakat aldı.
 
 ## Kullanım Raporu (Telemetri — owner-only, 0 token; skills/telemetri.py)
 ```
+GET  /api/usage/cagri-ozet         ?gun=7 → {toplam{cagri,girdi,cikti,cache_yaz,cache_oku,sure_sn,tur}, asamalar[{asama,model,canli,…}]}
+                                   (Faz 0 ölçüm: logs/usage/cagri.jsonl aşama+model bazlı; usage-gate; 0 token)
 GET  /api/auth/me                  → {username, is_admin, usage_admin, yetki_admin, rol, gizli[]}. usage_admin/
                                      yetki_admin = `reference/owner_konsol.json` işaret dosyası (env DEĞİL). gizli[] =
                                      bu kullanıcı için ETKİN gizli ekran id'leri (rol→ekran, _etkin_gizli).

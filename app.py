@@ -3483,6 +3483,18 @@ def usage_stats():
     return jsonify(telemetri.istatistik(gun=gun, donem=donem, analist=analist))
 
 
+@app.route("/api/usage/cagri-ozet", methods=["GET"])
+@usage_gerekli
+def usage_cagri_ozet():
+    """Faz 0 ölçüm: son N günün AI çağrıları aşama+model bazında (logs/usage/cagri.jsonl; 0 token)."""
+    try:
+        gun = int(request.args.get("gun", 7))
+    except Exception:
+        gun = 7
+    from skills.base import cagri_ozeti
+    return jsonify({"ok": True, **cagri_ozeti(gun=gun)})
+
+
 @app.route("/api/usage/donem-detay", methods=["GET"])
 @usage_gerekli
 def usage_donem_detay():

@@ -17,7 +17,7 @@ from .base import (
     _domain_kurallari_oku,
     OZEL_PROMPT_DOGRULUK_EKI, MODEL_HAFIF, ai_ara_sozleri_temizle,
     belirsizlik_denetimi, izlenebilirlik_matrisi_olustur,
-    extended_thinking_acik, hizli_mod_acik, surec_id_kapsam,
+    extended_thinking_acik, hizli_mod_acik, surec_id_kapsam, asama_ayarla,
     yonetici_ozeti_olustur, yonetici_ozetini_cikar,
     OUTPUT_DIR,
     MAX_CHARS_GENEL,
@@ -203,8 +203,15 @@ def teknik_analiz_yap(ozel_atla: bool = False) -> tuple[Path, Path]:
 
     canli_baglam = canli_uygulama_baglami_hazirla()
     if canli_baglam:
-        print("  Canlı uygulama MCP/Chrome hedefleri dahil ediliyor...")
-        stable_bloklar.append({"type": "text", "text": canli_baglam})
+        # Faz 1 (kota): gözlem ayrı küçük-promptlu fazda → rapor; analiz çağrısı tarayıcı kullanmaz.
+        from . import gozlem as _gz
+        _gr = _gz.rapor_al(canli_baglam, "surec", gorev_ozet=surec_metni, yeniden=True)
+        if _gr.get("md"):
+            print("  🌐 Canlı gözlem raporu (ayrı faz) analize dahil ediliyor...")
+            stable_bloklar.append({"type": "text", "text": _gz.rapor_blogu(_gr)})
+        else:
+            print("  ⚠ Canlı gözlem yapılamadı — teknik analiz gözlemsiz üretiliyor.")
+            stable_bloklar.append({"type": "text", "text": _gz.gozlem_yok_blogu(_gr.get("neden", ""))})
 
     if mockup_icerik:
         print(f"  HTML prototip dahil ediliyor ({len(mockup_icerik):,} karakter)...")
@@ -259,8 +266,8 @@ def teknik_analiz_yap(ozel_atla: bool = False) -> tuple[Path, Path]:
     # ── AŞAMA 1: Sadece teknik analiz ──
     sistem = _teknik_prompt_olustur(mockup_var=bool(mockup_icerik), ozel_atla=ozel_atla)
     mesajlar = [{"role": "user", "content": icerik_parcalari}]
-    yanit = _teknik_uret_tam(sistem, mesajlar,
-                             canli_uygulama_kapsami=("surec" if canli_baglam else None))
+    asama_ayarla("teknik:analiz")
+    yanit = _teknik_uret_tam(sistem, mesajlar)   # gözlem ayrı fazda → tarayıcı yok, önbellek normal
     yanit = _metin_sikistir(yanit)
     # AI'ın süreç anlatımı ara sözlerini ("Şimdi raporu yazıyorum." vb.) çıkar —
     # gereksinim değil, gürültü; hiçbir yerde değeri yok.

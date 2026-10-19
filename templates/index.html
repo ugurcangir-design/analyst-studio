@@ -3274,6 +3274,13 @@ function temaDegistir() {
         </div>
         <div class="panel-body">
           <!-- Few-shot ortak eğitim havuzu durumu (agent'ın analiz kalitesinden öğrenmesi) -->
+          <div id="ku-cagri-panel" style="margin-bottom:14px;padding:11px 14px;border:1px solid var(--border);background:var(--surface2);border-radius:9px;font-size:12.5px">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <b>Aşama bazlı tüketim</b> <span style="color:var(--text3)">(bu makine · son <select id="ku-cagri-gun" onchange="kuCagriOzetYukle()" style="font-size:12px"><option value="1">1 gün</option><option value="7" selected>7 gün</option><option value="30">30 gün</option></select>)</span>
+              <span class="panel-spacer"></span><span id="ku-cagri-toplam" style="color:var(--text2)"></span>
+            </div>
+            <div id="ku-cagri-tablo" style="margin-top:8px;overflow:auto"></div>
+          </div>
           <div id="ku-ornek-panel" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px;padding:11px 14px;border:1px solid var(--border);background:var(--surface2);border-radius:9px;font-size:12.5px">
             <svg class="ico" style="width:16px;height:16px;color:var(--accent);flex-shrink:0"><use href="#i-zap"/></svg>
             <div style="flex:1;min-width:220px">
@@ -4370,7 +4377,24 @@ function kullanimExcel() {
   window.location = '/api/usage/export?gun=' + gun;
 }
 // Few-shot ortak eğitim havuzu durumu (owner görünürlüğü)
+// Faz 0 ölçüm — aşama bazlı AI tüketimi (logs/usage/cagri.jsonl)
+async function kuCagriOzetYukle() {
+  const kap = document.getElementById('ku-cagri-tablo'); if (!kap) return;
+  const gun = (document.getElementById('ku-cagri-gun') || {}).value || 7;
+  try {
+    const d = await (await fetch('/api/usage/cagri-ozet?gun=' + gun)).json();
+    if (!d.ok) { kap.innerHTML = ''; return; }
+    const f = n => (n || 0).toLocaleString('tr-TR');
+    const t = d.toplam || {};
+    document.getElementById('ku-cagri-toplam').textContent = `${f(t.cagri)} çağrı · girdi ${f(t.girdi)} · çıktı ${f(t.cikti)} · cache yaz ${f(t.cache_yaz)} · cache oku ${f(t.cache_oku)} · ${f(t.tur)} tur`;
+    if (!(d.asamalar || []).length) { kap.innerHTML = '<span style="color:var(--text3)">Henüz kayıt yok — ölçüm bu sürümle başladı; ilk analizden sonra dolar.</span>'; return; }
+    kap.innerHTML = '<table class="ku-table" style="width:100%;font-size:12px"><thead><tr><th>Aşama</th><th>Model</th><th>Canlı</th><th>Çağrı</th><th>Tur</th><th>Girdi</th><th>Çıktı</th><th>Cache yaz</th><th>Cache oku</th><th>Süre</th><th>Tekrar/Tavan</th></tr></thead><tbody>'
+      + d.asamalar.map(a => `<tr><td>${escHtml(a.asama)}</td><td>${escHtml(String(a.model).replace('claude-', ''))}</td><td>${a.canli ? '🌐' : ''}</td><td>${f(a.cagri)}</td><td>${f(a.tur)}</td><td>${f(a.girdi)}</td><td>${f(a.cikti)}</td><td>${f(a.cache_yaz)}</td><td><b>${f(a.cache_oku)}</b></td><td>${Math.round((a.sure_sn || 0) / 60)} dk</td><td>${a.tekrar || 0} / ${a.max_tur || 0}</td></tr>`).join('')
+      + '</tbody></table><div style="color:var(--text3);margin-top:4px">Cache oku = agentik döngüde her turda yeniden okunan bağlam; kota tüketiminin ana kalemi. Gözlem fazı (aşama "gozlem") ile analiz ("gorev:analiz" vb.) artık ayrı ölçülür.</div>';
+  } catch (e) { kap.innerHTML = ''; }
+}
 async function ornekDurumYukle() {
+  kuCagriOzetYukle();
   const el = document.getElementById('ku-ornek-ozet');
   if (!el) return;
   try {

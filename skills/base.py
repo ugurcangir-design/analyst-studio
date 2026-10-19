@@ -2795,6 +2795,9 @@ def canli_uygulama_baglami_hazirla(gorev: bool = False, base_url_override: str =
         "(ör. hangi aksiyonda hangi errorCode/HTTP status döndü), gerisini KISA bir açık soruya "
         "bırak; 'sunucu loglarından bakılmalı / gözlemlenemez' gibi meta-not ile olası-neden dizisi yazma.\n"
         "- Chrome MCP erişilemiyorsa bunu varsayım üretmeden belirt; bu URL'leri yalnızca hedef bağlam say.\n"
+        "- TUR DİYETİ (kota): aynı sayfanın `browser_snapshot`'ını ikinci kez ALMA (ilkini kullan); kontrol ararken önce "
+        "`browser_find`; `browser_network_requests` listesinden yalnız kapsamla ilgili 1-3 isteğin detayını "
+        "`browser_network_request` ile al; kapsam dışı menüleri gezme; yeterli kanıt toplanınca gezmeyi bırak ve raporu yaz.\n"
         "- Bir tarayıcı aracı reddedilirse veya erişilebilir değilse İZİN İSTEME (bu oturumda izin "
         "verilemez — kimse onaylayamaz); eşdeğer İZİNLİ araçla devam et (örn. form doldurmada "
         "browser_fill_form yerine alan alan browser_type + browser_click). Hiçbir alternatif yoksa "
@@ -4147,8 +4150,79 @@ def _live_app_tekrar_acik() -> bool:
     return (os.getenv("LIVE_APP_TEKRAR", "true") or "true").strip().lower() not in ("0", "false", "hayir", "no")
 
 
+# ─── Faz 0 ÖLÇÜM: aşama etiketi + çağrı başına kayıt ─────────────────────────
+# Kota taraması (docs/KOTA-OPTIMIZASYON-PLANI.md): hangi aşamanın ne tükettiği görünmüyordu. Her AI çağrısı
+# `logs/usage/cagri.jsonl`'a aşama/model/canlı/tur/token ile yazılır → Kullanım Raporu "aşama bazlı tüketim".
+_ASAMA_TL = threading.local()
+CAGRI_LOG = BASE_DIR / "logs" / "usage" / "cagri.jsonl"
+
+
+def asama_ayarla(ad: str) -> None:
+    """Bu thread'deki sonraki AI çağrılarının aşama etiketi (ör. 'gorev:analiz', 'gozlem', 'soru:cozum')."""
+    _ASAMA_TL.ad = ad
+
+
+def asama_oku() -> str:
+    return getattr(_ASAMA_TL, "ad", "") or ""
+
+
+def _cagri_kaydet(**alanlar) -> None:
+    """Çağrı başına ölçüm satırı (fail-safe). Analiz içeriği YAZILMAZ — yalnız sayılar/etiketler."""
+    try:
+        from datetime import datetime
+        CAGRI_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with CAGRI_LOG.open("a", encoding="utf-8") as f:
+            f.write(json.dumps({"ts": datetime.now().isoformat(timespec="seconds"), "asama": asama_oku(), **alanlar},
+                               ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
+def cagri_ozeti(gun: int = 7) -> dict:
+    """Kullanım Raporu: son `gun` günün çağrılarını aşama+model bazında toplar (0 token)."""
+    from datetime import datetime, timedelta
+    esik = (datetime.now() - timedelta(days=max(1, gun))).isoformat(timespec="seconds")
+    grup: dict[tuple, dict] = {}
+    toplam = {"cagri": 0, "girdi": 0, "cikti": 0, "cache_yaz": 0, "cache_oku": 0, "sure_sn": 0, "tur": 0}
+    try:
+        if CAGRI_LOG.exists():
+            for satir in CAGRI_LOG.read_text(encoding="utf-8").splitlines():
+                try:
+                    r = json.loads(satir)
+                except Exception:
+                    continue
+                if (r.get("ts") or "") < esik:
+                    continue
+                k = (r.get("asama") or "?", r.get("model") or "?", bool(r.get("canli")))
+                g = grup.setdefault(k, {"asama": k[0], "model": k[1], "canli": k[2], "cagri": 0, "girdi": 0, "cikti": 0,
+                                        "cache_yaz": 0, "cache_oku": 0, "sure_sn": 0, "tur": 0, "tekrar": 0, "max_tur": 0})
+                for a in ("girdi", "cikti", "cache_yaz", "cache_oku", "sure_sn", "tur"):
+                    v = int(r.get(a) or 0)
+                    g[a] += v
+                    toplam[a] += v
+                g["cagri"] += 1
+                toplam["cagri"] += 1
+                g["tekrar"] += 1 if r.get("tekrar") else 0
+                g["max_tur"] += 1 if r.get("max_tur_takildi") else 0
+    except Exception:
+        pass
+    satirlar = sorted(grup.values(), key=lambda g: -(g["girdi"] + g["cache_yaz"] + g["cache_oku"]))
+    return {"gun": gun, "toplam": toplam, "asamalar": satirlar}
+
+
+def _canli_max_tur(varsayilan: int = 40) -> int:
+    try:
+        return max(5, int(os.getenv("LIVE_APP_MAX_TUR", str(varsayilan))))
+    except (TypeError, ValueError):
+        return varsayilan
+
+
+_MAX_TUR_TAMAMLA = ("Tur tavanına ulaştın. ARTIK ARAÇ KULLANMA. Şimdiye kadar topladığın kanıtla istenen çıktı bloğunu "
+                    "EKSİKSİZ ve istenen biçimde ŞİMDİ yaz; göremediğin kısımları 'gözlemlenemedi' diye belirt, uydurma.")
+
+
 def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | None = None,
-                   _tekrar: bool = False) -> str:
+                   _tekrar: bool = False, max_turns: int | None = None) -> str:
     claude_yolu = _claude_yolu_bul()
     if not claude_yolu:
         raise EnvironmentError(
@@ -4207,11 +4281,33 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
     # --model DAİMA açıkça geçilir → Claude Code'un varsayılan (ör. Fable) modeli KULLANILMAZ.
     _aktif_model = aktif_cli_model()   # canlı okuma → arayüzden değişince restart gerekmez
     _model_args = ["--model", _aktif_model] if _aktif_model else []
+    # Canlı gözlem döngüsüne TUR TAVANI (Faz 1 A1.4): kaçak döngü (her tur ~bağlam kadar okuma) kesilir;
+    # tavana takılırsa oturum --resume ile sürdürülüp rapor araçsız tamamlatılır (çıktı kaybolmaz).
+    _tur_args: list[str] = []
+    if _live_args:
+        _tur_tavani = int(max_turns or _canli_max_tur())
+        _tur_args = ["--max-turns", str(_tur_tavani)]
+    _cagri_bas = time.time()
     try:
         proc = _cli_calistir(
-            [claude_yolu, "-p", "--output-format", "json", *_model_args, *_live_args, *_analiz_mcp_args],
+            [claude_yolu, "-p", "--output-format", "json", *_model_args, *_live_args, *_tur_args, *_analiz_mcp_args],
             tam_prompt, cli_env, timeout=_cli_timeout,
         )
+        # Tur tavanına takıldıysa (subtype error_max_turns): aynı oturumu sürdür, araçsız tamamlat.
+        _max_tur_takildi = False
+        try:
+            _v0 = json.loads((proc.stdout or "").strip() or "{}")
+        except Exception:
+            _v0 = {}
+        if _live_args and isinstance(_v0, dict) and str(_v0.get("subtype") or "") == "error_max_turns" and _v0.get("session_id"):
+            _max_tur_takildi = True
+            logger.warning("Canlı gözlem tur tavanına (%s) takıldı — oturum sürdürülüp rapor araçsız tamamlatılıyor.", _tur_args[-1])
+            print(f"  ⏱ Gözlem tur tavanına ({_tur_args[-1]}) ulaştı — rapor mevcut kanıtla tamamlatılıyor…")
+            proc = _cli_calistir(
+                [claude_yolu, "-p", "--output-format", "json", *_model_args, "--resume", str(_v0["session_id"]),
+                 *_live_args, "--max-turns", "3"],
+                _MAX_TUR_TAMAMLA, cli_env, timeout=max(300, _cli_timeout // 3),
+            )
     finally:
         if _live_args:
             _slot_birak()      # profil slotu serbest (tekrar denemesi yeni slot alır)
@@ -4280,6 +4376,11 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
                     cache_yaz=_u.get("cache_creation_input_tokens", 0),
                     cache_oku=_u.get("cache_read_input_tokens", 0),
                     maliyet=veri.get("total_cost_usd", 0.0))
+        _cagri_kaydet(model=_aktif_model, canli=bool(_live_args), kapsam=canli_uygulama_kapsami or "",
+                      tur=int(veri.get("num_turns") or 0), girdi=int(_u.get("input_tokens") or 0),
+                      cikti=int(_u.get("output_tokens") or 0), cache_yaz=int(_u.get("cache_creation_input_tokens") or 0),
+                      cache_oku=int(_u.get("cache_read_input_tokens") or 0), sure_sn=int(time.time() - _cagri_bas),
+                      tekrar=bool(_tekrar), max_tur_takildi=bool(_max_tur_takildi), prompt_kc=len(tam_prompt))
     except Exception:
         pass
 
@@ -4304,7 +4405,7 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
             logger.warning("⚠ Canlı gözlem istendi ama model hiç tarayıcı aracı çağırmadı (num_turns=%s, MCP bağlıydı) "
                            "— sertleştirilmiş talimatla 1 kez daha deneniyor.", _turns)
             print("  ⚠ Model tarayıcıyı kullanmadı — canlı gözlem bir kez daha deneniyor…")
-            return _api_cagri_cli(sistem, mesajlar, canli_uygulama_kapsami, _tekrar=True)
+            return _api_cagri_cli(sistem, mesajlar, canli_uygulama_kapsami, _tekrar=True, max_turns=max_turns)
         _neden = ("izinli tarayıcı aracı reddedildi" if _browser_reddi
                   else ("model hiç tarayıcı aracı çağırmadı (MCP bağlıydı" + ("; tekrar denendi)" if _tekrar else ")")
                         if _turns <= 1 else ""))
@@ -4506,8 +4607,10 @@ def _api_cagri(
     thinking: bool = False,
     onbellek: bool = True,
     canli_uygulama_kapsami: str | None = None,
+    max_turns: int | None = None,
 ) -> str:
     """onbellek=False → önbellek OKUMAZ (taze çağrı), ama sonucu yine YAZAR.
+    max_turns: canlı gözlem döngüsü tur tavanı (yalnız CLI + canlı kapsamda; None → LIVE_APP_MAX_TUR / 40).
     Aynı prompt'la 'farklı sonuç bekleyen' retry'lar (örn. kesik çıktı yeniden
     denemesi) bunu kullanmalı; aksi halde cache aynı kesik yanıtı döndürür.
 
@@ -4524,7 +4627,7 @@ def _api_cagri(
             return kayit
     if USE_CLAUDE_CLI:
         try:
-            sonuc = _api_cagri_cli(sistem, mesajlar, canli_uygulama_kapsami=canli_uygulama_kapsami)
+            sonuc = _api_cagri_cli(sistem, mesajlar, canli_uygulama_kapsami=canli_uygulama_kapsami, max_turns=max_turns)
         except CliLimitError:
             # P1-B dayanıklılık: CLI limiti (429) doldu → API anahtarı varsa bu çağrıyı otomatik
             # API moduyla tamamla (analistin işi kesilmesin). Anahtar yoksa (analist CLI makinesi)

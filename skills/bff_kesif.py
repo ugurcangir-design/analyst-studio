@@ -25,7 +25,7 @@ from urllib.parse import urlparse
 
 from .base import (
     LIVE_APP_DIR, MAX_TOKENS_COMBINED,
-    _api_cagri, _xml_ayir, _metin_sikistir, load_context_filter,
+    _api_cagri, _xml_ayir, _metin_sikistir, load_context_filter, asama_ayarla,
     canli_uygulama_baglami_hazirla, gorev_live_app_urls, live_app_urls,
 )
 
@@ -177,6 +177,7 @@ def kesfet(hedef_url: str = "", ekran_tarif: str = "", ekran_bazli: bool = False
               "ile gerçek istek-yanıtlardan çıkarırsın. Analiz/öneri yazmazsın; yalnız gözlemlenen gerçeği, maskeleyerek raporlarsın.")
     icerik = [{"type": "text", "text": canli}, {"type": "text", "text": _RAPOR_FORMAT},
               {"type": "text", "text": "Keşfi uygula ve raporu yaz."}]
+    asama_ayarla("bff")
     ai = _ai or (lambda s, m, k: _api_cagri(s, m, max_tokens=MAX_TOKENS_COMBINED, thinking=False, onbellek=False,
                                             canli_uygulama_kapsami=k))
     try:

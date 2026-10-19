@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 os.environ.setdefault("BILDIRIM", "false")
 
 from skills import jira_gorevleri as JG  # noqa: E402
+JG.canli_uygulama_baglami_hazirla = lambda *a, **k: ""   # gözlem fazı gerçek CLI açmasın (0 token)
 import skills.jira_tasks as JT  # noqa: E402
 import skills.jira_fe_be as JF  # noqa: E402
 import skills.jira_kopru as JK  # noqa: E402

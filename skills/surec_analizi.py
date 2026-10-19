@@ -6,7 +6,7 @@ from .base import (
     _domain_kurallari_oku,
     OZEL_PROMPT_DOGRULUK_EKI, belirsizlik_denetimi, akis_butunluk_denetimi, ai_ara_sozleri_temizle,
     referans_dosyalari_hazirla, _ref_bloklari_olustur,
-    canli_uygulama_baglami_hazirla,
+    canli_uygulama_baglami_hazirla, asama_ayarla,
     yonetici_ozeti_olustur, yonetici_ozetini_cikar,
     MAX_TOKENS_UZUN,
     extended_thinking_acik,
@@ -64,8 +64,17 @@ def surec_analizi_yap(icerik_override: list | None = None,
 
     canli_baglam = canli_uygulama_baglami_hazirla()
     if canli_baglam:
-        print("  Canlı uygulama MCP/Chrome hedefleri dahil ediliyor...")
-        icerik_parcalari.append({"type": "text", "text": canli_baglam})
+        # Faz 1 (kota): gözlem ayrı küçük-promptlu fazda → rapor; analiz çağrısı tarayıcı kullanmaz.
+        from . import gozlem as _gz
+        _ozet = " ".join(p.get("text", "") for p in icerik if isinstance(p, dict) and p.get("type") == "text") \
+            if isinstance(icerik, list) else str(icerik)
+        _gr = _gz.rapor_al(canli_baglam, "surec", gorev_ozet=_ozet, yeniden=True)
+        if _gr.get("md"):
+            print("  🌐 Canlı gözlem raporu (ayrı faz) analize dahil ediliyor...")
+            icerik_parcalari.append({"type": "text", "text": _gz.rapor_blogu(_gr)})
+        else:
+            print("  ⚠ Canlı gözlem yapılamadı — süreç analizi gözlemsiz üretiliyor.")
+            icerik_parcalari.append({"type": "text", "text": _gz.gozlem_yok_blogu(_gr.get("neden", ""))})
 
     # Few-shot: ekibin onayladığı süreç analizlerinden EN ALAKALI örnek(ler) — stil/derinlik referansı.
     try:
@@ -103,10 +112,9 @@ def surec_analizi_yap(icerik_override: list | None = None,
 
     sistem = _surec_prompt_olustur(ozel_atla=ozel_atla)
     mesajlar = [{"role": "user", "content": icerik_parcalari}]
-    yanit = _api_cagri(sistem, mesajlar, max_tokens=MAX_TOKENS_UZUN, thinking=extended_thinking_acik(),
-                       # Canlı gözlem = mevcut durum → gözlem varken cache OKUMA (yeniden çalıştırmada taze gözle).
-                       onbellek=(not canli_baglam),
-                       canli_uygulama_kapsami=("surec" if canli_baglam else None))
+    asama_ayarla("surec:analiz")
+    # Gözlem ayrı fazda (taze rapor → prompt değişir → taze analiz); bu çağrı tarayıcı kullanmaz.
+    yanit = _api_cagri(sistem, mesajlar, max_tokens=MAX_TOKENS_UZUN, thinking=extended_thinking_acik())
     # AI'ın süreç anlatımı ara sözlerini ("Şimdi raporu yazıyorum." vb.) çıkar.
     yanit = ai_ara_sozleri_temizle(yanit)
 

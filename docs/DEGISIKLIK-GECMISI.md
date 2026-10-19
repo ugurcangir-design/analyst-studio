@@ -6,6 +6,12 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## Kota Faz 0+1 — ölçüm + gözlem fazı ayrımı ✅ (plan: docs/KOTA-OPTIMIZASYON-PLANI.md)
+- Faz 0: `logs/usage/cagri.jsonl` çağrı başına aşama/model/tur/token; `/api/usage/cagri-ozet`; Kullanım Raporu paneli.
+- Faz 1: `skills/gozlem.py` — canlı gözlem analizden ayrı küçük promptla rapor; motorlar tarayıcısız analiz + rapor
+  bloğu; FE+BE tek gözlem; cevap turunda taze rapor (6 sa) yeniden kullanılır; `--max-turns` + resume tamamlatma;
+  tur diyeti. Faz 2-4 onay bekliyor.
+
 ## Kabul Kontrolü listeden tek tıkla (analiz üretmeden) ✅
 - Owner: "ANALIZ CHECK task'ı seçince başlat butonu olsun, ekran karışık, tekrar analiz yapmasın". Görev kartına
   "🧪 Kabul Kontrolü" (check statüsünde vurgulu "Başlat"); analiz üretilmeden task içeriği + canlı gözlemle doğrulama;

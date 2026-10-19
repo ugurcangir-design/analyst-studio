@@ -962,6 +962,34 @@ diyordu) ve içerik sonradan değişebilir.
 - Kısmi yazım kalıcı: `jiraYazildi` sette (`_jgSetKaydet`) → sayfa yenilense de "FE KEY açıldı ✓" görünür, diğer katman
   sonra yazılabilir. Test: `tests/test_katman_secimi.py`.
 
+### Kota Faz 0+1 — ölçüm ve gözlem fazı ayrımı (2026-10-19, `docs/KOTA-OPTIMIZASYON-PLANI.md`)
+**Teşhis:** canlı gözlem analiz çağrısının içinde agentik döngüyle yapılıyordu; her araç turu (17-34) ~40k token'lık tam
+analiz bağlamını yeniden okuyordu (tek süreç analizi çağrısı: 5.9M cache okuma). Task Analizi'nde token ölçümü de yoktu.
+**Faz 0 — ölçüm:** `base.asama_ayarla(ad)` thread-local aşama etiketi; `_api_cagri_cli` her başarılı çağrı için
+`logs/usage/cagri.jsonl`'a satır yazar (`_cagri_kaydet`: ts, asama, model, canli, kapsam, tur, girdi, cikti, cache_yaz,
+cache_oku, sure_sn, tekrar, max_tur_takildi, prompt_kc — analiz içeriği yazılmaz). `cagri_ozeti(gun)` aşama+model+canlı
+bazında toplar → `GET /api/usage/cagri-ozet?gun=` (usage-gate) → Kullanım Raporu "Aşama bazlı tüketim" tablosu (cache oku
+= döngüde yeniden okunan bağlam; ana kalem).
+**Faz 1 — gözlem fazı (`skills/gozlem.py`):**
+- `rapor_al(canli_blok, kapsam, gorev_ozet, yeniden, max_turns)`: prompt = motorun zaten ürettiği canlı görev bloğu
+  (URL + hedef + giriş + kurallar) + ≤3k görev/doküman özeti + `_RAPOR_FORMAT`; referans/few-shot/domain YOK →
+  `_api_cagri(onbellek=False, canli_uygulama_kapsami=kapsam, max_turns)` → `<gozlem_raporu>` (etiketsiz gövde de kabul)
+  → `reference/live-app/gozlem/<anahtar>.md/.json` (anahtar = sha1(kapsam|blok); ≤12k char). `ok` = `.gozlem-durum.json`
+  yapildi + kanıt etiketi var. `yeniden=False` ve taze (`GOZLEM_RAPOR_GECERLILIK` 6 sa) → önbellekten, AI çağrılmaz.
+- `rapor_blogu(rapor)`: analize giren blok — "gözlem tamamlandı, bu çağrıda tarayıcı YOK; etiketleri aynen taşı; raporda
+  olmayanı uydurma; referansla çelişirse gözlem kazanır". `gozlem_yok_blogu(neden)`: gözlem yapılamadıysa.
+- **Motorlar:** `gorev_analiz_et` (canlı blok varken `rapor_al` → `rapor_blogu` stable bloğa; analiz çağrısı
+  `canli_uygulama_kapsami` olmadan, önbellek normal — rapor metni anahtarda), `gorev_fe_be_analiz` (TEK gözlem, `gozlem_rapor`
+  iki katmana), `surec_analizi_yap` / `teknik_analiz_yap` (aynı; `_teknik_uret_tam` tarayıcısız). Cevap turu / düzelt
+  (`cevaplar|onceki_sorular`) → `yeniden=False`; yeni analiz → `yeniden=True` (taze gözlem).
+- **Tur tavanı:** `_api_cagri(max_turns)` → `_api_cagri_cli` canlı çağrıda `--max-turns` (`LIVE_APP_MAX_TUR`, 40);
+  `error_max_turns` → `--resume <session_id> --max-turns 3` + "araç kullanma, raporu şimdi yaz" (çıktı kaybolmaz;
+  `max_tur_takildi` kaydedilir). Canlı prompt "TUR DİYETİ" kuralları.
+- Etki (beklenen): gözlem döngüsü tur başına ~40k → ~8k token; FE+BE'de iki döngü → bir; cevap turunda gözlem yok.
+  Ölçüm Kullanım Raporu panelinde (aşama "gozlem" vs "gorev:analiz").
+**Test kuralı:** motor çağıran her test `canli_uygulama_baglami_hazirla`'yı mock'lar; aksi hâlde gözlem fazı gerçek
+CLI/Playwright açar (test_katman_secimi bunu yaşadı → düzeltildi). Test: `tests/test_gozlem_fazi.py`.
+
 ## Bilinen Kısıtlamalar
 - CLI modu görsel (PNG/JPG) analiz EDEMEZ (text-only); görsel BRD için API modu gerekir.
 - `markdown_to_adf` nested list'leri düzleştirir.

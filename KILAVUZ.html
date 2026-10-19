@@ -1018,6 +1018,12 @@ Doküman yükle <span class="arr">→</span> Süreç Analizi <span class="arr">�
       <div class="num">5</div>
       <h4>Analiz sonrası aksiyonlar (önizleme panelindeki düğmeler) <span class="pill new">Yeni</span></h4>
       <ul>
+        <li><strong>Canlı gözlem artık ayrı bir adım <span class="pill new">Yeni</span></strong> — agent önce uygulamayı küçük bir
+            görevle gezip <em>gözlem raporu</em> çıkarır (ekran, alanlar, aksiyon → servis çağrısı, validasyon mesajları), sonra analizi
+            bu raporla tek seferde yazar. Analiz kalitesi aynı; kota tüketimi büyük ölçüde azalır (eskiden her tarayıcı adımında tüm
+            referanslar yeniden okunuyordu). FE+BE ayrımında tek gözlem iki analize girer; "Cevapları İşle" ve düzeltmelerde son 6 saatin
+            raporu yeniden kullanılır, yeni "Teknik Analiz Et" ise her zaman taze gözler. Kullanım Raporu'nda "Aşama bazlı tüketim"
+            tablosu hangi adımın ne harcadığını gösterir.</li>
         <li><strong>Giriş için tarayıcı açmanıza gerek yok <span class="pill new">Yeni</span></strong> — Bağlam Filtresi → Giriş
             Bilgileri doluysa agent ilk analizde kayıtlı hesapla kendisi giriş yapar ve oturumu saklar; sonraki Task / İnteraktif /
             Kabul Kontrolü / Süreç analizleri yeniden giriş yapmadan başlar (durum satırında "Oturum kayıtlı · N dk önce"). Oturum

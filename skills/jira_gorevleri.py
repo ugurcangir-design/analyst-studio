@@ -17,7 +17,7 @@ from pathlib import Path
 
 from .atlassian import env_oku, atlassian_post, atlassian_put
 from .base import (
-    _api_cagri, _xml_ayir, _metin_sikistir,
+    _api_cagri, _xml_ayir, _metin_sikistir, asama_ayarla,
     prompt_yukle, extended_thinking_acik,
     referans_dosyalari_hazirla, _ref_bloklari_olustur, load_context_filter,
     canli_uygulama_baglami_hazirla,
@@ -805,7 +805,7 @@ _KATMAN_ETIKET = {"fe": "Frontend (FE)", "be": "Backend (BE)", "belirsiz": ""}
 def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = None,
                     katman: str = "", onceki_sorular: str = "", ekran_baglami: bool = True,
                     rag_ctx: dict | None = None, canli_baglam_override: str | None = None,
-                    bff_rapor: str | None = None) -> dict:
+                    bff_rapor: str | None = None, gozlem_rapor: dict | None = None) -> dict:
     """Görevi YALIN teknik analize çevirir (gorev_teknik_analiz promptu — tek
     görev için, yalnızca ilgili bölümler, tüm şablonu doldurmaz → token/süre
     tasarrufu, kaliteden ödün yok). İki aşama: (1) Sonnet ile analiz (RAG dahil),
@@ -869,9 +869,22 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
         stable_bloklar.append({"type": "text", "text": bff_rapor})
     canli_baglam = canli_baglam_override if canli_baglam_override is not None \
         else canli_uygulama_baglami_hazirla(gorev=True)
+    # Faz 1 (kota): canlı gözlem ANALİZDEN AYRI küçük promptlu bir fazda yapılır (skills/gozlem.py) → analiz çağrısı
+    # gözlem RAPORUNU alır, tarayıcı aracı kullanmaz. Cevap turu / düzelt (cevaplar|onceki_sorular) taze raporu yeniden
+    # kullanır (6 sa); yeni analiz taze gözler. FE+BE ayrımında rapor dışarıdan (gozlem_rapor) paylaşılır.
+    if canli_baglam and gozlem_rapor is None:
+        from . import gozlem as _gz
+        gozlem_rapor = _gz.rapor_al(canli_baglam, "surec" if canli_baglam_override is not None else "gorev",
+                                   gorev_ozet=f"{gorev.get('summary', '')}\n\n{gorev.get('description', '') or ''}",
+                                   yeniden=not bool((cevaplar or "").strip() or (onceki_sorular or "").strip()))
     if canli_baglam:
-        print("  🌐 Canlı uygulama (görev bazlı) MCP/Chrome hedefi dahil ediliyor...")
-        stable_bloklar.append({"type": "text", "text": canli_baglam})
+        from . import gozlem as _gz
+        if gozlem_rapor and gozlem_rapor.get("md"):
+            print("  🌐 Canlı gözlem raporu (ayrı faz) analize dahil ediliyor...")
+            stable_bloklar.append({"type": "text", "text": _gz.rapor_blogu(gozlem_rapor)})
+        else:
+            print("  ⚠ Canlı gözlem yapılamadı — analiz gözlemsiz üretiliyor (rapor rozetinde görünür).")
+            stable_bloklar.append({"type": "text", "text": _gz.gozlem_yok_blogu((gozlem_rapor or {}).get("neden", ""))})
 
     if stable_bloklar:
         stable_bloklar[-1]["cache_control"] = {"type": "ephemeral"}
@@ -987,12 +1000,11 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
     icerik.append(
         {"type": "text", "text": "Bu görev için teknik analiz raporunu üret (açık sorular HARİÇ — onlar ayrı adımda üretilecek)."}
     )
+    asama_ayarla("gorev:analiz")
+    # Gözlem ayrı fazda yapıldı → bu çağrı tarayıcı aracı kullanmaz; önbellek anahtarı rapor metnini içerir
+    # (taze rapor = taze analiz; aynı rapor + aynı girdi = önbellek hit, token yok).
     yanit = _api_cagri(sistem, [{"role": "user", "content": icerik}],
-                       max_tokens=MAX_TOKENS_COMBINED, thinking=extended_thinking_acik(),
-                       # CANLI GÖZLEM = MEVCUT DURUM → cache OKUMA (yeniden analizde UAT'ı taze gözle,
-                       # bayat/eski-ortam sonucu dönmesin). Gözlem yoksa cache normal çalışır.
-                       onbellek=(not canli_baglam),
-                       canli_uygulama_kapsami=("gorev" if canli_baglam else None))
+                       max_tokens=MAX_TOKENS_COMBINED, thinking=extended_thinking_acik())
     teknik = _meta_notlari_temizle(_xml_ayir(_metin_sikistir(yanit), "teknik_analiz"))
 
     # Şeffaflık: editör ön-izlemesinde + history'de RAG durumu görünür.
@@ -1051,16 +1063,27 @@ def gorev_fe_be_analiz(gorev: dict, cevaplar: str = "", onceki_sorular: str = ""
     sözleşmesini KARŞI-KATMAN bağlamı olarak alır, BE'nin iç implementasyonunu TEKRARLAMAZ,
     yalnız tükettiği arayüzü yazar. İki içerik ayrışır → 'aynı analiz iki taskta' sorunu çözülür.
     Dönen: {"be": {markdown, acik_sorular}, "fe": {markdown, acik_sorular}}."""
+    # Faz 1 (kota): TEK gözlem raporu, iki analiz (eskiden BE ve FE ayrı ayrı gözlüyordu → iki döngü).
+    gozlem_rapor = None
+    _canli = canli_baglam_override if canli_baglam_override is not None else canli_uygulama_baglami_hazirla(gorev=True)
+    if _canli:
+        from . import gozlem as _gz
+        gozlem_rapor = _gz.rapor_al(_canli, "surec" if canli_baglam_override is not None else "gorev",
+                                   gorev_ozet=f"{gorev.get('summary', '')}\n\n{gorev.get('description', '') or ''}",
+                                   yeniden=not bool((cevaplar or "").strip() or (onceki_sorular or "").strip()))
+        if not (gozlem_rapor or {}).get("md"):
+            gozlem_rapor = {"md": "", "neden": (gozlem_rapor or {}).get("neden", "")}
     be = gorev_analiz_et(gorev, cevaplar=cevaplar, katman="be", onceki_sorular=onceki_sorular,
                          ekran_baglami=ekran_baglami, rag_ctx=rag_ctx,
-                         canli_baglam_override=canli_baglam_override, bff_rapor=bff_rapor)
+                         canli_baglam_override=canli_baglam_override, bff_rapor=bff_rapor, gozlem_rapor=gozlem_rapor)
     # FE, BE'nin ürettiği FE↔BE sözleşmesini bağlam alsın (aynı görevin karşı katmanı).
     be_baglam = {"key": gorev.get("key", ""),
                  "summary": (gorev.get("summary", "") + " — BE tarafı (sözleşme)"),
                  "description": be.get("markdown", ""), "katman": "be"}
     fe = gorev_analiz_et(gorev, cevaplar=cevaplar, katman="fe", iliskili=[be_baglam],
                          onceki_sorular=onceki_sorular, ekran_baglami=ekran_baglami,
-                         rag_ctx=rag_ctx, canli_baglam_override=canli_baglam_override, bff_rapor=bff_rapor)
+                         rag_ctx=rag_ctx, canli_baglam_override=canli_baglam_override, bff_rapor=bff_rapor,
+                         gozlem_rapor=gozlem_rapor)
     return {"be": {"markdown": be.get("markdown", ""), "acik_sorular": be.get("acik_sorular", ""),
                    "is_var": katman_is_var_mi(be.get("markdown", ""))},
             "fe": {"markdown": fe.get("markdown", ""), "acik_sorular": fe.get("acik_sorular", ""),
@@ -1300,6 +1323,7 @@ def gorev_analiz_duzelt(gorev: dict, mevcut_markdown: str, talimat: str) -> str:
         {"type": "text", "text": f"### Kaynak Görev: {gorev.get('key','')} — {gorev.get('summary','')}"},
         {"type": "text", "text": f"### Düzeltme Talimatı (yalnız bunu uygula)\n{talimat}"},
     ]
+    asama_ayarla("gorev:duzelt")
     yanit = _api_cagri(_GOREV_DUZELT_SISTEM, [{"role": "user", "content": icerik}],
                        max_tokens=MAX_TOKENS_COMBINED, thinking=extended_thinking_acik())
     return _meta_notlari_temizle(_xml_ayir(_metin_sikistir(yanit), "teknik_analiz"))
@@ -1311,6 +1335,7 @@ def _gorev_acik_sorular_uret(teknik_metni: str, gorev: dict,
     Amaç: geliştirmeyi GERÇEKTEN bloklayan soruları toplamak ve TURLAR İÇİNDE YAKINSAMAK — her turda
     AZALMALI, birkaç turda bitmeli (drift/tekrar yok). Haiku — ucuz. Boşsa UI'da panel gizlenir."""
     takip = bool(cevaplar.strip() or onceki_sorular.strip())
+    asama_ayarla("gorev:sorular")
     sistem = (
         "Kıdemli teknik analistsin. Sana üretilmiş bir teknik analiz + Jira görevi (ve varsa ÖNCEKİ TUR "
         "açık soruları + analistin CEVAPLARI) verilir. Amaç: geliştiricinin başlamasını GERÇEKTEN "
