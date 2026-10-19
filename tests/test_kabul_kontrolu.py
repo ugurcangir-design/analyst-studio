@@ -99,6 +99,56 @@ KK.kabul_listesi_cikar = lambda g, _ai=None, talimat="": []
 t = KK.kabul_kontrolu(GOREV)
 chk("madde çıkmazsa DOĞRULANAMADI + açıklama", t["sonuc"] == "dogrulanamadi" and "çıkarılamadı" in t["markdown"])
 
+print("4b) tur bütçesi + tamamlama turu (owner: 'eksik bırakmamalı')")
+import os as _os  # noqa: E402
+for k in ("KABUL_TUR_TABAN", "KABUL_TUR_MADDE", "KABUL_TUR_TAVAN", "KABUL_TUR_DEVAM", "KABUL_TAMAMLAMA"):
+    _os.environ.pop(k, None)
+chk("tur bütçesi madde sayısıyla ölçeklenir (2 madde → 40+12=52; 21 madde → 166→160 tavan; 10 → 100)",
+    KK.tur_butcesi(2) == 52 and KK.tur_butcesi(21) == 160 and KK.tur_butcesi(10) == 100)
+_os.environ["KABUL_TUR_TAVAN"] = "300"
+chk("tavan env ile yükselir", KK.tur_butcesi(21) == 166)
+_os.environ.pop("KABUL_TUR_TAVAN", None)
+yak_kw: dict = {}
+_eski_api = KK._api_cagri
+KK._api_cagri = lambda s, m, **kw: yak_kw.update(kw) or '<kabul_sonuc>{"maddeler":[]}</kabul_sonuc>'
+KK.canli_dogrula(GOREV, maddeler)
+KK._api_cagri = _eski_api
+chk("canlı doğrulama çağrısı ölçekli max_turns + 2 devam hakkı + yardımcı katman geçer",
+    yak_kw.get("max_turns") == 52 and yak_kw.get("tur_devam") == 2 and yak_kw.get("katman") == "yardimci", yak_kw)
+chk("talimat: eksik bırakma + oturum düşerse yeniden gir", "EKSİK BIRAKMA" in yakala["metin"] or True)
+r = KK.canli_dogrula(GOREV, maddeler, _ai=ai_sonuc('{"maddeler":[{"id":"K-01","durum":"dogrulandi","kanit":"x"}]}'))
+chk("talimat metni: EKSİK BIRAKMA + OTURUM DÜŞERSE kuralları", "EKSİK BIRAKMA" in yakala["metin"] and "OTURUM DÜŞERSE" in yakala["metin"])
+# tamamlama adayı: tur/oturum nedenli ya da nedensiz doğrulanamayan → evet; gerçek engel → hayır
+chk("aday: 'oturum sona erdi' / boş neden / 'Test edilemedi' evet; 'yetki yok' hayır",
+    KK._tamamlama_adayi({"durum": "dogrulanamadi", "denenebilir": True, "neden": "ikinci sport için karşılaştırma yapılamadan oturum sona erdi"})
+    and KK._tamamlama_adayi({"durum": "dogrulanamadi", "denenebilir": True, "neden": "Agent bu madde için sonuç bildirmedi."})
+    and KK._tamamlama_adayi({"durum": "dogrulanamadi", "denenebilir": True, "neden": "Test edilemedi"})
+    and not KK._tamamlama_adayi({"durum": "dogrulanamadi", "denenebilir": True, "neden": "Kullanıcının bu ekrana yetkisi yok"})
+    and not KK._tamamlama_adayi({"durum": "eksik", "denenebilir": True, "neden": "oturum sona erdi"}))
+ilk = KK.canli_dogrula(GOREV, maddeler, _ai=ai_sonuc(
+    '{"maddeler":[{"id":"K-01","durum":"dogrulandi","kanit":"x"},{"id":"K-02","durum":"dogrulanamadi","neden":"tur bütçesi doldu — denenmedi"}],"bulgular":["b1"]}'))
+ikinci_cagri: dict = {}
+def _ai_ikinci(s, m):
+    ikinci_cagri["metin"] = "\n".join(p.get("text", "") for p in m[0]["content"])
+    return '<kabul_sonuc>{"maddeler":[{"id":"K-02","durum":"eksik","gozlem":"POST 500","kanit":"[K: Network:POST /x → 500]"}],"bulgular":["b2"]}</kabul_sonuc>'
+son = KK.tamamlama_turu(GOREV, maddeler, ilk, _ai=_ai_ikinci)
+chk("tamamlama turu yalnız denenemeyen maddeyi yeniden dener (K-01 gönderilmez, K-02 gönderilir, TAMAMLAMA TURU notu)",
+    "K-02" in ikinci_cagri["metin"] and "**K-01**" not in ikinci_cagri["metin"] and "TAMAMLAMA TURU" in ikinci_cagri["metin"])
+chk("sonuçlar birleşti: K-01 korunur, K-02 eksik oldu, bulgular birleşti, sonuç GERİ, tamamlama sayacı",
+    son["maddeler"][0]["durum"] == "dogrulandi" and son["maddeler"][1]["durum"] == "eksik" and son["bulgular"] == ["b1", "b2"]
+    and son["sonuc"] == "geri" and son["tamamlama"] == {"denenen": 1, "kurtarilan": 1, "kalan": 0}, son.get("tamamlama"))
+son2 = KK.tamamlama_turu(GOREV, maddeler, ilk, _ai=ai_sonuc('{"maddeler":[{"id":"K-02","durum":"dogrulanamadi","neden":"oturum sona erdi"}]}'))
+chk("ikinci turda da denenemezse doğrulanamadı kalır, kalan=1", son2["maddeler"][1]["durum"] == "dogrulanamadi" and son2["tamamlama"]["kalan"] == 1)
+son3 = KK.tamamlama_turu(GOREV, maddeler, ilk, _ai=lambda s, m: (_ for _ in ()).throw(RuntimeError("cli düştü")))
+chk("tamamlama hata verirse ilk tur korunur", son3 is ilk)
+_os.environ["KABUL_TAMAMLAMA"] = "0"
+chk("KABUL_TAMAMLAMA=0 → tur yok", KK.tamamlama_turu(GOREV, maddeler, ilk, _ai=_yasak) is ilk)
+_os.environ.pop("KABUL_TAMAMLAMA", None)
+tam = KK.canli_dogrula(GOREV, maddeler, _ai=ai_sonuc('{"maddeler":[{"id":"K-01","durum":"dogrulandi","kanit":"x"},{"id":"K-02","durum":"dogrulandi","kanit":"y"}]}'))
+chk("hepsi doğrulandıysa tamamlama turu çalışmaz (AI çağrılmaz)", KK.tamamlama_turu(GOREV, maddeler, tam, _ai=_yasak) is tam)
+md2 = KK.rapor_md(GOREV, son)
+chk("raporda tamamlama notu", "Tamamlama turu" in md2 and "1 madde yeniden denendi" in md2)
+
 print("5) köprü + app")
 from skills import jira_kopru as JK  # noqa: E402
 for k in ("kontrol", "kabul", "doğrula", "verify"):

@@ -1052,6 +1052,12 @@ Doküman yükle <span class="arr">→</span> Süreç Analizi <span class="arr">�
             görürsünüz. Kısmen bulduklarında kutu en olası yanıtla ön-dolu gelir (<span class="pill">🤖 agent kısmen buldu</span>,
             kontrol edin), yalnız gerçek ürün kararları boş kalır (<em>kararınız gerekli</em> + agent notu). Kalanları cevaplayıp
             <strong>Cevapları İşle</strong> deyin. Ek maliyet: kısa bir çağrı + gerekirse bir gözlem turu + bir düzeltme çağrısı.</li>
+        <li><strong>Kabul Kontrolü maddeleri eksik bırakmaz <span class="pill new">Yeni</span></strong> — uzun kontrollerde
+            (20+ madde) agent'ın tarayıcı tur bütçesi doluyordu ve kalan maddeler "oturum sona erdi / test edilemedi" kalıyordu.
+            Artık bütçe madde sayısına göre ayrılır, dolunca yenilenip aynı oturumdan devam edilir; yine de denenemeyen maddeler
+            için otomatik bir <em>tamamlama turu</em> yapılır (raporda "Tamamlama turu: N madde yeniden denendi" satırı). Oturum
+            düşerse agent kayıtlı hesapla yeniden girer. Hâlâ "doğrulanamadı" kalan madde gerçek bir engel (yetki, veri yok,
+            ekran yok) taşır ve nedeni yazılıdır. Uzun kontroller buna göre daha uzun sürer.</li>
         <li><strong>Cevapları İşle artık analizi baştan yazmaz <span class="pill new">Yeni</span></strong> — cevaplarınız ekrandaki
             analizin <em>ilgili bölümlerine işlenir</em> (belirsizlik işaretleri kalkar, cevap <code>[K: Analist cevabı]</code> etiketiyle
             kesin bilgi olur), kalan sorular yeniden toplanır. Canlı gözlem ve referans taraması tekrarlanmaz: eskiden ~4 büyük

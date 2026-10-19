@@ -14,6 +14,7 @@ Kanallar: Task Analizi ekranı "Kabul Kontrolü" (iş modu `kabul-kontrol`) · J
 from __future__ import annotations
 
 import json
+import os
 import re
 from urllib.parse import urlparse
 
@@ -24,6 +25,38 @@ from .base import (
 )
 
 _MAX_MADDE = 25
+
+# ── Tur bütçesi (owner 2026-10-19: 'canlı gözlem olmasına rağmen maddeleri check yapamamış; eksik bırakmamalı') ──
+# Teşhis: 21 maddelik kontrol 40 turluk genel tavana takıldı → agent kalan maddeleri 'oturum sona erdi / test edilemedi'
+# diye bıraktı. Çözüm: (1) tavan madde sayısına göre ölçeklenir, (2) tavana takılınca bütçe yenilenip AYNI oturum
+# kaldığı maddeden sürdürülür (`tur_devam`), (3) yine de denenemeyen maddeler için otomatik TAMAMLAMA turu (yalnız o
+# maddelerle, taze bütçe). Env: KABUL_TUR_TABAN (40) · KABUL_TUR_MADDE (6/madde) · KABUL_TUR_TAVAN (160) ·
+# KABUL_TUR_DEVAM (2) · KABUL_TAMAMLAMA (1 tur; 0 kapatır).
+
+
+def _env_int(ad: str, vars_: int, en_az: int = 0) -> int:
+    try:
+        return max(en_az, int(os.getenv(ad, str(vars_))))
+    except (TypeError, ValueError):
+        return vars_
+
+
+def tur_butcesi(madde_sayisi: int) -> int:
+    """Denenebilir madde sayısına göre tur tavanı: taban + madde×katsayı, [taban, tavan] aralığında."""
+    taban, katsayi, tavan = _env_int("KABUL_TUR_TABAN", 40, 5), _env_int("KABUL_TUR_MADDE", 6, 1), _env_int("KABUL_TUR_TAVAN", 160, 40)
+    return max(taban, min(tavan, taban + katsayi * max(0, madde_sayisi)))
+
+
+_BUTCE_NEDENI = re.compile(r"tur bütçe|bütçe|oturum sona|oturum süresi|süre doldu|zaman|test edilemedi|test edilmedi|denenmedi|"
+                           r"denenemedi|bildirmedi|karşılaştırma yapılamadan|sıra gelmedi|yetişmedi", re.I)
+
+
+def _tamamlama_adayi(m: dict) -> bool:
+    """Doğrulanamayan madde tur/zaman yüzünden mi (yeniden denenmeli) yoksa gerçek engel mi (yetki/veri/ekran yok)?"""
+    if m.get("durum") != "dogrulanamadi" or not m.get("denenebilir", True):
+        return False
+    neden = (m.get("neden") or "") + " " + (m.get("gozlem") or "")
+    return (not neden.strip()) or bool(_BUTCE_NEDENI.search(neden))
 DURUMLAR = ("dogrulandi", "eksik", "dogrulanamadi")
 _SONUC_ETIKET = {"teste_hazir": "✅ TESTE HAZIR", "geri": "❌ GELİŞTİRMEYE GERİ",
                  "dogrulanamadi": "⚠ DOĞRULANAMADI"}
@@ -207,7 +240,13 @@ def _kontrol_talimati(maddeler: list[dict], talimat: str = "") -> str:
         "- GET/POST/PUT/DELETE'in HEPSİNİ bu ortamda kullanabilirsin (test ortamı); yıkıcı işlemi yalnız kendi "
         "AI-TEST kaydında yap.\n"
         + (f"- ANALİST TALİMATI (öncelikli ortam/odak): {talimat.strip()}\n" if (talimat or '').strip() else "")
-        + "- Yazma işlemlerini (kaydet/güncelle/sil) GERÇEKTEN yap (test ortamı); kayıt adlarında `AI-TEST` öneki.\n"
+        + "- EKSİK BIRAKMA: maddeleri SIRAYLA ve HER BİRİNİ fiilen dene; bir maddeyi 'test edilemedi/sıra gelmedi' diye "
+        "atlama. Tur bütçen madde sayısına göre ayrıldı; bütçe dolarsa yenilenir ve kaldığın maddeden sürdürülür — "
+        "bu yüzden erken bitirip rapor yazma. Aynı ekranı tekrar tekrar snapshot alma; bir maddenin kanıtı toplanınca sonrakine geç.\n"
+        "- OTURUM DÜŞERSE (giriş sayfasına yönlendirilirsen / 401) kayıtlı hesapla YENİDEN GİR ve kaldığın maddeden DEVAM ET; "
+        "'oturum sona erdi' diye bırakma. Giriş yeniden de başarısızsa yalnız o durumda kalan maddeleri 'dogrulanamadi' + "
+        "'yeniden giriş başarısız: <hata>' nedeniyle işaretle.\n"
+        "- Yazma işlemlerini (kaydet/güncelle/sil) GERÇEKTEN yap (test ortamı); kayıt adlarında `AI-TEST` öneki.\n"
         "- Validasyon maddelerinde boş/geçersiz değeri gerçekten gönder, çıkan mesajı AYNEN kaydet.\n"
         "- Servis maddelerinde tetiklenen isteği `browser_network_requests` → `browser_network_request` ile "
         "yakala (method/path/status + beklenen alanlar var mı).\n"
@@ -299,8 +338,11 @@ def canli_dogrula(gorev: dict, maddeler: list[dict], _ai=None, talimat: str = ""
               {"type": "text", "text": f"### Task: {gorev.get('key', '')} — {gorev.get('summary', '')}"},
               {"type": "text", "text": _kontrol_talimati(maddeler, talimat)}]
     asama_ayarla("kabul:dogrula")
+    n = sum(1 for m in maddeler if m["denenebilir"])
+    butce, devam = tur_butcesi(n), _env_int("KABUL_TUR_DEVAM", 2)
     ai = _ai or (lambda s, m: _api_cagri(s, m, max_tokens=MAX_TOKENS_COMBINED, thinking=extended_thinking_acik(),
-                                         onbellek=False, canli_uygulama_kapsami="gorev", katman="yardimci"))
+                                         onbellek=False, canli_uygulama_kapsami="gorev", katman="yardimci",
+                                         max_turns=butce, tur_devam=devam))
     yanit = _metin_sikistir(ai(sistem, [{"role": "user", "content": icerik}]))
     return _sonuc_normalize(_json_dizi(yanit, "kabul_sonuc"), maddeler)
 
@@ -332,6 +374,10 @@ def rapor_md(gorev: dict, sonuc: dict, ortam: str = "") -> str:
            + (f" ({', '.join(k['kriter'] for k in kriterler if k['durum'] == 'dogrulanamadi')})" if ks.get('dogrulanamadi') else ""),
            f"- Ekran dışı (denenmedi): {ks.get('ekran_disi', 0)}",
            f"- Netleştirilmesi gereken konu: {len(acik)}", ""]
+    t = sonuc.get("tamamlama") or {}
+    if t:
+        sat += [f"_Tamamlama turu: ilk turda denenemeyen {t.get('denenen', 0)} madde yeniden denendi → {t.get('kurtarilan', 0)} sonuçlandı, "
+                f"{t.get('kalan', 0)} hâlâ doğrulanamadı._", ""]
     if sonuc["genel_not"]:
         sat += [f"**Genel değerlendirme:** {sonuc['genel_not']}", ""]
     if sonuc.get("bulgular"):
@@ -374,11 +420,58 @@ def kabul_kontrolu(gorev: dict, talimat: str = "") -> dict:
               "denenebilir kabul maddesi çıkarılamadı (analiz/kabul kriteri yok ya da çok kısa).")
         return {"markdown": md, "sonuc": "dogrulanamadi", "maddeler": [], "sayim": {}}
     sonuc = canli_dogrula(gorev, maddeler, talimat=talimat)
+    sonuc = tamamlama_turu(gorev, maddeler, sonuc, talimat=talimat)
     ortam = _ortam_adi(_hedef_url(talimat))
     return {"markdown": rapor_md(gorev, sonuc, ortam), "sonuc": sonuc["sonuc"], "maddeler": sonuc["maddeler"],
             "sayim": sonuc["sayim"], "kriter_sayim": sonuc.get("kriter_sayim", {}), "kriterler": sonuc.get("kriterler", []),
             "bulgular": sonuc.get("bulgular", []), "acik_konular": sonuc.get("acik_konular", []),
-            "yazma_islemleri": sonuc["yazma_islemleri"], "ortam": ortam}
+            "yazma_islemleri": sonuc["yazma_islemleri"], "ortam": ortam, "tamamlama": sonuc.get("tamamlama")}
+
+
+def _ham_kayit(m: dict) -> dict:
+    return {"id": m["id"], "durum": m["durum"], "gozlem": m.get("gozlem", ""), "kanit": m.get("kanit", ""), "neden": m.get("neden", "")}
+
+
+def tamamlama_turu(gorev: dict, maddeler: list[dict], sonuc: dict, talimat: str = "", _ai=None) -> dict:
+    """İlk turda tur/zaman yüzünden denenemeyen maddeler için otomatik İKİNCİ tur: yalnız o maddeler, taze bütçe
+    (`KABUL_TAMAMLAMA`, vars. 1; 0 → kapalı). Gerçek engelli (yetki/veri/ekran yok) maddeler yeniden denenmez. Sonuçlar
+    birleştirilir; `sonuc.tamamlama` {denenen, kurtarilan, kalan} raporda görünür. Hata → ilk tur sonucu korunur."""
+    tur = _env_int("KABUL_TAMAMLAMA", 1)
+    adaylar = [m for m in sonuc.get("maddeler", []) if _tamamlama_adayi(m)]
+    if tur <= 0 or not adaylar:
+        return sonuc
+    aday_idler = {m["id"] for m in adaylar}
+    kalan_maddeler = [m for m in maddeler if m["id"] in aday_idler]
+    print(f"  🔁 Kabul tamamlama turu: {len(kalan_maddeler)} madde ilk turda denenemedi — yalnız bunlar yeniden deneniyor…")
+    ek = ("TAMAMLAMA TURU: aşağıdaki maddeler önceki turda tur bütçesi/oturum yüzünden DENENEMEDİ. Yalnız bunları, "
+          "ilk maddeden başlayarak fiilen dene; gerekirse yeniden giriş yap. " + (talimat or "")).strip()
+    try:
+        ikinci = canli_dogrula(gorev, kalan_maddeler, _ai=_ai, talimat=ek)
+    except Exception as e:
+        print(f"  ⚠ Tamamlama turu çalıştırılamadı (ilk tur sonucu korunuyor): {str(e)[:120]}")
+        return sonuc
+    ikinci_map = {m["id"]: m for m in ikinci.get("maddeler", [])}
+    birlesik = []
+    for m in sonuc["maddeler"]:
+        y = ikinci_map.get(m["id"])
+        # Yeni sonuç yalnız bir şey söylüyorsa (dogrulandi/eksik ya da gerçek nedenli dogrulanamadi) öncekini ezer
+        if m["id"] in aday_idler and y and (y["durum"] != "dogrulanamadi" or (y.get("neden") and not _tamamlama_adayi(y))):
+            birlesik.append(_ham_kayit(y))
+        elif m["id"] in aday_idler and y:
+            birlesik.append({**_ham_kayit(m), "neden": (y.get("neden") or m.get("neden") or "Tamamlama turunda da denenemedi.")})
+        else:
+            birlesik.append(_ham_kayit(m))
+    ham = {"maddeler": birlesik,
+           "bulgular": (sonuc.get("bulgular") or []) + [b for b in (ikinci.get("bulgular") or []) if b not in (sonuc.get("bulgular") or [])],
+           "acik_konular": (sonuc.get("acik_konular") or []) + [x for x in (ikinci.get("acik_konular") or []) if x not in (sonuc.get("acik_konular") or [])],
+           "yazma_islemleri": (sonuc.get("yazma_islemleri") or []) + (ikinci.get("yazma_islemleri") or []),
+           "gezilemeyen": (sonuc.get("gezilemeyen") or []) + (ikinci.get("gezilemeyen") or []),
+           "genel_not": sonuc.get("genel_not") or ikinci.get("genel_not") or ""}
+    yeni = _sonuc_normalize(ham, maddeler)
+    kurtarilan = sum(1 for m in yeni["maddeler"] if m["id"] in aday_idler and m["durum"] != "dogrulanamadi")
+    kalan = sum(1 for m in yeni["maddeler"] if m["id"] in aday_idler and m["durum"] == "dogrulanamadi")
+    yeni["tamamlama"] = {"denenen": len(kalan_maddeler), "kurtarilan": kurtarilan, "kalan": kalan}
+    return yeni
 
 
 def _kisa(metin: str, n: int) -> str:

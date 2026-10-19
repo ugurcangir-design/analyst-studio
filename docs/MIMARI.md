@@ -963,6 +963,19 @@ diyordu) ve içerik sonradan değişebilir.
 - Kısmi yazım kalıcı: `jiraYazildi` sette (`_jgSetKaydet`) → sayfa yenilense de "FE KEY açıldı ✓" görünür, diğer katman
   sonra yazılabilir. Test: `tests/test_katman_secimi.py`.
 
+### Kabul Kontrolü — tur bütçesi, devam ve tamamlama turu (2026-10-19)
+**Sorun:** 21 maddelik kabul kontrolü genel 40 turluk tavana takılıyor, agent `_MAX_TUR_TAMAMLA` ile rapora zorlanınca kalan
+maddeleri "oturum sona erdi / test edilemedi" diye bırakıyordu (app.log: 16:10–16:28 arası 4 tavan uyarısı).
+**Çözüm:** (1) `kabul_kontrolu.tur_butcesi(n)` madde sayısına göre tavan (40 + 6×n, ≤160; env `KABUL_TUR_*`) →
+`canli_dogrula` `max_turns` + `tur_devam=2` geçer. (2) `base._api_cagri(tur_devam)` → `_api_cagri_cli`: `error_max_turns`
+alınca `--resume <session> --max-turns <aynı tavan>` + `_TUR_DEVAM_MESAJI` ile aynı oturum sürdürülür (döngü, `tur_devam`
+kez); sonra eski araçsız tamamlatma. Devam mesajı giriş sayfasına düşüldüyse yeniden giriş ister. Genel env
+`LIVE_APP_TUR_DEVAM` (vars. 0). (3) `tamamlama_turu(gorev, maddeler, sonuc)`: `_tamamlama_adayi` (dogrulanamadi + neden
+boş/`_BUTCE_NEDENI`) maddeler yalnız kendileriyle ikinci `canli_dogrula`'ya gider; birleşik `_sonuc_normalize`;
+`tamamlama {denenen, kurtarilan, kalan}` → `rapor_md` notu + `kabul_kontrolu()` dönüşünde. Gerçek engelli maddeler
+(yetki/veri/ekran yok) yeniden denenmez. `KABUL_TAMAMLAMA=0` kapatır. Prompt: "EKSİK BIRAKMA" + "OTURUM DÜŞERSE yeniden gir".
+Maliyet: yalnız uzun kontrollerde artar (madde sayısıyla orantılı; yardımcı katman = Sonnet).
+
 ### Kota Faz 2+3 — hedefli cevap uygulama + model katmanları (2026-10-19, plan §7)
 **Faz 2 — "Cevapları İşle" hedefli (`jira_gorevleri.gorev_cevap_uygula`):** eskiden analistin cevapları `gorev_analiz_et(cevaplar=…)`
 ile TAM zinciri (gözlem fazı + analiz + açık sorular + öz-çözümleme) yeniden koşturuyordu. Şimdi: `(1)` `_rag_yorum_ayir` ile RAG

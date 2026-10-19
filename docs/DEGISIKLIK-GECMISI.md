@@ -6,6 +6,12 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## Kabul Kontrolü eksiksiz tamamlama — tur bütçesi + devam + tamamlama turu ✅
+- Owner: "canlı gözlem olmasına rağmen işaretli maddeleri check yapamamış; eksik bırakmamalı". Neden: 21 madde 40 turluk
+  tavana takıldı, agent kalanları "oturum sona erdi" diye bıraktı. Çözüm: madde sayısına göre tavan (`tur_butcesi`),
+  tavana takılınca aynı oturumun yenilenmiş bütçeyle sürdürülmesi (`tur_devam`), denenemeyen maddeler için otomatik
+  tamamlama turu (`tamamlama_turu`), prompt'ta "eksik bırakma / oturum düşerse yeniden gir". Test §4b.
+
 ## Kota Faz 2+3 — hedefli "Cevapları İşle" + model katmanları ✅ (plan §7)
 - Faz 2: `gorev_cevap_uygula` — cevaplar mevcut analize hedefli düzeltmeyle işlenir + sorular yakınsar (gözlem/RAG tekrarı yok);
   Task Analizi iş modu `cevap` (UI "Cevapları İşle → Analize Uygula" + "Baştan üret (pahalı)"); köprü `cevap` aynı yol; `CEVAP_HEDEFLI`.

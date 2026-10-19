@@ -4311,11 +4311,24 @@ def _canli_max_tur(varsayilan: int = 40) -> int:
 
 
 _MAX_TUR_TAMAMLA = ("Tur tavanına ulaştın. ARTIK ARAÇ KULLANMA. Şimdiye kadar topladığın kanıtla istenen çıktı bloğunu "
-                    "EKSİKSİZ ve istenen biçimde ŞİMDİ yaz; göremediğin kısımları 'gözlemlenemedi' diye belirt, uydurma.")
+                    "EKSİKSİZ ve istenen biçimde ŞİMDİ yaz; deneyemediğin maddeleri 'tur bütçesi doldu — denenmedi' nedeniyle "
+                    "'dogrulanamadi'/'gözlemlenemedi' olarak işaretle ('oturum sona erdi' DEME), uydurma.")
+_TUR_DEVAM_MESAJI = ("Tur bütçen YENİLENDİ. Çıktı bloğunu HENÜZ yazma — kaldığın yerden, henüz denemediğin maddelerle/adımlarla "
+                     "tarayıcı araçlarını kullanarak DEVAM ET. Giriş sayfasına düştüysen kayıtlı hesapla yeniden gir ve sürdür. "
+                     "Tüm maddeler bitince (ya da bütçe yine dolunca) istenen çıktı bloğunu yaz.")
+
+
+def _canli_tur_devam(varsayilan: int = 0) -> int:
+    """Tavana takılınca kaç kez bütçe yenilenip sürdürülür (çağrı bazlı `tur_devam` > env LIVE_APP_TUR_DEVAM > 0)."""
+    try:
+        return max(0, int(os.getenv("LIVE_APP_TUR_DEVAM", str(varsayilan))))
+    except (TypeError, ValueError):
+        return varsayilan
 
 
 def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | None = None,
-                   _tekrar: int = 0, max_turns: int | None = None, katman: str = "ana") -> str:
+                   _tekrar: int = 0, max_turns: int | None = None, katman: str = "ana",
+                   tur_devam: int | None = None) -> str:
     """_tekrar: araç-çağırmama tekrarı sayacı (0 = ilk deneme). Tekrarlar yerleşik araçları KAPATMAZ (`--tools ""` yok) —
     teşhis 2026-10-19: ilk tur bazen MCP araçları görünmeden gidiyor (model araç çağrısını METİN olarak yazıyor), özellikle
     soğuk npx başlangıcında; tekrar farklı başlatma profiliyle + 2 sn gecikmeyle yapılır."""
@@ -4404,6 +4417,27 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
             _v0 = json.loads((proc.stdout or "").strip() or "{}")
         except Exception:
             _v0 = {}
+        # Tur DEVAMI (kabul kontrolü gibi çok maddeli işler; owner 2026-10-19 'eksik bırakmamalı'): tavana takılınca
+        # çıktıyı zorlamak yerine AYNI oturum `tur_devam` kez yenilenmiş bütçeyle sürdürülür (kaldığı maddeden devam;
+        # giriş düştüyse yeniden girer). Devam hakkı bitince eski davranış: araçsız tamamlatma.
+        _devam_hakki = int(tur_devam if tur_devam is not None else _canli_tur_devam())
+        _devam_sayisi = 0
+        while (_live_args and isinstance(_v0, dict) and str(_v0.get("subtype") or "") == "error_max_turns"
+               and _v0.get("session_id") and _devam_sayisi < _devam_hakki):
+            _devam_sayisi += 1
+            _max_tur_takildi = True
+            logger.warning("Canlı gözlem tur tavanına (%s) takıldı — bütçe yenilenip sürdürülüyor (%s/%s).",
+                           _tur_args[-1], _devam_sayisi, _devam_hakki)
+            print(f"  ⏱ Tur tavanına ({_tur_args[-1]}) ulaşıldı — bütçe yenilendi, kaldığı yerden devam ({_devam_sayisi}/{_devam_hakki})…")
+            proc = _cli_calistir(
+                [claude_yolu, "-p", "--output-format", "json", *_model_args, *_yalin_args, "--resume", str(_v0["session_id"]),
+                 *_live_args, *_tur_args],
+                _TUR_DEVAM_MESAJI, cli_env, timeout=_cli_timeout,
+            )
+            try:
+                _v0 = json.loads((proc.stdout or "").strip() or "{}")
+            except Exception:
+                _v0 = {}
         if _live_args and isinstance(_v0, dict) and str(_v0.get("subtype") or "") == "error_max_turns" and _v0.get("session_id"):
             _max_tur_takildi = True
             logger.warning("Canlı gözlem tur tavanına (%s) takıldı — oturum sürdürülüp rapor araçsız tamamlatılıyor.", _tur_args[-1])
@@ -4516,7 +4550,7 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
             print(f"  ⚠ Model tarayıcıyı kullanmadı — canlı gözlem yeniden deneniyor ({_tekrar + 1}/{_LIVE_APP_TEKRAR_SAYISI})…")
             time.sleep(2)
             return _api_cagri_cli(sistem, mesajlar, canli_uygulama_kapsami, _tekrar=_tekrar + 1, max_turns=max_turns,
-                                  katman=katman)
+                                  katman=katman, tur_devam=tur_devam)
         _neden = ("izinli tarayıcı aracı reddedildi" if _browser_reddi
                   else ((("model araç çağrısını metin olarak yazdı — araçlar ilk turda görünmedi" if _sahte_arac
                           else "model hiç tarayıcı aracı çağırmadı (MCP bağlıydı")
@@ -4722,6 +4756,7 @@ def _api_cagri(
     canli_uygulama_kapsami: str | None = None,
     max_turns: int | None = None,
     katman: str = "",
+    tur_devam: int | None = None,
 ) -> str:
     """onbellek=False → önbellek OKUMAZ (taze çağrı), ama sonucu yine YAZAR.
     max_turns: canlı gözlem döngüsü tur tavanı (yalnız CLI + canlı kapsamda; None → LIVE_APP_MAX_TUR / 40).
@@ -4745,7 +4780,7 @@ def _api_cagri(
     if USE_CLAUDE_CLI:
         try:
             sonuc = _api_cagri_cli(sistem, mesajlar, canli_uygulama_kapsami=canli_uygulama_kapsami, max_turns=max_turns,
-                                   katman=katman)
+                                   katman=katman, tur_devam=tur_devam)
         except CliLimitError:
             # P1-B dayanıklılık: CLI limiti (429) doldu → API anahtarı varsa bu çağrıyı otomatik
             # API moduyla tamamla (analistin işi kesilmesin). Anahtar yoksa (analist CLI makinesi)
