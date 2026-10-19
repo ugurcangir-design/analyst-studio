@@ -333,7 +333,7 @@ def ekran_listesi_cikar() -> list[dict]:
         {"type": "text", "text": "Ekran envanterini çıkar."},
     ]
     yanit = _api_cagri(_EKRAN_SISTEM + _domain_kurallari_oku(), [{"role": "user", "content": icerik}],
-                       max_tokens=MAX_TOKENS_KISA, thinking=False)
+                       max_tokens=MAX_TOKENS_KISA, thinking=False, katman="yardimci")
     ham = _xml_ayir(_metin_sikistir(yanit or ""), "ekranlar")
     try:
         liste = json.loads(ham)

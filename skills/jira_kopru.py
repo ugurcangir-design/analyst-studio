@@ -49,6 +49,7 @@ from .base import (
 from .jira_gorevleri import (
     _adf_to_text, _cloud_id, _ID_DESENI,
     gorev_getir, gorev_analiz_et, gorev_analiz_duzelt, gorev_jiraya_yaz,
+    gorev_cevap_uygula, cevap_hedefli_acik,
 )
 from .jira_tasks import _issue_olustur, _proje_bilgi, _katman_prefix   # canonical OAuth issue create
 from jira_agent import markdown_to_adf  # ADF: teknik analiz task'ı formatı
@@ -503,7 +504,17 @@ def _cevap_islet(key: str, arg: str, durum: dict, prefix: str) -> str:
     if not gorev:
         return f"{ROBOT_IMZA}\n\n⚠ `{key}` okunamadı (yetki/erişim?)."
     onceki = (durum.get("son_analiz", {}).get(key, {}) or {}).get("acik", "")
-    sonuc = _bridge_uret(gorev, arg, onceki_sorular=onceki)
+    # Kota Faz 2: mevcut analiz (önbellek ya da gövde) varsa cevaplar HEDEFLİ işlenir — gözlem/RAG tekrarı yok.
+    mevcut = (durum.get("son_analiz", {}).get(key, {}) or {}).get("md", "") or _analiz_bolumu_ayikla(gorev.get("description", ""))
+    sonuc = None
+    if mevcut and cevap_hedefli_acik():
+        try:
+            sonuc = gorev_cevap_uygula(_orijinal_gorev(gorev), mevcut, arg, onceki_sorular=onceki)
+        except Exception as e:
+            print(f"  ⚠ Köprü: hedefli cevap uygulanamadı, tam üretime düşülüyor: {str(e)[:120]}")
+            sonuc = None
+    if sonuc is None:
+        sonuc = _bridge_uret(gorev, arg, onceki_sorular=onceki)
     md = (sonuc.get("markdown") or "").strip()
     acik = (sonuc.get("acik_sorular") or "").strip()
     durum.setdefault("son_analiz", {})[key] = {"md": md, "acik": acik, "zaman": _simdi()}

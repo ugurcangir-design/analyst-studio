@@ -268,7 +268,7 @@ def _json_dizi(metin: str, tag: str):
 
 def _siniflandir(gorev: dict, sorular: list[dict], kanitlar: dict[str, str], _ai=None) -> dict[str, dict]:
     asama_ayarla("soru:cozum")
-    ai = _ai or (lambda s, m: _api_cagri(s, m, max_tokens=MAX_TOKENS_KISA, thinking=False))
+    ai = _ai or (lambda s, m: _api_cagri(s, m, max_tokens=MAX_TOKENS_KISA, thinking=False, katman="yardimci"))
     parcalar = [f"### Jira Görevi: {gorev.get('key', '')} — {gorev.get('summary', '')}"]
     for s in sorular:
         parcalar.append(f"### {s['id']}: {s['baslik']}\n{s['govde'].strip()}\n\n#### KANITLAR ({s['id']})\n{kanitlar.get(s['id'], '')}")
@@ -315,7 +315,7 @@ def _gozlemle(gorev: dict, sorular_gozlem: list[tuple[dict, dict]], _ai=None) ->
     kapsam = "gorev" if gorev_live_app_urls() else "surec"
     asama_ayarla("soru:gozlem")
     ai = _ai or (lambda s, m, k=kapsam: _api_cagri(s, m, max_tokens=MAX_TOKENS_COMBINED, thinking=False, onbellek=False,
-                                                  canli_uygulama_kapsami=k))
+                                                  canli_uygulama_kapsami=k, katman="yardimci"))
     yanit = _metin_sikistir(ai(sistem, [{"role": "user", "content": icerik}]))
     out: dict[str, dict] = {}
     for r in _json_dizi(yanit, "gozlem_cozum") or []:

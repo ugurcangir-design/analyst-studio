@@ -11,6 +11,7 @@ description'ına (markdown→ADF) yazılır. Okuma/yazma canonical skills/atlass
 """
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -1325,8 +1326,47 @@ def gorev_analiz_duzelt(gorev: dict, mevcut_markdown: str, talimat: str) -> str:
     ]
     asama_ayarla("gorev:duzelt")
     yanit = _api_cagri(_GOREV_DUZELT_SISTEM, [{"role": "user", "content": icerik}],
-                       max_tokens=MAX_TOKENS_COMBINED, thinking=extended_thinking_acik())
+                       max_tokens=MAX_TOKENS_COMBINED, thinking=extended_thinking_acik(), katman="yardimci")
     return _meta_notlari_temizle(_xml_ayir(_metin_sikistir(yanit), "teknik_analiz"))
+
+
+def cevap_hedefli_acik() -> bool:
+    """Kota Faz 2: 'Cevapları İşle' analizi BAŞTAN üretmek yerine hedefli düzeltme ile işler. `CEVAP_HEDEFLI=false` kapatır."""
+    return os.getenv("CEVAP_HEDEFLI", "true").strip().lower() not in ("0", "false", "no", "hayir", "hayır")
+
+
+_CEVAP_TALIMAT = (
+    "Analistin aşağıdaki CEVAPLARINI analize İŞLE (cevaplanan her soru için):\n"
+    "- Sorunun ilgilendirdiği bölümü bul; oradaki `[K: ❓ Belirsiz]` / `⚠ VARSAYIM` / 'netleştirilmeli' ifadelerini kaldır ve "
+    "analistin cevabını KESİN bilgi olarak, `[K: Analist cevabı]` etiketiyle yaz (endpoint/alan/kural/akış etkisi dahil).\n"
+    "- Cevabın gerektirdiği küçük tutarlılık düzeltmelerini (kabul kriteri, akış adımı, hata durumu) AYNI bölümlerde yap.\n"
+    "- Açık Sorular bölümü varsa cevaplanan soruları oradan ÇIKAR; kalanları aynen bırak.\n"
+    "- Cevapla ilgisiz hiçbir bölüme, başlığa, numaralandırmaya DOKUNMA; analizi kısaltma/genişletme; yeniden yazma.\n\n"
+    "### ANALİSTİN CEVAPLARI\n")
+
+
+def gorev_cevap_uygula(gorev: dict, mevcut_markdown: str, cevaplar: str, onceki_sorular: str = "") -> dict:
+    """Kota Faz 2 — 'Cevapları İşle' HEDEFLİ: analizi baştan üretmek (tam bağlam + gözlem + öz-çözümleme = ~3-4 büyük
+    çağrı) yerine (1) mevcut analize cevapları `gorev_analiz_duzelt` ile işler (yardımcı katman, küçük prompt),
+    (2) kalan açık soruları `_gorev_acik_sorular_uret` ile YAKINSAR (hafif katman). Canlı gözlem/RAG YENİDEN YAPILMAZ —
+    cevaplar yeni gözlem gerektirmeyen analist bilgisidir. Mevcut analiz yoksa ValueError → çağıran tam üretime düşer.
+    Dönen: {markdown, acik_sorular, hedefli: True}."""
+    cevaplar = (cevaplar or "").strip()
+    if not cevaplar:
+        raise ValueError("Cevap metni boş.")
+    if not (mevcut_markdown or "").strip():
+        raise ValueError("Cevap uygulanacak mevcut analiz yok.")
+    rag, govde = _rag_yorum_ayir(mevcut_markdown)
+    asama_ayarla("gorev:cevap")
+    yeni = gorev_analiz_duzelt(gorev, govde, _CEVAP_TALIMAT + cevaplar)
+    if not yeni.strip():
+        raise ValueError("Cevap uygulama boş sonuç döndü.")
+    acik = ""
+    try:
+        acik = _gorev_acik_sorular_uret(yeni, gorev, cevaplar=cevaplar, onceki_sorular=onceki_sorular or "")
+    except Exception as e:
+        print(f"  ⚠ Kalan açık sorular üretilemedi (cevaplar yine de işlendi): {str(e)[:120]}")
+    return {"markdown": (rag + yeni) if rag else yeni, "acik_sorular": acik, "hedefli": True}
 
 
 def _gorev_acik_sorular_uret(teknik_metni: str, gorev: dict,

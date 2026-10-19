@@ -5307,6 +5307,25 @@ def _gorev_is_calistir(job_id: str) -> None:
             elif mode == "duzelt":
                 md = gorev_analiz_duzelt(gorev, adim.get("markdown", ""), adim.get("talimat", ""))
                 sonuc = {"markdown": md, "acik_sorular": adim.get("acik_sorular", "")}
+            elif mode == "cevap":
+                # Kota Faz 2: cevaplar mevcut analize HEDEFLİ işlenir (gözlem/RAG/öz-çözümleme tekrarı YOK).
+                # Mevcut analiz yoksa / kapalıysa eski yol: cevaplarla TAM yeniden üretim.
+                from skills.jira_gorevleri import cevap_hedefli_acik, gorev_cevap_uygula
+                if cevap_hedefli_acik() and (adim.get("markdown") or "").strip():
+                    sonuc = gorev_cevap_uygula(gorev, adim.get("markdown", ""), adim.get("cevaplar", ""),
+                                               adim.get("onceki_sorular", ""))
+                else:
+                    mode = "analiz"
+                    iliskili = []
+                    for ik in adim.get("iliskili_keys", []):
+                        try:
+                            iliskili.append(gorev_getir(ik))
+                        except Exception:
+                            pass
+                    _r2 = gorev_analiz_et(gorev, katman=adim.get("katman", ""), iliskili=iliskili,
+                                          cevaplar=adim.get("cevaplar", ""), onceki_sorular=adim.get("onceki_sorular", ""),
+                                          bff_rapor=_bff_blok, **_canli_ek)
+                    sonuc = {"markdown": _r2.get("markdown", ""), "acik_sorular": _r2.get("acik_sorular", "")}
             elif mode == "kabul-kontrol":
                 # Kabul Kontrolü: ANALIZ CHECK task'ını canlı ortamda testçi gibi doğrula (Jira durumu DEĞİŞMEZ).
                 from skills.kabul_kontrolu import kabul_kontrolu

@@ -3033,15 +3033,16 @@ function temaDegistir() {
           <textarea id="jg-preview-editor" class="jg-editor jg-editor-modal" spellcheck="false" placeholder="İçerik yükleniyor…"></textarea>
           <!-- Açık Sorular — CEVAPLANABİLİR: soruları oku, cevapla, "Cevapları İşle" ile analizi yeniden yazdır -->
           <div id="jg-preview-sorular-wrap" style="display:none">
-            <div class="jg-soru-yardim">Her soruyu altındaki kutuda cevaplayın; <b>Cevapları İşle</b> deyince teknik analiz cevaplarınıza göre yeniden yazılır (belirsizlikler çözülür). Boş bıraktığınız sorular atlanır. Sorular ve cevaplar <b>Jira'ya YAZILMAZ</b>.</div>
+            <div class="jg-soru-yardim">Her soruyu altındaki kutuda cevaplayın; <b>Cevapları İşle</b> deyince cevaplarınız mevcut analizin ilgili bölümlerine işlenir (belirsizlikler çözülür; analiz baştan üretilmez, canlı gözlem tekrarlanmaz — hızlı ve düşük kota). Boş bıraktığınız sorular atlanır. Sorular ve cevaplar <b>Jira'ya YAZILMAZ</b>.</div>
             <!-- Soru-bazlı cevap kartları — JS ile doldurulur (_jgSorulariRender) -->
             <div id="jg-sorular-liste"></div>
             <!-- Ayrıştırma başarısızsa ham metin yedeği -->
             <textarea id="jg-preview-sorular" class="jg-editor jg-editor-modal" spellcheck="false" placeholder="Açık sorular yok." readonly style="display:none"></textarea>
             <div class="jg-soru-akt">
-              <button class="btn btn-primary btn-sm" id="jg-cevap-isle-btn" onclick="jgCevaplariIsle()">
-                <svg class="ico"><use href="#i-refresh"/></svg> Cevapları İşle → Analizi Yeniden Yaz
+              <button class="btn btn-primary btn-sm" id="jg-cevap-isle-btn" onclick="jgCevaplariIsle()" title="Cevaplar mevcut analizin ilgili bölümlerine işlenir (hedefli — gözlem/RAG tekrarı yok)">
+                <svg class="ico"><use href="#i-refresh"/></svg> Cevapları İşle → Analize Uygula
               </button>
+              <button class="btn btn-ghost btn-sm" onclick="jgCevaplariBastanUret()" title="Pahalı yol: canlı gözlem + referanslarla analizi cevaplara göre BAŞTAN üretir. Yalnız hedefli sonuç yetersiz kaldıysa.">Baştan üret (pahalı)</button>
             </div>
           </div>
         </div>
@@ -6209,11 +6210,19 @@ async function jgCevaplariIsle() {
   const key = _jgAktifAnalizKey, s = _jgAnalizSeti[key] || {};
   // iliskili_keys GERÇEK Jira key'lerine çözülür (::FE sentetik → backend okuyamaz)
   const digerleri = Object.keys(_jgAnalizSeti).filter(k => k !== key).map(_jgGercekKey);
-  _jgIsBaslat([{ key: key, mode: 'analiz', katman: s.katman || '', iliskili_keys: digerleri,
+  // Kota Faz 2: cevaplar MEVCUT analize HEDEFLİ işlenir (mode 'cevap' — gözlem/RAG/öz-çözümleme tekrarı yok, ~1/5 maliyet).
+  // Editör boşsa ya da analist "baştan üret" dediyse eski yol (mode 'analiz' = tam yeniden üretim).
+  const markdown = (document.getElementById('jg-preview-editor').value || '').trim();
+  const bastan = !!window._jgCevapBastan; window._jgCevapBastan = false;
+  const hedefli = !!markdown && !bastan;
+  _jgIsBaslat([{ key: key, mode: hedefli ? 'cevap' : 'analiz', katman: s.katman || '', iliskili_keys: digerleri,
+                 markdown: hedefli ? markdown : '',
                  cevaplar: cev, onceki_sorular: s.acik_sorular || '',   // YAKINSAMA: önceki soruları geç
                  gorev: _jgGorevCoz(key) }],   // GERÇEK görev (routing sentetik key'de kalır)
-             'Cevaplara göre yeniden yazılıyor', key, false);   // seti korunur (merge)
+             hedefli ? 'Cevaplar analize işleniyor' : 'Cevaplara göre baştan yazılıyor', key, false);   // seti korunur (merge)
 }
+// Yedek: cevaplarla analizi BAŞTAN üret (canlı gözlem + RAG dahil; pahalı — yalnız hedefli sonuç yetersizse).
+function jgCevaplariBastanUret() { window._jgCevapBastan = true; jgCevaplariIsle(); }
 
 // İteratif düzelt: AKTİF analizin YALNIZ ilgili kısmını talimata göre düzeltir (arka planda).
 async function jgAnalizDuzelt() {

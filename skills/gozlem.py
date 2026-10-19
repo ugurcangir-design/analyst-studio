@@ -128,7 +128,7 @@ def rapor_al(canli_blok: str, kapsam: str, gorev_ozet: str = "", yeniden: bool =
               {"type": "text", "text": _RAPOR_FORMAT},
               {"type": "text", "text": "Gözlemi uygula ve raporu yaz."}]
     ai = _ai or (lambda s, m: _api_cagri(s, m, max_tokens=MAX_TOKENS_COMBINED, thinking=False, onbellek=False,
-                                         canli_uygulama_kapsami=kapsam, max_turns=max_turns))
+                                         canli_uygulama_kapsami=kapsam, max_turns=max_turns, katman="yardimci"))
     try:
         yanit = ai(_SISTEM, [{"role": "user", "content": icerik}])
     except Exception as e:

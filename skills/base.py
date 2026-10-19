@@ -145,6 +145,9 @@ MODEL_ANALIZ = "claude-sonnet-4-6"
 # Hafif model — ucuz/hızlı pass'ler için (test senaryoları, formatlama).
 # jira_gorevleri.py'deki MODEL_HAFIF ile aynı sürüm tutulmalı.
 MODEL_HAFIF = "claude-haiku-4-5-20251001"
+# Yardımcı katman (API modunda Sonnet 5.5; CLI modunda CLI_MODEL_YARDIMCI). MODEL_ANALIZ ile AYNI id olsaydı CLI katmanı
+# ayırt edemezdi → FARKLI id şart. Çağıranlar `_api_cagri(..., katman="yardimci")` de geçebilir (model'den bağımsız).
+MODEL_YARDIMCI = "claude-sonnet-5-5"
 
 MAX_CHARS_BRD     = 100_000
 MAX_CHARS_GENEL   =  30_000
@@ -168,6 +171,27 @@ MAX_CHARS_REF_GLOBAL = int(os.getenv("MAX_CHARS_REF_GLOBAL", "140000"))
 # CLI modunda prompt-cache YOK → getirim bütçesi HER çağrıda tam girdi-token'ı olarak ödenir.
 # CLI için daha sıkı tavan (varsayılan 100000 ≈ ~25K token). 0/negatif → CLI'de de genel tavana düş.
 MAX_CHARS_REF_GLOBAL_CLI = int(os.getenv("MAX_CHARS_REF_GLOBAL_CLI", "100000"))
+
+
+# ── Model katmanları (Kota Faz 3) ─────────────────────────────────────────────
+# CLI modunda her çağrı tek modele (CLAUDE_CLI_MODEL) gidiyordu → gözlem/giriş/BFF/kabul/soru-sınıflandırma gibi
+# YARDIMCI işler de en pahalı modelle koşuyordu. Üç katman: 'ana' (analiz/denetçi/FE-BE bölme — CLAUDE_CLI_MODEL),
+# 'yardimci' (gözlem fazı, giriş testi, BFF keşfi, kabul kontrolü, soru çözümleme, hedefli düzeltme/cevap, ekran
+# envanteri — CLI_MODEL_YARDIMCI, vars. 'sonnet'), 'hafif' (formatla/test senaryosu/açık soru toplama — CLI_MODEL_HAFIF,
+# vars. 'haiku'). API modunda `model` parametresi aynen geçerli (katman yalnız CLI). Boş değer = 'ana' modeli kullan.
+KATMANLAR = ("ana", "yardimci", "hafif")
+
+
+def cli_model_katman(katman: str) -> str:
+    """Katmanın CLI modelini döner (canlı okuma — .env değişince restart gerekmez). 'ana' → aktif_cli_model()."""
+    k = (katman or "ana").strip().lower()
+    if k == "yardimci":
+        m = (os.getenv("CLI_MODEL_YARDIMCI") or "sonnet").strip()
+    elif k == "hafif":
+        m = (os.getenv("CLI_MODEL_HAFIF") or "haiku").strip()
+    else:
+        m = ""
+    return m or aktif_cli_model()
 
 
 def _ref_global_butce() -> int:
@@ -4291,7 +4315,7 @@ _MAX_TUR_TAMAMLA = ("Tur tavanına ulaştın. ARTIK ARAÇ KULLANMA. Şimdiye kad
 
 
 def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | None = None,
-                   _tekrar: int = 0, max_turns: int | None = None) -> str:
+                   _tekrar: int = 0, max_turns: int | None = None, katman: str = "ana") -> str:
     """_tekrar: araç-çağırmama tekrarı sayacı (0 = ilk deneme). Tekrarlar yerleşik araçları KAPATMAZ (`--tools ""` yok) —
     teşhis 2026-10-19: ilk tur bazen MCP araçları görünmeden gidiyor (model araç çağrısını METİN olarak yazıyor), özellikle
     soğuk npx başlangıcında; tekrar farklı başlatma profiliyle + 2 sn gecikmeyle yapılır."""
@@ -4351,8 +4375,10 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
         except Exception:
             _analiz_mcp_args = []
     # --model DAİMA açıkça geçilir → Claude Code'un varsayılan (ör. Fable) modeli KULLANILMAZ.
-    _aktif_model = aktif_cli_model()   # canlı okuma → arayüzden değişince restart gerekmez
+    _aktif_model = cli_model_katman(katman)   # canlı okuma → arayüzden değişince restart gerekmez; katman → model
     _model_args = ["--model", _aktif_model] if _aktif_model else []
+    if katman != "ana" and _aktif_model != aktif_cli_model():
+        print(f"  🪜 Model katmanı: {katman} → {_aktif_model}")
     # Canlı gözlem döngüsüne TUR TAVANI (Faz 1 A1.4): kaçak döngü (her tur ~bağlam kadar okuma) kesilir;
     # tavana takılırsa oturum --resume ile sürdürülüp rapor araçsız tamamlatılır (çıktı kaybolmaz).
     _tur_args: list[str] = []
@@ -4455,7 +4481,7 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
                     cache_yaz=_u.get("cache_creation_input_tokens", 0),
                     cache_oku=_u.get("cache_read_input_tokens", 0),
                     maliyet=veri.get("total_cost_usd", 0.0))
-        _cagri_kaydet(model=_aktif_model, canli=bool(_live_args), kapsam=canli_uygulama_kapsami or "",
+        _cagri_kaydet(model=_aktif_model, katman=katman, canli=bool(_live_args), kapsam=canli_uygulama_kapsami or "",
                       tur=int(veri.get("num_turns") or 0), girdi=int(_u.get("input_tokens") or 0),
                       cikti=int(_u.get("output_tokens") or 0), cache_yaz=int(_u.get("cache_creation_input_tokens") or 0),
                       cache_oku=int(_u.get("cache_read_input_tokens") or 0), sure_sn=int(time.time() - _cagri_bas),
@@ -4489,7 +4515,8 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
                            "; araç çağrısı metin olarak yazıldı" if _sahte_arac else "", _tekrar + 1, _LIVE_APP_TEKRAR_SAYISI)
             print(f"  ⚠ Model tarayıcıyı kullanmadı — canlı gözlem yeniden deneniyor ({_tekrar + 1}/{_LIVE_APP_TEKRAR_SAYISI})…")
             time.sleep(2)
-            return _api_cagri_cli(sistem, mesajlar, canli_uygulama_kapsami, _tekrar=_tekrar + 1, max_turns=max_turns)
+            return _api_cagri_cli(sistem, mesajlar, canli_uygulama_kapsami, _tekrar=_tekrar + 1, max_turns=max_turns,
+                                  katman=katman)
         _neden = ("izinli tarayıcı aracı reddedildi" if _browser_reddi
                   else ((("model araç çağrısını metin olarak yazdı — araçlar ilk turda görünmedi" if _sahte_arac
                           else "model hiç tarayıcı aracı çağırmadı (MCP bağlıydı")
@@ -4626,12 +4653,12 @@ _API_CACHE_TTL = int(os.getenv("API_CACHE_TTL", str(7 * 24 * 3600)))  # 7 gün
 _API_CACHE_AKTIF = os.getenv("API_CACHE", "true").lower() in ("1", "true", "yes")
 
 
-def _api_cache_key(sistem, mesajlar, model, max_tokens, thinking) -> str:
+def _api_cache_key(sistem, mesajlar, model, max_tokens, thinking, katman: str = "ana") -> str:
     h = hashlib.sha256()
     # CLI modunda gerçek model `model` paramında DEĞİL, aktif_cli_model()'dedir. Anahtar
     # bunu da içermeli — yoksa analist modeli değiştirince (Sonnet→Opus) aynı girdide ESKİ
     # modelin sonucu yanlışlıkla "önbellek hit" olarak döner (model seçimi etkisiz kalır).
-    _mod = f"cli:{aktif_cli_model()}" if USE_CLAUDE_CLI else "api"
+    _mod = f"cli:{cli_model_katman(katman)}" if USE_CLAUDE_CLI else "api"
     h.update(f"{model}|{_mod}|{max_tokens}|{thinking}|".encode())
     h.update(sistem.encode("utf-8", "ignore"))
     h.update(json.dumps(mesajlar, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8", "ignore"))
@@ -4694,6 +4721,7 @@ def _api_cagri(
     onbellek: bool = True,
     canli_uygulama_kapsami: str | None = None,
     max_turns: int | None = None,
+    katman: str = "",
 ) -> str:
     """onbellek=False → önbellek OKUMAZ (taze çağrı), ama sonucu yine YAZAR.
     max_turns: canlı gözlem döngüsü tur tavanı (yalnız CLI + canlı kapsamda; None → LIVE_APP_MAX_TUR / 40).
@@ -4705,7 +4733,10 @@ def _api_cagri(
     "gorev" ver. Varsayılan None → CLI modunda canlı uygulama MCP'si HİÇ açılmaz
     (global URL tanımlı olsa bile) — talimatsız çağrılarda gereksiz Playwright
     başlatma yükünü ve kullanılmayan tarayıcı araç erişimini önler."""
-    key = _api_cache_key(sistem, mesajlar, model, max_tokens, thinking)
+    # Katman (CLI modu): açık `katman` > model sabitinden türet (MODEL_HAFIF→hafif, MODEL_YARDIMCI→yardimci) > ana.
+    if not katman:
+        katman = "hafif" if model == MODEL_HAFIF else ("yardimci" if model == MODEL_YARDIMCI else "ana")
+    key = _api_cache_key(sistem, mesajlar, model, max_tokens, thinking, katman)
     if onbellek:
         kayit = _api_cache_oku(key)
         if kayit is not None:
@@ -4713,7 +4744,8 @@ def _api_cagri(
             return kayit
     if USE_CLAUDE_CLI:
         try:
-            sonuc = _api_cagri_cli(sistem, mesajlar, canli_uygulama_kapsami=canli_uygulama_kapsami, max_turns=max_turns)
+            sonuc = _api_cagri_cli(sistem, mesajlar, canli_uygulama_kapsami=canli_uygulama_kapsami, max_turns=max_turns,
+                                   katman=katman)
         except CliLimitError:
             # P1-B dayanıklılık: CLI limiti (429) doldu → API anahtarı varsa bu çağrıyı otomatik
             # API moduyla tamamla (analistin işi kesilmesin). Anahtar yoksa (analist CLI makinesi)

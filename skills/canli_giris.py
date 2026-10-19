@@ -106,7 +106,7 @@ def giris_calistir(canli: str, kapsam: str, _ai=None) -> dict:
         "Giriş formu hiç çıkmadıysa (oturum zaten açık) ok=true. Şifreyi yazma.")}]
     asama_ayarla("giris")
     ai = _ai or (lambda s, m, k=kapsam: _api_cagri(s, m, max_tokens=MAX_TOKENS_KISA, thinking=False, onbellek=False,
-                                                  canli_uygulama_kapsami=k))
+                                                  canli_uygulama_kapsami=k, katman="yardimci"))
     try:
         yanit = ai(sistem, [{"role": "user", "content": icerik}])
         ham = _xml_ayir(_metin_sikistir(yanit or ""), "giris_sonuc")

@@ -45,6 +45,15 @@ def _sahte_analiz(gorev, cevaplar="", onceki_sorular="", **kw):
 
 jk.gorev_analiz_et = _sahte_analiz
 jk.gorev_analiz_duzelt = lambda gorev, mevcut, talimat: f"{mevcut}\n\n[DÜZELTİLDİ: {talimat}]"
+cevap_girdi: list = []   # Kota Faz 2: hedefli cevap uygulama MOCK (gerçek motor çağrılmaz)
+
+
+def _sahte_cevap_uygula(gorev, mevcut, cevaplar, onceki_sorular=""):
+    cevap_girdi.append({"key": gorev.get("key"), "mevcut": mevcut, "cevaplar": cevaplar, "onceki": onceki_sorular})
+    return {"markdown": f"{mevcut}\n\n[CEVAP İŞLENDİ: {cevaplar}]", "acik_sorular": "Açık soru tespit edilmedi.", "hedefli": True}
+
+
+jk.gorev_cevap_uygula = _sahte_cevap_uygula
 jk.gorev_jiraya_yaz = lambda key, md: yazilan_aciklama.__setitem__(key, md) or True
 jk._iliskili_task_onerileri = lambda md, gorev: [
     {"summary": "BE endpoint ekle", "description": "market servisi", "katman": "BE"},
@@ -138,10 +147,19 @@ jk._komut_uygula("analiz", "", "MBSTRADE-5", PFX, durum2)
 kontrol("analiz açık soruyu önbelleğe aldı", "Q-T-001" in durum2["son_analiz"]["MBSTRADE-5"].get("acik", ""))
 kontrol("analiz girdisi orijinal (gövde değil)", analiz_girdi[-1]["desc"] == "açıklama")
 yazilan_aciklama.clear()
+_analiz_sayisi = len(analiz_girdi)
 r = jk._komut_uygula("cevap", "Q-T-001: mevcut alan korunur", "MBSTRADE-5", PFX, durum2)
-kontrol("cevap gövdeyi güncelledi", "MBSTRADE-5" in yazilan_aciklama)
-kontrol("cevap önceki soruları yakınsamaya geçirdi", "Q-T-001" in analiz_girdi[-1]["onceki"])
+kontrol("cevap gövdeyi güncelledi", "MBSTRADE-5" in yazilan_aciklama and "CEVAP İŞLENDİ" in yazilan_aciklama["MBSTRADE-5"])
+kontrol("cevap HEDEFLİ işlendi (mevcut analiz + cevaplar; tam üretim YOK — Kota Faz 2)",
+        cevap_girdi and cevap_girdi[-1]["cevaplar"].startswith("Q-T-001") and len(analiz_girdi) == _analiz_sayisi)
+kontrol("cevap önceki soruları yakınsamaya geçirdi", "Q-T-001" in cevap_girdi[-1]["onceki"])
 kontrol("cevap → açık soru kalmadı bilgisi", "açık soru kalmadı" in r.lower())
+# Hedefli kapalı (CEVAP_HEDEFLI=false) → eski yol: cevaplarla TAM yeniden üretim
+jk.cevap_hedefli_acik = lambda: False
+jk._komut_uygula("cevap", "Q-T-001: ikinci cevap", "MBSTRADE-5", PFX, durum2)
+kontrol("hedefli kapalıyken cevap tam üretime düşer (önceki sorular yakınsamaya geçer)",
+        len(analiz_girdi) == _analiz_sayisi + 1 and "Q-T-001" in (analiz_girdi[-1]["onceki"] or "") or "ikinci" in analiz_girdi[-1].get("cevaplar", ""))
+jk.cevap_hedefli_acik = lambda: True
 
 # ── düzelt → yalnız ilgili kısmı düzeltir, gövdeye yazar ──────────────────────
 yazilan_aciklama.clear()

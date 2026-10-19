@@ -1,6 +1,6 @@
 # Kota Optimizasyon Planı — agent tüketim taraması (2026-10-19)
 
-> Durum: **Faz 0 + Faz 1 UYGULANDI (2026-10-19, owner onaylı)**; Faz 2 ve 3 owner kararıyla BEKLEMEDE (2026-10-19); Faz 4 ölçümden sonra. Etki ölçümü: Kullanım Raporu → "Aşama bazlı tüketim". İlke: **doğruluk/kalite kaybı YOK** —
+> Durum: **Faz 0 + 1 + 2 + 3 UYGULANDI (2026-10-19, owner onaylı)**; Faz 4/5 ölçümden (1 hafta Kullanım Raporu) sonra. Bkz. §7 (Faz 2-3 uygulama notu + Opus 5.5 karşılaştırması). Etki ölçümü: Kullanım Raporu → "Aşama bazlı tüketim". İlke: **doğruluk/kalite kaybı YOK** —
 > her madde için "kalite nasıl korunuyor" satırı var; kaliteyi düşürebilecek seçenekler ayrı başlıkta, karar owner'da.
 
 ## 1. Ölçülen gerçek (kullanım kayıtları + CLI MCP logları)
@@ -120,4 +120,32 @@ yerleşik araçlar açık bırakıldı (~99k/tur; güvenilirlik öncelikli). Dü
 
 ## 6. Uygulama sırası ve süre
 Faz 0 (yarım gün) → Faz 1 (2 gün; en büyük kazanç) → Faz 2 (1 gün) → Faz 3 (yarım gün) → ölçüm 1 hafta → Faz 4/5.
+
+## 7. Faz 2 + 3 uygulama notu (2026-10-19) + model karşılaştırması
+**Faz 2 (A2.1 + A2.3 uygulandı; A2.2 öz-çözümleme zaten tek düzeltmeyle işliyor):** `jira_gorevleri.gorev_cevap_uygula(gorev,
+mevcut_md, cevaplar, onceki_sorular)` → (1) `gorev_analiz_duzelt` ile cevaplar ilgili bölümlere işlenir (`_CEVAP_TALIMAT`: belirsiz/
+varsayım işaretleri kalkar, `[K: Analist cevabı]`, ilgisiz bölüme dokunma), (2) `_gorev_acik_sorular_uret(cevaplar, onceki)` ile
+kalan sorular yakınsar; RAG yorumu korunur; gözlem/RAG/öz-çözümleme TEKRARLANMAZ. Task Analizi iş modu **`cevap`** (UI "Cevapları
+İşle → Analize Uygula", editör içeriği = mevcut analiz); editör boşsa / `CEVAP_HEDEFLI=false` ise eski tam üretim; "Baştan üret
+(pahalı)" düğmesi bilinçli tam üretim. Köprü `cevap` komutu da mevcut analiz (önbellek/gövde) varsa hedefli. Eskiden cevap turu =
+tam zincir (gözlem + analiz + sorular + öz-çözümleme ≈ 4 büyük çağrı) → şimdi 2 küçük çağrı (yardımcı + hafif katman).
+**Faz 3 (A3.1 + A3.2):** `base.cli_model_katman(katman)` — `ana` (CLAUDE_CLI_MODEL) · `yardimci` (`CLI_MODEL_YARDIMCI`, vars.
+`sonnet`) · `hafif` (`CLI_MODEL_HAFIF`, vars. `haiku`). `_api_cagri(..., katman=)` açık katman > model sabiti (`MODEL_HAFIF`→hafif,
+`MODEL_YARDIMCI`→yardimci) > ana; `_api_cagri_cli` `--model`'i katmana göre geçer, önbellek anahtarı + `cagri.jsonl` katmanı taşır.
+Yardımcı: gözlem fazı, giriş testi, BFF keşfi, kabul listesi + doğrulama, soru sınıflandırma + çözüm gözlemi, hedefli düzeltme/
+cevap, sohbet ekran envanteri. Hafif: formatla, test senaryoları, açık soru toplama. Ana (Opus): süreç/teknik/görev analizi,
+denetçi, FE/BE bölme, akış kapatma, sohbet turu. API modunda `model` parametresi aynen geçerli (katman yalnız CLI).
+**CLI 2.1.303 + alias'lar:** `sonnet`→claude-sonnet-5-5, `haiku`→claude-haiku-5-5, `opus`→claude-opus-5-5 (2.1.267'de
+`claude-opus-5-5` reddediliyordu → analist makineleri `claude update` / `npm i -g @anthropic-ai/claude-code@latest`).
+**Aynı minimal canlı prompt (example.com gez + rapor), CLI 2.1.303, 2'şer koşu:**
+
+| Model | Tur | Çıktı token | cache_yaz / cache_oku | API eşdeğeri | Süre |
+|---|---|---|---|---|---|
+| Opus 4.8 | 7 / 4 | 713 / 267 | 100k / 496k · 66k / 331k | $1.26 / $0.83 | 26 s / 12 s |
+| Opus 5.5 | 4 / 4 | 245 / 297 | 100k / 297k · 4k / 392k | $0.86 / $0.12 | 8 s / 11 s |
+| Sonnet 5.5 | 4 / 4 | 242 / 245 | 100k / 198k · 4k / 394k | $0.42 / $0.06 | 9 s / 8 s |
+
+Sonuç: aynı doğru çıktı; Opus 5.5 daha az tur + daha kısa çıktı + daha ucuz birim fiyat ($4/$20 vs $5/$25) → ana katman
+**Opus 5.5** önerildi (owner makinesinde `.env` `CLAUDE_CLI_MODEL=claude-opus-5-5`); yardımcı işler Sonnet 5.5 (Opus'un ~yarısı,
+aynı çıktı). Tokenizer aynı → girdi token sayısı değişmez; kazanç tur sayısı + birim fiyat + katmanlama. Test: `tests/test_kota_faz23.py`.
 Her faz: offline testler (0 token) + 1 gerçek Task analizi ölçümü (önce/sonra token tablosu Kullanım Raporu'nda).

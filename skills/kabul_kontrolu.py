@@ -131,7 +131,7 @@ def _ilgili_metni(gorev: dict) -> str:
 
 def kabul_listesi_cikar(gorev: dict, _ai=None, talimat: str = "") -> list[dict]:
     asama_ayarla("kabul:liste")
-    ai = _ai or (lambda s, m: _api_cagri(s, m, max_tokens=MAX_TOKENS_KISA, thinking=False))
+    ai = _ai or (lambda s, m: _api_cagri(s, m, max_tokens=MAX_TOKENS_KISA, thinking=False, katman="yardimci"))
     icerik = [{"type": "text", "text": f"### Jira Görevi: {gorev.get('key', '')}\n\n**Başlık:** {gorev.get('summary', '')}\n"
                                        f"{_ilgili_metni(gorev)}\n"
                                        f"**Açıklama / Analiz:**\n{gorev.get('description', '') or '(açıklama yok)'}"}]
@@ -300,7 +300,7 @@ def canli_dogrula(gorev: dict, maddeler: list[dict], _ai=None, talimat: str = ""
               {"type": "text", "text": _kontrol_talimati(maddeler, talimat)}]
     asama_ayarla("kabul:dogrula")
     ai = _ai or (lambda s, m: _api_cagri(s, m, max_tokens=MAX_TOKENS_COMBINED, thinking=extended_thinking_acik(),
-                                         onbellek=False, canli_uygulama_kapsami="gorev"))
+                                         onbellek=False, canli_uygulama_kapsami="gorev", katman="yardimci"))
     yanit = _metin_sikistir(ai(sistem, [{"role": "user", "content": icerik}]))
     return _sonuc_normalize(_json_dizi(yanit, "kabul_sonuc"), maddeler)
 

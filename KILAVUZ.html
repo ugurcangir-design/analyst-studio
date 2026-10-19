@@ -1052,6 +1052,16 @@ Doküman yükle <span class="arr">→</span> Süreç Analizi <span class="arr">�
             görürsünüz. Kısmen bulduklarında kutu en olası yanıtla ön-dolu gelir (<span class="pill">🤖 agent kısmen buldu</span>,
             kontrol edin), yalnız gerçek ürün kararları boş kalır (<em>kararınız gerekli</em> + agent notu). Kalanları cevaplayıp
             <strong>Cevapları İşle</strong> deyin. Ek maliyet: kısa bir çağrı + gerekirse bir gözlem turu + bir düzeltme çağrısı.</li>
+        <li><strong>Cevapları İşle artık analizi baştan yazmaz <span class="pill new">Yeni</span></strong> — cevaplarınız ekrandaki
+            analizin <em>ilgili bölümlerine işlenir</em> (belirsizlik işaretleri kalkar, cevap <code>[K: Analist cevabı]</code> etiketiyle
+            kesin bilgi olur), kalan sorular yeniden toplanır. Canlı gözlem ve referans taraması tekrarlanmaz: eskiden ~4 büyük
+            çağrı olan tur şimdi 2 küçük çağrıdır (dakikalar yerine ~1 dk). Analiz baştan üretilmeli diyorsanız (örn. cevap akışı
+            kökten değiştirdi) yanındaki <strong>Baştan üret (pahalı)</strong> düğmesini kullanın.</li>
+        <li><strong>Model katmanları <span class="pill new">Yeni</span></strong> — ana analizler (süreç/teknik/task, FE+BE bölme) seçili
+            ana modelle (Opus) çalışır; gözlem fazı, giriş testi, BFF keşfi, kabul kontrolü, soru araştırma ve hedefli düzeltmeler
+            daha hafif bir modelle (Sonnet), biçimleme/test senaryosu/açık soru toplama en hafifiyle (Haiku) koşar. Çıktı kalitesi
+            aynı kalırken kota tüketimi düşer; Kullanım Raporu'nda "Aşama bazlı tüketim" tablosunda model sütunundan görürsünüz.
+            Claude CLI'nız 2.1.303'ten eskiyse <code>claude update</code> çalıştırın (yeni model adları için gerekli).</li>
         <li><strong>FE+BE Ayrı</strong> — tek task hem FE hem BE içeriyorsa iki ayrı katman analizi üretir (BE sözleşmeyi tanımlar,
             FE onu kullanır). Onay satırında <strong>katman kutuları</strong> çıkar: <em>BE → kaynak task'a yaz</em> ve <em>FE → yeni task
             aç</em>. İkisi işaretliyse BE orijinal task'a yazılır, FE için yeni task açılır, BE→FE <em>Blocks</em> bağı kurulur; yalnız FE

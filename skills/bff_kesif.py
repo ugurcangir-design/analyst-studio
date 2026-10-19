@@ -179,7 +179,7 @@ def kesfet(hedef_url: str = "", ekran_tarif: str = "", ekran_bazli: bool = False
               {"type": "text", "text": "Keşfi uygula ve raporu yaz."}]
     asama_ayarla("bff")
     ai = _ai or (lambda s, m, k: _api_cagri(s, m, max_tokens=MAX_TOKENS_COMBINED, thinking=False, onbellek=False,
-                                            canli_uygulama_kapsami=k))
+                                            canli_uygulama_kapsami=k, katman="yardimci"))
     try:
         yanit = ai(sistem, [{"role": "user", "content": icerik}], kapsam)
     except Exception as e:

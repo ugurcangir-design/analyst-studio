@@ -6,11 +6,19 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## Kota Faz 2+3 — hedefli "Cevapları İşle" + model katmanları ✅ (plan §7)
+- Faz 2: `gorev_cevap_uygula` — cevaplar mevcut analize hedefli düzeltmeyle işlenir + sorular yakınsar (gözlem/RAG tekrarı yok);
+  Task Analizi iş modu `cevap` (UI "Cevapları İşle → Analize Uygula" + "Baştan üret (pahalı)"); köprü `cevap` aynı yol; `CEVAP_HEDEFLI`.
+- Faz 3: `cli_model_katman` ana/yardimci/hafif (`CLI_MODEL_YARDIMCI=sonnet`, `CLI_MODEL_HAFIF=haiku`); `_api_cagri(katman=)`;
+  gözlem/giriş/BFF/kabul/soru çözümleme/düzelt yardımcı, formatla/test/açık soru hafif; önbellek anahtarı + cagri.jsonl katmanlı.
+- CLI 2.1.303 (alias'lar 5.5 ailesi); Opus 4.8 vs 5.5 vs Sonnet 5.5 karşılaştırması → ana katman Opus 5.5 önerisi.
+  Test `tests/test_kota_faz23.py`.
+
 ## Kota Faz 0+1 — ölçüm + gözlem fazı ayrımı ✅ (plan: docs/KOTA-OPTIMIZASYON-PLANI.md)
 - Faz 0: `logs/usage/cagri.jsonl` çağrı başına aşama/model/tur/token; `/api/usage/cagri-ozet`; Kullanım Raporu paneli.
 - Faz 1: `skills/gozlem.py` — canlı gözlem analizden ayrı küçük promptla rapor; motorlar tarayıcısız analiz + rapor
   bloğu; FE+BE tek gözlem; cevap turunda taze rapor (6 sa) yeniden kullanılır; `--max-turns` + resume tamamlatma;
-  tur diyeti. Yalın CLI (sabit bağlam 98k→62k). Araçsız ilk tur/pseudo-araç: 2 ek deneme + boot'ta MCP ısıtma. Faz 2-3 BEKLEMEDE (owner), Faz 4 ölçümden sonra.
+  tur diyeti. Yalın CLI (sabit bağlam 98k→62k). Araçsız ilk tur/pseudo-araç: 2 ek deneme + boot'ta MCP ısıtma. Faz 2-3 uygulandı (üstte), Faz 4 ölçümden sonra.
 
 ## Kabul Kontrolü listeden tek tıkla (analiz üretmeden) ✅
 - Owner: "ANALIZ CHECK task'ı seçince başlat butonu olsun, ekran karışık, tekrar analiz yapmasın". Görev kartına

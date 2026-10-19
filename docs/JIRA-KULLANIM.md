@@ -41,7 +41,7 @@ Bir Jira task'ının **yorum** satırına yaz:
 |---|---|
 | `/analyst_agent analiz` | Task'ı teknik analiz eder, sonucu **task açıklamasına (gövde)** yazar (orijinal talep korunur); **açık sorular ayrı yorum** olarak gelir. |
 | `/analyst_agent analiz <talimat>` | Talimatlı analiz — örn. `analiz sadece BE tarafını değerlendir`. |
-| `/analyst_agent cevap <cevaplarınız>` | Açık sorulara cevap ver → analiz cevaplara göre **yeniden üretilir**, sorular yakınsar (azalır), gövde güncellenir. |
+| `/analyst_agent cevap <cevaplarınız>` | Açık sorulara cevap ver → cevaplar **mevcut analizin ilgili bölümlerine işlenir** (hedefli; analiz baştan üretilmez, canlı gözlem tekrarlanmaz — hızlı/düşük kota), sorular yakınsar (azalır), gövde güncellenir. Mevcut analiz yoksa tam üretim. |
 | `/analyst_agent düzelt <talimat>` | Yalnız ilgili kısmı düzeltir (diğer bölümler korunur). |
 | `/analyst_agent güncelle` | Son analizi gövdeye yeniden yazar (taze ise 0-token). |
 | `/analyst_agent ilişkili-aç` | İlişkili YENİ task **önerir (taslak)** — henüz açmaz. |

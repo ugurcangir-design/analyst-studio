@@ -963,6 +963,33 @@ diyordu) ve içerik sonradan değişebilir.
 - Kısmi yazım kalıcı: `jiraYazildi` sette (`_jgSetKaydet`) → sayfa yenilense de "FE KEY açıldı ✓" görünür, diğer katman
   sonra yazılabilir. Test: `tests/test_katman_secimi.py`.
 
+### Kota Faz 2+3 — hedefli cevap uygulama + model katmanları (2026-10-19, plan §7)
+**Faz 2 — "Cevapları İşle" hedefli (`jira_gorevleri.gorev_cevap_uygula`):** eskiden analistin cevapları `gorev_analiz_et(cevaplar=…)`
+ile TAM zinciri (gözlem fazı + analiz + açık sorular + öz-çözümleme) yeniden koşturuyordu. Şimdi: `(1)` `_rag_yorum_ayir` ile RAG
+yorumu ayrılır, `(2)` `gorev_analiz_duzelt(gorev, govde, _CEVAP_TALIMAT + cevaplar)` cevapları ilgili bölümlere işler (belirsiz/
+varsayım işaretlerini kaldır, `[K: Analist cevabı]` ile kesin bilgi, Açık Sorular'dan düş, ilgisiz bölüme dokunma — yardımcı
+katman, aşama `gorev:cevap`), `(3)` `_gorev_acik_sorular_uret(yeni, gorev, cevaplar, onceki_sorular)` kalan soruları yakınsar (hafif
+katman; hata yutulur → cevaplar yine işlenir), RAG yorumu geri konur → `{markdown, acik_sorular, hedefli:True}`. Mevcut analiz /
+cevap boşsa `ValueError` (çağıran tam üretime düşer). `cevap_hedefli_acik()` (`CEVAP_HEDEFLI`, vars. açık). **app.py `_adim_isle`
+mode `cevap`:** adım `markdown` (editör içeriği) doluysa hedefli; boşsa/kapalıysa `mode="analiz"` tam üretim (eski yol, BFF bloğu
+olmadan). Eğitim toplama/telemetri diğer modlarla aynı. **UI:** `jgCevaplariIsle` → `mode:'cevap'` + editör markdown'ı; düğme
+"Cevapları İşle → Analize Uygula"; `jgCevaplariBastanUret` (`_jgCevapBastan`) → `mode:'analiz'` bilinçli tam üretim. FE+BE
+setinde `::FE` sentetik anahtar `_jgGorevCoz` ile gerçek göreve çözülür (duzelt ile aynı). **Köprü `cevap`:** `son_analiz[key].md`
+ya da gövdeden `_analiz_bolumu_ayikla` varsa `gorev_cevap_uygula(_orijinal_gorev(gorev), …)`; hata/yoksa `_bridge_uret` (tam).
+**Faz 3 — model katmanları (yalnız CLI modu):** `base.KATMANLAR=("ana","yardimci","hafif")`, `cli_model_katman(k)`: ana →
+`aktif_cli_model()` (CLAUDE_CLI_MODEL) · yardimci → `CLI_MODEL_YARDIMCI` (vars. `sonnet`) · hafif → `CLI_MODEL_HAFIF` (vars.
+`haiku`); boş env → varsayılan; canlı okunur (restart gerekmez). `_api_cagri(..., katman="")`: açık katman > model sabiti
+(`MODEL_HAFIF`→hafif, `MODEL_YARDIMCI="claude-sonnet-5-5"`→yardimci — MODEL_ANALIZ ile AYNI id olamaz, yoksa ayırt edilemez) >
+ana → `_api_cagri_cli(katman=)` `--model cli_model_katman(katman)` (tekrar denemeleri katmanı taşır; `--resume` tamamlaması aynı
+model). `_api_cache_key(..., katman)` → katman modeli anahtarda (yardımcı sonuç ana diye dönmez). `_cagri_kaydet(katman=…)` →
+`cagri.jsonl` + Kullanım Raporu model sütunu gerçek modeli gösterir. **Atama:** yardimci = `gozlem.rapor_al`, `canli_giris.
+giris_calistir`, `bff_kesif.kesfet`, `kabul_kontrolu` (liste + doğrulama), `soru_cozumleme` (`_siniflandir` + `_gozlemle`),
+`gorev_analiz_duzelt` (→ cevap uygulama ve öz-çözümleme işlemesi de), `sohbet_analiz.ekran_listesi_cikar`; hafif = `MODEL_HAFIF`
+çağrıları (formatla, test senaryoları, açık soru toplama); ana = süreç/teknik/görev analizi, denetçi, FE/BE bölme, akış kapatma,
+sohbet turu, kapsam/BRD/delta. API modunda `model` parametresi aynen gider (katman etkisiz). **CLI sürümü:** alias'lar
+(`sonnet`/`haiku`/`opus`) ve `claude-opus-5-5` CLI ≥ 2.1.303 ister (2.1.267 `unrecognized_model`); eski CLI'da `claude update`.
+Owner makinesinde ana katman `claude-opus-5-5` (`.env`; karşılaştırma plan §7). Test: `tests/test_kota_faz23.py`.
+
 ### Kota Faz 0+1 — ölçüm ve gözlem fazı ayrımı (2026-10-19, `docs/KOTA-OPTIMIZASYON-PLANI.md`)
 **Teşhis:** canlı gözlem analiz çağrısının içinde agentik döngüyle yapılıyordu; her araç turu (17-34) ~40k token'lık tam
 analiz bağlamını yeniden okuyordu (tek süreç analizi çağrısı: 5.9M cache okuma). Task Analizi'nde token ölçümü de yoktu.
