@@ -5050,6 +5050,9 @@ def jira_hierarchy_olustur():
     try:
         from skills.jira_tasks import jira_hiyerarsi_olustur
         sonuc = jira_hiyerarsi_olustur(hierarchy, confluence_url=confluence_url)
+        # Kullanım Raporu 'Açılan Task' sayacı (eksikti → Epic/Story hiyerarşisinden açılanlar sayılmıyordu)
+        _telemetri_olay("jira_gonder", "ok", 0,
+                        jira={"toplam": int(sonuc.get("toplam") or 0), "islem": "hiyerarşi açıldı"})
         return jsonify({"ok": True, **sonuc})
     except Exception as e:
         logger.error(f"Jira hiyerarşi oluşturma hatası: {e}")
@@ -5148,6 +5151,9 @@ def jira_fe_be_olustur_route():
     try:
         from skills.jira_fe_be import jira_fe_be_olustur
         sonuc = jira_fe_be_olustur(secim, confluence_url=confluence_url)
+        # Kullanım Raporu 'Açılan Task' sayacı (eksikti → FE/BE Task Aç yolundan açılanlar sayılmıyordu)
+        _telemetri_olay("jira_gonder", "ok", 0,
+                        jira={"toplam": int(sonuc.get("toplam") or 0), "islem": "fe-be task açıldı"})
         return jsonify({"ok": True, **sonuc})
     except Exception as e:
         logger.error(f"Jira FE/BE oluşturma hatası: {e}")

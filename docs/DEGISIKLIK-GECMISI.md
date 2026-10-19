@@ -6,6 +6,10 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## Açılan Task sayacı eksikleri ✅
+- FE/BE Task Aç (`/api/jira/fe-be/create`), Epic/Story hiyerarşisi (`/api/jira/hierarchy/create`) ve köprü `onayla` yollarında
+  telemetri yoktu → Kullanım Raporu 'Açılan Task' eksik sayıyordu. Üçüne `jira.toplam` emit eklendi. Test izolasyonu ile birlikte.
+
 ## Analiz kalitesi vekilleri + ★ iyi örnek kürasyonu ✅
 - Telemetri olayına `kalite {acik_soru, zorunlu_soru}` (`soru_sayilari`, 0 token) + `baglam.islem` dokümana gömülür (sink korur);
   `kalite_ozeti` haftalık: analiz n, ort açık/zorunlu soru, düzelt+cevap oranı → Kullanım Raporu "Analiz kalitesi" tablosu.

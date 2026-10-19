@@ -647,6 +647,12 @@ def _onayla_uygula(key: str, durum: dict, prefix: str) -> str:
                 acilan.append(yeni)
             except Exception as e:
                 hata.append(f"'{o['summary'][:40]}' açılamadı: {e}")
+        if acilan:   # Kullanım Raporu 'Açılan Task' sayacı (köprü ilişkili-aç → onayla)
+            try:
+                from .telemetri import olay_yaz
+                olay_yaz("gorev_guncelle", "ok", sure_ms=0, jira={"toplam": len(acilan), "keyler": list(acilan), "islem": "ilişkili task açıldı"})
+            except Exception:
+                pass
         satir = [f"{ROBOT_IMZA} ✅ `{key}` için {len(acilan)} ilişkili task açıldı:"]
         satir += [f"- {k} ({key} ile Relates)" for k in acilan]
         if hata:
