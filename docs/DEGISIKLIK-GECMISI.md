@@ -6,6 +6,11 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## Ekip kota ölçümü — token sink'e gömülü + güncelleme öncesi/sonrası karşılaştırma ✅
+- Sink `token` alanını düşürüyordu (ekip verisinde token boş) → `telemetri.olay_yaz` token özetini `dokuman`'a `⟨tok …⟩`
+  gömer, okuma/Uzaktan Çek `_olay_normalize` ile geri çözer (Apps Script değişmez). `kota_karsilastirma` olay bazında
+  `KOTA_OLCUM_BASLANGIC` öncesi/sonrası ortalama okuma/süre + Δ% → Kullanım Raporu "Kota ölçümü" tablosu. Test `tests/test_telemetri_olcum.py`.
+
 ## Kota taraması 2 — tavan sonrası yanlış tekrar bug'ı, canlıda --tools "", giriş testi atlama, BFF bütçesi ✅ (plan §8)
 - Tavana takılan gözlem tamamlatma JSON'u yüzünden "araç çağırmadı" sanılıp 2 kez daha koşuyordu (BFF 3×40 tur) → kullanım
   birikimli, tekrar yok. Canlı ilk denemede `--tools ""` (tur başına −27k, 4/4 koşu). Taze agent oturumu varsa giriş testi

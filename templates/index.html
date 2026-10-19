@@ -4340,9 +4340,14 @@ async function kullanimYukle() {
     const tokFmt = (n) => { n = Number(n || 0); if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'; if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K'; return String(n); };
     const usdFmt = (n) => '$' + Number(n || 0).toFixed(2);
     const tk = d.token_ozet || {};
-    const tokenGrubu = (tk.cagri || tk.girdi || tk.cikti)
+    // Kota ölçümü: güncelleme öncesi/sonrası olay bazında ortalama tüketim (ekip verisi gömülü token'la gelir)
+    const ks = d.karsilastirma || {}; const ksO = ks.olaylar || {};
+    const ksSatir = Object.keys(ksO).filter(k => (ksO[k].once || ksO[k].sonra)).sort().map(k => { const o = ksO[k].once || {}, s = ksO[k].sonra || {}; const dp = ksO[k].degisim_okuma_pct;
+      return `<tr><td>${escHtml(k)}</td><td>${o.n || 0}</td><td>${o.n ? tokFmt(o.ort_okuma) : '·'}</td><td>${o.n ? Math.round(o.ort_sure_sn / 60) + ' dk' : '·'}</td><td>${s.n || 0}</td><td><b>${s.n ? tokFmt(s.ort_okuma) : '·'}</b></td><td>${s.n ? Math.round(s.ort_sure_sn / 60) + ' dk' : '·'}</td><td style="color:${dp == null ? 'var(--text2)' : (dp < 0 ? 'var(--green)' : 'var(--red)')}">${dp == null ? '·' : (dp > 0 ? '+' : '') + dp + '%'}</td></tr>`; }).join('');
+    const karsGrubu = ksSatir ? `<div class="ku-grup"><div class="ku-grup-lbl" title="Olay başına ortalama okuma (girdi + cache okuma). Kesim: ${escHtml(ks.esik || '')} (KOTA_OLCUM_BASLANGIC). Ekip verisi 'Uzaktan Çek' ile gelir; güncellemeyi alan analistlerin işleri 'sonra' kovasına düşer.">Kota ölçümü — güncelleme öncesi / sonrası (olay başına ortalama)</div><div style="overflow:auto"><table class="ku-tablo"><thead><tr><th>Olay</th><th>Önce n</th><th>Önce okuma</th><th>Önce süre</th><th>Sonra n</th><th>Sonra okuma</th><th>Sonra süre</th><th>Δ okuma</th></tr></thead><tbody>${ksSatir}</tbody></table></div></div>` : '';
+    const tokenGrubu = karsGrubu + ((tk.cagri || tk.girdi || tk.cikti)
       ? `<div class="ku-grup"><div class="ku-grup-lbl" title="AI çağrılarında harcanan token ve tahmini maliyet (CLI JSON usage + API usage). Cache okuma girdiden düşülür.">Token / Maliyet</div><div class="ku-cards">${kart(tokFmt(tk.girdi), 'Girdi Token')}${kart(tokFmt(tk.cikti), 'Çıktı Token')}${kart(tokFmt(tk.cache_oku), 'Cache Okuma', true)}${kart(usdFmt(tk.maliyet_usd), 'Tahmini Maliyet')}</div></div>`
-      : '';
+      : '');
     document.getElementById('ku-ozet').innerHTML =
       `<div class="ku-grup"><div class="ku-grup-lbl">Aktivite (kümülatif)</div><div class="ku-cards">${kart(oz.bugun || 0, 'Bugün', true)}${kart(oz.bu_hafta || 0, 'Bu Hafta', true)}${kart(oz.bu_ay || 0, 'Bu Ay', true)}</div></div>` +
       `<div class="ku-grup"><div class="ku-grup-lbl">Seçili Aralık Toplamı</div><div class="ku-cards">${kart(d.toplam_analiz, 'Toplam İşlem')}${kart(d.toplam_jira_task, 'Açılan Task')}${kart(d.analist_sayisi, 'Analist')}</div></div>` +

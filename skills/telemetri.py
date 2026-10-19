@@ -265,7 +265,8 @@ def olay_yaz(
             "model": model,
             "ai_modu": ai_modu,
             "jira": jira or None,
-            "baglam": baglam or None,
+            "baglam": (({**(baglam or {}), "dokuman": ((baglam or {}).get("dokuman") or "") + " " + _tok_gom(token)})
+                       if isinstance(token, dict) and token else (baglam or None)),
             "token": token or None,
             "makine": socket.gethostname(),
             "app_versiyon": _app_versiyon(),
@@ -276,6 +277,53 @@ def olay_yaz(
         _sink_gonder(kayit)
     except Exception:
         pass  # telemetri asla analizi bozmaz
+
+
+# ── Token gömme (sink sınırı): Apps Script yalnız bilinen sütunları saklar → `token` alanı DÜŞER (ekip verisinde
+# token hep boş). `eposta`'daki gibi, token özeti sink'in AYNEN koruduğu `dokuman` sütununa `⟨tok …⟩` işaretiyle GÖMÜLÜR;
+# okuma/çekme tarafı (`_olay_normalize`) işareti ayrıştırıp `token`'a geri koyar ve dokümandan siler. Apps Script'e
+# dokunmadan güncelleme sonrası tüm analistlerin token tüketimi Kullanım Raporu'na gelir. ─────────────────────────────
+_TOK_DESEN = re.compile(r"\s*⟨tok ([^⟩]*)⟩\s*")
+_TOK_ALANLAR = (("g", "girdi"), ("c", "cikti"), ("cy", "cache_yaz"), ("co", "cache_oku"), ("n", "cagri"), ("usd", "maliyet_usd"))
+
+
+def _tok_gom(token: dict) -> str:
+    parca = []
+    for kisa, uzun in _TOK_ALANLAR:
+        v = token.get(uzun, 0) or 0
+        parca.append(f"{kisa}={round(float(v), 4) if uzun == 'maliyet_usd' else int(v)}")
+    return "⟨tok " + ",".join(parca) + "⟩"
+
+
+def _tok_coz(metin: str) -> tuple[str, dict | None]:
+    m = _TOK_DESEN.search(metin or "")
+    if not m:
+        return (metin or ""), None
+    tok = {}
+    for parca in m.group(1).split(","):
+        if "=" in parca:
+            k, v = parca.split("=", 1)
+            uzun = dict(_TOK_ALANLAR).get(k.strip())
+            if uzun:
+                try:
+                    tok[uzun] = float(v) if uzun == "maliyet_usd" else int(float(v))
+                except ValueError:
+                    pass
+    return (metin[:m.start()] + metin[m.end():]).strip(), (tok or None)
+
+
+def _olay_normalize(e: dict) -> dict:
+    """Gömülü token işaretini `token` alanına geri taşır (yoksa), dokümandan siler. Her okuma/çekme yolunda uygulanır."""
+    try:
+        b = e.get("baglam")
+        if isinstance(b, dict) and isinstance(b.get("dokuman"), str) and "⟨tok " in b["dokuman"]:
+            temiz, tok = _tok_coz(b["dokuman"])
+            b["dokuman"] = temiz
+            if tok and not isinstance(e.get("token"), dict):
+                e["token"] = tok
+    except Exception:
+        pass
+    return e
 
 
 def kimlik_bildir() -> None:
@@ -320,7 +368,7 @@ def olaylari_oku() -> list[dict]:
                     if not satir:
                         continue
                     try:
-                        olaylar.append(json.loads(satir))
+                        olaylar.append(_olay_normalize(json.loads(satir)))
                     except Exception:
                         continue
             except Exception:
@@ -341,6 +389,43 @@ def _donem_key(ts_str: str, donem: str) -> str:
         except Exception:
             return ts_str[:10]
     return ts_str[:10]
+
+
+def kota_olcum_baslangic() -> str:
+    """Kota optimizasyonu 'öncesi/sonrası' kesim anı (ISO). Vars. Faz 2+3 + tarama-2 yayını; env ile değişir."""
+    return (os.getenv("KOTA_OLCUM_BASLANGIC") or "2026-10-19T18:00:00").strip()
+
+
+def kota_karsilastirma(olaylar: list[dict]) -> dict:
+    """Olay tipi bazında güncelleme ÖNCESİ/SONRASI ortalama tüketim (token'lı olaylar): n, ort_okuma (girdi+cache_oku),
+    ort_yazma (cache_yaz), ort_sure_sn, ort_maliyet. Ekip verisi gömülü token'la geldiği için güncellemeyi alan
+    analistlerin işleri otomatik 'sonra' kovasına düşer (ts kesimi + token var)."""
+    esik = kota_olcum_baslangic()
+    grup: dict[str, dict[str, dict]] = {}
+    for e in olaylar:
+        tk = e.get("token")
+        if not isinstance(tk, dict) or not (tk.get("girdi") or tk.get("cache_oku") or tk.get("cikti")):
+            continue
+        olay = e.get("olay") or "diger"
+        kova = "sonra" if str(e.get("ts", "")) >= esik else "once"
+        g = grup.setdefault(olay, {}).setdefault(kova, {"n": 0, "okuma": 0, "yazma": 0, "cikti": 0, "sure_sn": 0, "maliyet": 0.0})
+        g["n"] += 1
+        g["okuma"] += int(tk.get("girdi", 0) or 0) + int(tk.get("cache_oku", 0) or 0)
+        g["yazma"] += int(tk.get("cache_yaz", 0) or 0)
+        g["cikti"] += int(tk.get("cikti", 0) or 0)
+        g["sure_sn"] += int((e.get("sure_ms") or 0) / 1000)
+        g["maliyet"] += float(tk.get("maliyet_usd", 0) or 0)
+    out = {}
+    for olay, kovalar in grup.items():
+        satir = {}
+        for kova, g in kovalar.items():
+            n = max(1, g["n"])
+            satir[kova] = {"n": g["n"], "ort_okuma": g["okuma"] // n, "ort_yazma": g["yazma"] // n, "ort_cikti": g["cikti"] // n,
+                           "ort_sure_sn": g["sure_sn"] // n, "ort_maliyet": round(g["maliyet"] / n, 3)}
+        o, s = satir.get("once"), satir.get("sonra")
+        satir["degisim_okuma_pct"] = (round((s["ort_okuma"] - o["ort_okuma"]) * 100 / o["ort_okuma"]) if o and s and o["ort_okuma"] else None)
+        out[olay] = satir
+    return {"esik": esik, "olaylar": out}
 
 
 def _olaylari_filtrele(gun: int, analist: str | None = None) -> list[dict]:
@@ -452,6 +537,7 @@ def istatistik(gun: int = 90, donem: str = "gun", analist: str | None = None) ->
         "analist_sayisi": len(analistler),
         "ozet": ozet,
         "token_ozet": {**token_ozet, "maliyet_usd": round(token_ozet["maliyet_usd"], 4)},
+        "karsilastirma": kota_karsilastirma(filtreli),
         "analistler": sirali,
         "tum_analistler": list(tum_analistler),
         "tip_toplam": tip_toplam,
@@ -538,7 +624,7 @@ def uzaktan_cek() -> tuple[bool, str]:
         USAGE_DIR.mkdir(parents=True, exist_ok=True)
         with open(UZAK_DOSYA, "w", encoding="utf-8") as f:
             for e in veri:
-                f.write(json.dumps(e, ensure_ascii=False) + "\n")
+                f.write(json.dumps(_olay_normalize(e) if isinstance(e, dict) else e, ensure_ascii=False) + "\n")
         return True, f"{len(veri)} olay çekildi."
     except Exception as e:
         return False, f"Çekme başarısız: {e}"

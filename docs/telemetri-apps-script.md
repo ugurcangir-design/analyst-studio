@@ -164,3 +164,10 @@ olarak prompt'a enjekte eder. Havuz ≤80 (en yeni), örnek ≤45k (Sheet hücre
   çekme domain/owner/anahtar kapılı.
 - Kötü/eski örnek: Kullanım Raporu → Ortak Eğitim Havuzu → (yerel) Sil; merkezden kalıcı silmek için
   'Ornekler' sekmesinden satırı sil.
+
+## Token tüketimi ekip verisinde (2026-10-19) — script değişikliği GEREKMEZ
+Script yalnız yukarıdaki sütunları sakladığından `token` alanı düşüyordu (ekip verisinde token hep boştu). Uygulama artık
+token özetini `dokuman` sütununa `⟨tok g=…,c=…,cy=…,co=…,n=…,usd=…⟩` olarak gömer; Uzaktan Çek bunu geri ayrıştırıp
+dokümandan siler. Sheet'te `dokuman` hücresinde bu işaret görünür (zararsız). İsteğe bağlı temiz yol: `_basliklar`'a
+`'girdi','cikti','cache_yaz','cache_oku','cagri','maliyet_usd'` sütunlarını ekleyip `doPost`'ta `o.token||{}` alanlarını
+yazmak ve `doGet`'te `token:{…}` döndürmek — o zaman uygulama `token` alanını doğrudan kullanır (gömme yine zararsız kalır).

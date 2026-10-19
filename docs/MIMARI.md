@@ -963,6 +963,14 @@ diyordu) ve içerik sonradan değişebilir.
 - Kısmi yazım kalıcı: `jiraYazildi` sette (`_jgSetKaydet`) → sayfa yenilense de "FE KEY açıldı ✓" görünür, diğer katman
   sonra yazılabilir. Test: `tests/test_katman_secimi.py`.
 
+### Ekip kota ölçümü — token gömme + öncesi/sonrası karşılaştırma (2026-10-19)
+`telemetri`: sink `token`'ı saklamadığından `olay_kaydet` `_tok_gom(token)` işaretini `baglam.dokuman` sonuna ekler (`⟨tok
+g,c,cy,co,n,usd⟩`); `olaylari_oku` ve `uzaktan_cek` her satırı `_olay_normalize` ile geçirir (`_tok_coz` → `token`, doküman
+temizlenir). `kota_karsilastirma(olaylar)` → `{esik, olaylar{olay:{once,sonra{n,ort_okuma,ort_yazma,ort_cikti,ort_sure_sn,
+ort_maliyet}, degisim_okuma_pct}}}` (`KOTA_OLCUM_BASLANGIC`, vars. 2026-10-19T18:00:00); `ozet()` `karsilastirma` alanı →
+Kullanım Raporu "Kota ölçümü — güncelleme öncesi / sonrası" tablosu (`karsGrubu`). Yeni sürümü alan analistin her işi
+token'lı geldiğinden 'sonra' kovası kendiliğinden dolar; owner Uzaktan Çek ile toplar.
+
 ### Kota taraması 2 — tavan-sonrası tekrar bug'ı, canlıda yalın CLI, giriş atlama (2026-10-19, plan §8)
 `_api_cagri_cli`: tavan/devam/tamamlatma koşularının `usage`/`num_turns`'ü `_onceki_koşular` ile BİRİKTİRİLİR (eskiden son
 koşunun 1-3 turluk JSON'u kaydediliyor ve `num_turns<=1` "araç çağırmadı" tekrarını yanlış tetikliyordu → gözlem 3× koşuyordu).
