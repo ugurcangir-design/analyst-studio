@@ -5781,7 +5781,7 @@ def jira_projeler():
                     pass  # erişilemeyen/olmayan key → key'in kendisi gösterilir
         except Exception:
             pass
-    projeler = [{"key": k, "name": proj[k]} for k in sorted(proj)]
+    projeler = [{"key": k, "name": proj[k]} for k in proj]   # sıra _agent_jira_projeleri'den (köprü projeleri → ana → alfabetik)
     return jsonify({"ok": True, "projeler": projeler, "varsayilan": env.get("JIRA_PROJECT_KEY", "")})
 
 
