@@ -12,6 +12,7 @@ import tempfile
 from pathlib import Path
 
 os.environ.setdefault("AUTO_UPDATE", "false")
+os.environ.setdefault("SIRKET_EPOSTA_DOMAIN", "example.com")   # test kimliği filtresi kapalı (test ortamı)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from skills import telemetri as T  # noqa: E402
 

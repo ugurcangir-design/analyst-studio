@@ -41,6 +41,9 @@ ORIGIN = {"Origin": "http://localhost"}            # CSRF same-origin
 # Kimlik kapısı deterministik: geçici analist.json + geçerli kimlik (gated POST'lar geçsin)
 from skills import telemetri as _tel               # noqa: E402
 _tel.ANALIST_DOSYA = _tmp / "analist.json"
+_tel.USAGE_DIR = _tmp / "usage"                     # test olayları GERÇEK events.jsonl'e/ekip Sheet'ine GİTMESİN
+_tel.EVENTS_DOSYA = _tmp / "usage" / "events.jsonl"
+_tel._sink_gonder = lambda kayit: None              # (2026-10-19: 'Smoke Analist' ekip roster'ında göründü)
 _tel.analist_yaz("Smoke Analist", "smoke@example.com")
 
 basari = 0

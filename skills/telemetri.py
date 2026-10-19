@@ -122,6 +122,8 @@ def analistler_listesi() -> list[dict]:
         for satir in satirlar:
             try:
                 o = json.loads(satir)
+                if _test_kimligi_mi(o):
+                    continue
             except Exception:
                 continue
             eposta = (o.get("eposta") or "").strip().lower()
@@ -229,6 +231,8 @@ def _sink_gonder(olay: dict) -> None:
     gibi KISA ÖMÜRLÜ subprocess'te süreç çıkışından önce öldürülüp POST kayboluyordu →
     süreç/teknik/BRD/kapsam olayları Sheet'e HİÇ ulaşmıyordu (in-process Flask'ta çalışıyordu).
     Senkron POST bu yarışı bitirir; başarısızsa lokal JSONL yedek zaten var."""
+    if os.getenv("TELEMETRI_SINK", "").strip().lower() in ("off", "0", "false"):
+        return   # test/geliştirme makinesi: ekip Sheet'ine gönderme
     url = _sink_url()
     if not url:
         return
@@ -337,6 +341,21 @@ def _tok_coz(metin: str) -> tuple[str, dict | None, dict | None, str | None]:
     return (metin[:m.start()] + metin[m.end():]).strip(), (tok or None), (kal or None), islem
 
 
+_TEST_KIMLIK_AD = {"smoke analist", "test analist"}
+
+
+def _test_kimligi_mi(e: dict) -> bool:
+    """Test koşularının seed kimliği (example.com / 'Smoke Analist') — roster/istatistiğe girmesin (sink'e sızmış eski satırlar dahil)."""
+    try:
+        if (os.getenv("SIRKET_EPOSTA_DOMAIN") or "").strip().lower() == "example.com":
+            return False   # test ortamı (domain example.com) — testlerin kendi seed kimlikleri görünür kalsın
+        ad = str(e.get("analist") or "").strip().lower()
+        ep = str(e.get("eposta") or "").strip().lower()
+        return ad in _TEST_KIMLIK_AD or ad.startswith("smoke analist <") or ep.endswith("@example.com") or "@example.com>" in ad
+    except Exception:
+        return False
+
+
 def _olay_normalize(e: dict) -> dict:
     """Gömülü işareti `token`/`kalite`/`baglam.islem` alanlarına geri taşır (yoksa), dokümandan siler. Her okuma/çekme yolunda."""
     try:
@@ -409,7 +428,10 @@ def olaylari_oku() -> list[dict]:
                     if not satir:
                         continue
                     try:
-                        olaylar.append(_olay_normalize(json.loads(satir)))
+                        o = _olay_normalize(json.loads(satir))
+                        if _test_kimligi_mi(o):
+                            continue
+                        olaylar.append(o)
                     except Exception:
                         continue
             except Exception:
