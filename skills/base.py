@@ -4144,6 +4144,9 @@ _LIVE_APP_TEKRAR_UYARISI = (
 )
 
 
+_LIVE_APP_TEKRAR_SAYISI = 2     # araçsız tek-tur sonucunda en fazla kaç ek deneme
+
+
 def _live_app_tekrar_acik() -> bool:
     """Canlı gözlem istenip model hiç araç çağırmadıysa (num_turns<=1) bir kez daha dene.
     `.env` LIVE_APP_TEKRAR=false kapatır (maliyet kontrolü)."""
@@ -4213,12 +4216,12 @@ def cagri_ozeti(gun: int = 7) -> dict:
 MCP_BOS_CONFIG = BASE_DIR / ".mcp.bos.json"     # canlı olmayan çağrılar: hiçbir MCP sunucusu yüklenmesin
 
 
-def _yalin_cli_argumanlari(mcp_verildi: bool) -> list[str]:
+def _yalin_cli_argumanlari(mcp_verildi: bool, araclar_kapali: bool = True) -> list[str]:
     """Yerleşik araçları + slash komutlarını kapat; MCP verilmediyse boş strict config → sabit bağlam ~%35 küçülür.
-    `CLI_YALIN=false` → eski davranış (teşhis için)."""
+    `CLI_YALIN=false` → eski davranış (teşhis için). araclar_kapali=False → yalnız slash kapalı (canlı tekrar denemesi)."""
     if (os.getenv("CLI_YALIN", "true") or "true").strip().lower() in ("false", "0", "hayir", "no"):
         return []
-    args = ["--tools", "", "--disable-slash-commands"]
+    args = (["--tools", ""] if araclar_kapali else []) + ["--disable-slash-commands"]
     if not mcp_verildi:
         try:
             if not MCP_BOS_CONFIG.exists():
@@ -4227,6 +4230,19 @@ def _yalin_cli_argumanlari(mcp_verildi: bool) -> list[str]:
         except Exception:
             pass
     return args
+
+
+def mcp_isit() -> None:
+    """Açılışta Playwright MCP paketini ARKA PLANDA ısıtır (`npx … --version`): soğuk npx başlangıcı ilk MCP bağlantısını
+    yavaşlatıyor ve ilk tur araçsız gidebiliyordu (teşhis 2026-10-19: hatalar hep yeniden başlatmadan hemen sonra). Best-effort."""
+    npx = _npx_yolu_bul()
+    if not npx:
+        return
+    try:
+        subprocess.Popen([npx, "-y", "@playwright/mcp@0.0.80", "--version"], stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+    except Exception:
+        pass
 
 
 def _canli_max_tur(varsayilan: int = 40) -> int:
@@ -4241,7 +4257,10 @@ _MAX_TUR_TAMAMLA = ("Tur tavanına ulaştın. ARTIK ARAÇ KULLANMA. Şimdiye kad
 
 
 def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | None = None,
-                   _tekrar: bool = False, max_turns: int | None = None) -> str:
+                   _tekrar: int = 0, max_turns: int | None = None) -> str:
+    """_tekrar: araç-çağırmama tekrarı sayacı (0 = ilk deneme). Tekrarlar yerleşik araçları KAPATMAZ (`--tools ""` yok) —
+    teşhis 2026-10-19: ilk tur bazen MCP araçları görünmeden gidiyor (model araç çağrısını METİN olarak yazıyor), özellikle
+    soğuk npx başlangıcında; tekrar farklı başlatma profiliyle + 2 sn gecikmeyle yapılır."""
     claude_yolu = _claude_yolu_bul()
     if not claude_yolu:
         raise EnvironmentError(
@@ -4310,7 +4329,7 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
     # kullanıcı profilindeki tüm MCP sunucuları). Analizler metin-içi çalışır, yerleşik araç/slash komutu kullanmaz →
     # `--tools ""` + `--disable-slash-commands`; canlı olmayan çağrıda BOŞ strict MCP config (Playwright/analiz-MCP
     # verilmişse onlar zaten strict). Ölçüm: 98k → 62k sabit bağlam; canlı turda ~107k → ~69k. CLI_YALIN=false kapatır.
-    _yalin_args = _yalin_cli_argumanlari(bool(_live_args or _analiz_mcp_args))
+    _yalin_args = _yalin_cli_argumanlari(bool(_live_args or _analiz_mcp_args), araclar_kapali=not (_live_args and _tekrar))
     _cagri_bas = time.time()
     try:
         proc = _cli_calistir(
@@ -4404,7 +4423,7 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
                       tur=int(veri.get("num_turns") or 0), girdi=int(_u.get("input_tokens") or 0),
                       cikti=int(_u.get("output_tokens") or 0), cache_yaz=int(_u.get("cache_creation_input_tokens") or 0),
                       cache_oku=int(_u.get("cache_read_input_tokens") or 0), sure_sn=int(time.time() - _cagri_bas),
-                      tekrar=bool(_tekrar), max_tur_takildi=bool(_max_tur_takildi), prompt_kc=len(tam_prompt))
+                      tekrar=int(_tekrar), max_tur_takildi=bool(_max_tur_takildi), prompt_kc=len(tam_prompt))
     except Exception:
         pass
 
@@ -4425,13 +4444,20 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
         _yapildi = not (_browser_reddi or _turns <= 1)
         # Model hiç araç çağırmadıysa (MCP bağlı olduğu hâlde — teşhis edilen gerçek neden) daha
         # sert direktifle BİR KEZ daha dene; ikinci deneme de başarısızsa aşağıdaki uyarıya düşer.
-        if not _yapildi and _turns <= 1 and not _tekrar and _live_app_tekrar_acik():
-            logger.warning("⚠ Canlı gözlem istendi ama model hiç tarayıcı aracı çağırmadı (num_turns=%s, MCP bağlıydı) "
-                           "— sertleştirilmiş talimatla 1 kez daha deneniyor.", _turns)
-            print("  ⚠ Model tarayıcıyı kullanmadı — canlı gözlem bir kez daha deneniyor…")
-            return _api_cagri_cli(sistem, mesajlar, canli_uygulama_kapsami, _tekrar=True, max_turns=max_turns)
+        # Araç çağrısını METİN olarak yazma (tool_use: browser_navigate / ```browser_navigate(...)```) = araçlar ilk turda
+        # modele ulaşmamış → tekrar şart (araçsız 1 tur zaten aynı sınıfa düşer; ayrıca etiketlenir).
+        _sahte_arac = bool(_turns <= 1 and re.search(r"tool_use\s*:|browser_navigate\s*[(→]|mcp__playwright__", yanit or ""))
+        if not _yapildi and _turns <= 1 and _tekrar < _LIVE_APP_TEKRAR_SAYISI and _live_app_tekrar_acik():
+            logger.warning("⚠ Canlı gözlem istendi ama model hiç tarayıcı aracı çağırmadı (num_turns=%s, MCP bağlıydı%s) "
+                           "— %d/%d tekrar (yerleşik araçlar açık, 2 sn gecikme).", _turns,
+                           "; araç çağrısı metin olarak yazıldı" if _sahte_arac else "", _tekrar + 1, _LIVE_APP_TEKRAR_SAYISI)
+            print(f"  ⚠ Model tarayıcıyı kullanmadı — canlı gözlem yeniden deneniyor ({_tekrar + 1}/{_LIVE_APP_TEKRAR_SAYISI})…")
+            time.sleep(2)
+            return _api_cagri_cli(sistem, mesajlar, canli_uygulama_kapsami, _tekrar=_tekrar + 1, max_turns=max_turns)
         _neden = ("izinli tarayıcı aracı reddedildi" if _browser_reddi
-                  else ("model hiç tarayıcı aracı çağırmadı (MCP bağlıydı" + ("; tekrar denendi)" if _tekrar else ")")
+                  else ((("model araç çağrısını metin olarak yazdı — araçlar ilk turda görünmedi" if _sahte_arac
+                          else "model hiç tarayıcı aracı çağırmadı (MCP bağlıydı")
+                         + (f"; {_tekrar} tekrar denendi)" if _tekrar else ")"))
                         if _turns <= 1 else ""))
         # UI'nın "Gözlem Raporu" rozeti için makine-doğrulanmış durum (log'un yanında).
         _gozlem_durum_yaz(yapildi=_yapildi, turns=_turns, reddedilen=[str(d)[:120] for d in _denials],

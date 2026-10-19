@@ -10,7 +10,7 @@
 - Faz 0: `logs/usage/cagri.jsonl` çağrı başına aşama/model/tur/token; `/api/usage/cagri-ozet`; Kullanım Raporu paneli.
 - Faz 1: `skills/gozlem.py` — canlı gözlem analizden ayrı küçük promptla rapor; motorlar tarayıcısız analiz + rapor
   bloğu; FE+BE tek gözlem; cevap turunda taze rapor (6 sa) yeniden kullanılır; `--max-turns` + resume tamamlatma;
-  tur diyeti. Faz 2-4 onay bekliyor.
+  tur diyeti. Yalın CLI (sabit bağlam 98k→62k). Araçsız ilk tur/pseudo-araç: 2 ek deneme + boot'ta MCP ısıtma. Faz 2-3 BEKLEMEDE (owner), Faz 4 ölçümden sonra.
 
 ## Kabul Kontrolü listeden tek tıkla (analiz üretmeden) ✅
 - Owner: "ANALIZ CHECK task'ı seçince başlat butonu olsun, ekran karışık, tekrar analiz yapmasın". Görev kartına

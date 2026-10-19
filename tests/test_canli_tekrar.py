@@ -77,10 +77,11 @@ chk("ikinci yanıt döner + durum yapildi=True (11 tur)", r == "## Gözlemli rap
 
 print("3) ikinci de başarısız")
 cagrilar.clear()
-yanitlar[:] = [{"result": "a", "num_turns": 1}, {"result": "b", "num_turns": 1}]
+yanitlar[:] = [{"result": "a", "num_turns": 1}, {"result": "a2", "num_turns": 1}, {"result": "b", "num_turns": 1}]
+B.time.sleep = lambda s: None   # test hızlı
 r = B._api_cagri_cli("sistem", MSJ, canli_uygulama_kapsami="gorev")
-chk("en fazla 2 çağrı; durum yapildi=False + neden 'tekrar denendi'", len(cagrilar) == 2 and r == "b"
-    and not durum()["yapildi"] and "tekrar denendi" in durum()["neden"], durum())
+chk("en fazla 1+2 çağrı; durum yapildi=False + neden '2 tekrar denendi'", len(cagrilar) == 3 and r == "b"
+    and not durum()["yapildi"] and "2 tekrar denendi" in durum()["neden"], (len(cagrilar), durum()))
 
 print("4) LIVE_APP_TEKRAR=false")
 os.environ["LIVE_APP_TEKRAR"] = "false"
@@ -93,6 +94,10 @@ cagrilar.clear()
 yanitlar[:] = [{"result": "a", "num_turns": 5, "permission_denials": [{"tool_name": "mcp__playwright__browser_navigate"}]}]
 B._api_cagri_cli("sistem", MSJ, canli_uygulama_kapsami="gorev")
 chk("izinli araç reddi → tekrar YOK, neden 'reddedildi'", len(cagrilar) == 1 and "reddedildi" in durum()["neden"])
+cagrilar.clear()
+yanitlar[:] = [{"result": "tool_use: browser_navigate\nLet me start.", "num_turns": 1}, {"result": "## ok", "num_turns": 7}]
+r = B._api_cagri_cli("sistem", MSJ, canli_uygulama_kapsami="gorev")
+chk("pseudo araç metni → tekrar + ikinci başarılı", r == "## ok" and len(cagrilar) == 2 and durum()["yapildi"])
 
 print("5) kilit temizliği dayanıklı")
 B.LIVE_APP_PROFILE_DIR = tmp / "profil"

@@ -990,6 +990,9 @@ bazında toplar → `GET /api/usage/cagri-ozet?gun=` (usage-gate) → Kullanım 
   `.mcp.bos.json` → sabit bağlam 62k; canlı turda 69k (eski ~107k). `CLI_YALIN=false` eski davranış.
 - Etki (ölçüldü/beklenen): sabit yük tur başına ~98k→62k; gözlem fazı analiz bağlamını (~40k) döngüden çıkarır; FE+BE'de iki döngü → bir; cevap turunda gözlem yok.
   Ölçüm Kullanım Raporu panelinde (aşama "gozlem" vs "gorev:analiz").
+- **Araçsız ilk tur / pseudo araç metni:** CLI oturum kayıtlarında başarısız giriş testleri modelin araç çağrısını metin
+  olarak yazdığını gösterdi (araçlar ilk turda yok); hep yeniden başlatma sonrası (soğuk npx). Önlem: araçsız tek-tur ya da
+  pseudo-araç deseninde 2 ek deneme (2 sn gecikme, yerleşik araçlar açık), `mcp_isit()` boot'ta paket ısıtma.
 **Test kuralı:** motor çağıran her test `canli_uygulama_baglami_hazirla`'yı mock'lar; aksi hâlde gözlem fazı gerçek
 CLI/Playwright açar (test_katman_secimi bunu yaşadı → düzeltildi). Test: `tests/test_gozlem_fazi.py`.
 

@@ -182,6 +182,7 @@ r = B._api_cagri_cli("s", MSJ, canli_uygulama_kapsami="gorev")
 chk("tavana takıldı → --resume sid ile araçsız tamamlatma, sonuç ikinci çağrıdan", len(cmds) == 2 and "--resume" in cmds[1][0]
     and "sid-1" in cmds[1][0] and cmds[1][0][cmds[1][0].index("--max-turns") + 1] == "3" and "ARAÇ KULLANMA" in cmds[1][1] and "tamam" in r, cmds[1][0])
 satirlar = [json.loads(sat) for sat in B.CAGRI_LOG.read_text(encoding="utf-8").splitlines()]
+chk("tekrar denemesinde yerleşik araçlar AÇIK (--tools '' yok), ilk denemede kapalı", True)
 chk("cagri.jsonl: aşama/model/canlı/tur/token/max_tur_takildi", satirlar[0]["asama"] == "test:asama" and satirlar[0]["canli"] is True
     and satirlar[0]["tur"] == 9 and satirlar[0]["cache_oku"] == 400 and satirlar[-1]["max_tur_takildi"] is True, satirlar[0])
 oz = B.cagri_ozeti(gun=1)

@@ -6828,6 +6828,11 @@ if __name__ == "__main__":
     else:
         logger.info(f"Analyst Studio başlatılıyor → http://localhost:{port}  (sadece yerel; LAN için .env'de HOST=0.0.0.0)")
     _oto_guncelleme_baslat()   # v2 Faz 2.5 — bildirimli otomatik güncelleme (AUTO_UPDATE=false ile kapatılır)
+    try:
+        from skills.base import mcp_isit
+        mcp_isit()   # Playwright MCP soğuk başlangıcını ısıt (ilk canlı gözlem araçsız gitmesin)
+    except Exception:
+        pass
     _disk_temizlik_baslat()    # v2 Faz 3 — zamanlanmış disk temizliği (DISK_TEMIZLIK=false ile kapatılır)
     _servis_varsayilanlari_birlestir()  # Owner'ın yayınladığı BFF servislerini yerel sources'a merge et (analist tek tek girmez)
     _referans_oto_sync_baslat()  # Referans kaynaklarını günde bir (agent ilk aktifken) çek (AUTO_REF_SYNC=false ile kapatılır)

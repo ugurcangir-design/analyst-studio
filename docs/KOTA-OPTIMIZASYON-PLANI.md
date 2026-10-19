@@ -1,6 +1,6 @@
 # Kota Optimizasyon Planı — agent tüketim taraması (2026-10-19)
 
-> Durum: **Faz 0 + Faz 1 UYGULANDI (2026-10-19, owner onaylı)**; Faz 2-4 onay bekliyor. Etki ölçümü: Kullanım Raporu → "Aşama bazlı tüketim". İlke: **doğruluk/kalite kaybı YOK** —
+> Durum: **Faz 0 + Faz 1 UYGULANDI (2026-10-19, owner onaylı)**; Faz 2 ve 3 owner kararıyla BEKLEMEDE (2026-10-19); Faz 4 ölçümden sonra. Etki ölçümü: Kullanım Raporu → "Aşama bazlı tüketim". İlke: **doğruluk/kalite kaybı YOK** —
 > her madde için "kalite nasıl korunuyor" satırı var; kaliteyi düşürebilecek seçenekler ayrı başlıkta, karar owner'da.
 
 ## 1. Ölçülen gerçek (kullanım kayıtları + CLI MCP logları)
