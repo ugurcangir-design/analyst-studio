@@ -992,7 +992,7 @@ bazında toplar → `GET /api/usage/cagri-ozet?gun=` (usage-gate) → Kullanım 
   Ölçüm Kullanım Raporu panelinde (aşama "gozlem" vs "gorev:analiz").
 - **Araçsız ilk tur / pseudo araç metni:** CLI oturum kayıtlarında başarısız giriş testleri modelin araç çağrısını metin
   olarak yazdığını gösterdi (araçlar ilk turda yok); hep yeniden başlatma sonrası (soğuk npx). Önlem: araçsız tek-tur ya da
-  pseudo-araç deseninde 2 ek deneme (2 sn gecikme, yerleşik araçlar açık), `mcp_isit()` boot'ta paket ısıtma.
+  pseudo-araç deseninde 2 ek deneme (2 sn gecikme, yerleşik araçlar açık), `mcp_isit()` boot'ta gerçek MCP el sıkışması (initialize + tools/list) ile ısıtma. Gerçek koşu: restart sonrası ilk giriş testi araçsız (1 tur, 4 sn) → 1. tekrar 5 turda başarılı (mekanizma doğrulandı).
 **Test kuralı:** motor çağıran her test `canli_uygulama_baglami_hazirla`'yı mock'lar; aksi hâlde gözlem fazı gerçek
 CLI/Playwright açar (test_katman_secimi bunu yaşadı → düzeltildi). Test: `tests/test_gozlem_fazi.py`.
 

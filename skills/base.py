@@ -4232,17 +4232,51 @@ def _yalin_cli_argumanlari(mcp_verildi: bool, araclar_kapali: bool = True) -> li
     return args
 
 
-def mcp_isit() -> None:
-    """Açılışta Playwright MCP paketini ARKA PLANDA ısıtır (`npx … --version`): soğuk npx başlangıcı ilk MCP bağlantısını
-    yavaşlatıyor ve ilk tur araçsız gidebiliyordu (teşhis 2026-10-19: hatalar hep yeniden başlatmadan hemen sonra). Best-effort."""
+def mcp_isit(bekle: bool = False) -> None:
+    """Playwright MCP'yi ARKA PLANDA gerçekten ISITIR: sunucuyu başlatıp JSON-RPC `initialize` + `tools/list` el sıkışması
+    yapar (node + paket + araç listesi OS önbelleğine girer), sonra kapatır. Teşhis 2026-10-19: yeniden başlatmadan hemen
+    sonraki İLK canlı çağrıda araçlar ilk tura yetişmiyor (model araç çağrısını metin yazıyor) — ısınmış kurulumda sorun yok.
+    Chrome AÇILMAZ (tools/list tarayıcı başlatmaz). Best-effort, 25 sn tavan; bekle=True testler için senkron."""
     npx = _npx_yolu_bul()
     if not npx:
         return
-    try:
-        subprocess.Popen([npx, "-y", "@playwright/mcp@0.0.80", "--version"], stdout=subprocess.DEVNULL,
-                         stderr=subprocess.DEVNULL, start_new_session=True)
-    except Exception:
-        pass
+
+    def _calistir():
+        try:
+            isit_dir = LIVE_APP_PROFILE_HAVUZ / "isit-profil"
+            isit_dir.mkdir(parents=True, exist_ok=True)
+            p = subprocess.Popen([npx, "-y", "@playwright/mcp@0.0.80", "--headless", "--browser", "chrome",
+                                  "--user-data-dir", str(isit_dir)],
+                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                 text=True, start_new_session=True)
+            msgs = [{"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                     "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "analyst-studio-isit", "version": "1"}}},
+                    {"jsonrpc": "2.0", "method": "notifications/initialized"},
+                    {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}]
+            try:
+                for m in msgs:
+                    p.stdin.write(json.dumps(m) + "\n")
+                p.stdin.flush()
+                son = time.time() + 25
+                while time.time() < son:
+                    satir = p.stdout.readline()
+                    if not satir:
+                        break
+                    if '"id":2' in satir.replace(" ", "") and "tools" in satir:
+                        logger.info("Playwright MCP ısıtıldı (tools/list yanıtı alındı).")
+                        break
+            finally:
+                try:
+                    os.killpg(os.getpgid(p.pid), signal.SIGTERM)
+                except Exception:
+                    p.kill()
+        except Exception as e:
+            logger.info("MCP ısıtma atlandı: %s", str(e)[:120])
+
+    if bekle:
+        _calistir()
+    else:
+        threading.Thread(target=_calistir, daemon=True).start()
 
 
 def _canli_max_tur(varsayilan: int = 40) -> int:
