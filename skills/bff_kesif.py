@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import time
 from datetime import datetime
@@ -178,8 +179,14 @@ def kesfet(hedef_url: str = "", ekran_tarif: str = "", ekran_bazli: bool = False
     icerik = [{"type": "text", "text": canli}, {"type": "text", "text": _RAPOR_FORMAT},
               {"type": "text", "text": "Keşfi uygula ve raporu yaz."}]
     asama_ayarla("bff")
+    # CRUD keşfi (liste→oluştur→doğrula→güncelle→sil→filtre) 40 turluk genel tavanı aşıyor (2026-10-19: tavana takılıp
+    # 3 kez baştan koştu) → kendi bütçesi (BFF_MAX_TUR, vars. 70) + 1 devam hakkı; sonra araçsız tamamlatma.
+    try:
+        _butce = max(20, int(os.getenv("BFF_MAX_TUR", "70")))
+    except (TypeError, ValueError):
+        _butce = 70
     ai = _ai or (lambda s, m, k: _api_cagri(s, m, max_tokens=MAX_TOKENS_COMBINED, thinking=False, onbellek=False,
-                                            canli_uygulama_kapsami=k, katman="yardimci"))
+                                            canli_uygulama_kapsami=k, katman="yardimci", max_turns=_butce, tur_devam=1))
     try:
         yanit = ai(sistem, [{"role": "user", "content": icerik}], kapsam)
     except Exception as e:

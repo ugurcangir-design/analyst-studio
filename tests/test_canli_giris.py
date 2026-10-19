@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 os.environ.setdefault("BILDIRIM", "false")
 
 from skills import canli_giris as CG  # noqa: E402
+CG.oturum_durumu = lambda: {}   # kayıtlı agent oturumu YOK (gate davranışı deterministik)
 
 _hata = 0
 

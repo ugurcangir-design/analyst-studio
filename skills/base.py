@@ -4395,6 +4395,7 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
     # Canlı gözlem döngüsüne TUR TAVANI (Faz 1 A1.4): kaçak döngü (her tur ~bağlam kadar okuma) kesilir;
     # tavana takılırsa oturum --resume ile sürdürülüp rapor araçsız tamamlatılır (çıktı kaybolmaz).
     _tur_args: list[str] = []
+    _onceki_koşular: list[dict] = []   # tavan/devam koşularının JSON'ları (kullanım birikimi için)
     if _live_args:
         _tur_tavani = int(max_turns or _canli_max_tur())
         _tur_args = ["--max-turns", str(_tur_tavani)]
@@ -4404,7 +4405,12 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
     # verilmişse onlar zaten strict). Ölçüm: 98k → 62k sabit bağlam; canlı turda ~107k → ~69k. CLI_YALIN=false kapatır.
     # CANLI çağrıda yerleşik araçlar KAPATILMAZ: `--tools ""` ile soğuk süreçte ilk tur araçsız gidiyordu (2 gerçek koşuda
     # ilk deneme düştü, araçları açık tekrar başardı); +~30k/tur maliyet güvenilirlik için kabul. Canlı olmayan çağrı yalın.
-    _yalin_args = _yalin_cli_argumanlari(bool(_live_args or _analiz_mcp_args), araclar_kapali=not _live_args)
+    # Ölçüm 2026-10-19 (MCP boot ısıtması sonrası, 4/4 koşu başarılı): canlı çağrıda `--tools ""` tur başına bağlamı
+    # ~100k→~73k düşürüyor (cache okuma −35%). Soğuk başlangıç riski için: İLK denemede kapalı, `_tekrar>0` denemelerinde
+    # AÇIK (araçsız ilk tur tespiti zaten tekrar tetikler). LIVE_APP_YERLESIK_ARACLAR=true → canlıda hep açık (eski).
+    _canli_araclar_acik = os.getenv("LIVE_APP_YERLESIK_ARACLAR", "false").strip().lower() in ("1", "true", "yes")
+    _yalin_args = _yalin_cli_argumanlari(bool(_live_args or _analiz_mcp_args),
+                                         araclar_kapali=(not _live_args) or (_tekrar == 0 and not _canli_araclar_acik))
     _cagri_bas = time.time()
     try:
         proc = _cli_calistir(
@@ -4422,10 +4428,17 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
         # giriş düştüyse yeniden girer). Devam hakkı bitince eski davranış: araçsız tamamlatma.
         _devam_hakki = int(tur_devam if tur_devam is not None else _canli_tur_devam())
         _devam_sayisi = 0
+        # Tavan/devam/tamamlatma koşularının kullanım sayaçları BİRİKTİRİLİR — son koşunun JSON'u yalnız 1-3 turluk
+        # tamamlatmayı gösterir; eskiden bu yüzden (a) cagri.jsonl 40 turluk döngüyü '1 tur' diye yazıyor, (b) aşağıdaki
+        # "model araç çağırmadı (num_turns<=1)" tekrarı yanlış tetiklenip tüm gözlem 2 kez daha koşuyordu (BFF keşfi 3×40 tur).
+        def _biriktir(v):
+            if isinstance(v, dict) and (v.get("usage") or v.get("num_turns")):
+                _onceki_koşular.append(v)
         while (_live_args and isinstance(_v0, dict) and str(_v0.get("subtype") or "") == "error_max_turns"
                and _v0.get("session_id") and _devam_sayisi < _devam_hakki):
             _devam_sayisi += 1
             _max_tur_takildi = True
+            _biriktir(_v0)
             logger.warning("Canlı gözlem tur tavanına (%s) takıldı — bütçe yenilenip sürdürülüyor (%s/%s).",
                            _tur_args[-1], _devam_sayisi, _devam_hakki)
             print(f"  ⏱ Tur tavanına ({_tur_args[-1]}) ulaşıldı — bütçe yenilendi, kaldığı yerden devam ({_devam_sayisi}/{_devam_hakki})…")
@@ -4440,6 +4453,7 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
                 _v0 = {}
         if _live_args and isinstance(_v0, dict) and str(_v0.get("subtype") or "") == "error_max_turns" and _v0.get("session_id"):
             _max_tur_takildi = True
+            _biriktir(_v0)
             logger.warning("Canlı gözlem tur tavanına (%s) takıldı — oturum sürdürülüp rapor araçsız tamamlatılıyor.", _tur_args[-1])
             print(f"  ⏱ Gözlem tur tavanına ({_tur_args[-1]}) ulaştı — rapor mevcut kanıtla tamamlatılıyor…")
             proc = _cli_calistir(
@@ -4509,14 +4523,22 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
         raise RuntimeError("claude CLI 'result' alanı boş döndü.")
     _cli_durum_yaz(True, None, kaynak="analiz")   # başarılı çağrı → CLI kullanılabilir
     # Token/maliyet sayacı (P0 madde 2): CLI JSON'daki usage + total_cost_usd birikimli sayaca.
+    _toplam_tur = int(veri.get("num_turns") or 0)
     try:
-        _u = veri.get("usage") or {}
+        _u = dict(veri.get("usage") or {})
+        _maliyet = float(veri.get("total_cost_usd") or 0.0)
+        for _k in (_onceki_koşular if _live_args else []):     # tavan/devam koşuları (birikimli — bkz. yukarı)
+            _ku = _k.get("usage") or {}
+            for _a in ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"):
+                _u[_a] = int(_u.get(_a) or 0) + int(_ku.get(_a) or 0)
+            _maliyet += float(_k.get("total_cost_usd") or 0.0)
+            _toplam_tur += int(_k.get("num_turns") or 0)
         _token_ekle(girdi=_u.get("input_tokens", 0), cikti=_u.get("output_tokens", 0),
                     cache_yaz=_u.get("cache_creation_input_tokens", 0),
                     cache_oku=_u.get("cache_read_input_tokens", 0),
-                    maliyet=veri.get("total_cost_usd", 0.0))
+                    maliyet=_maliyet)
         _cagri_kaydet(model=_aktif_model, katman=katman, canli=bool(_live_args), kapsam=canli_uygulama_kapsami or "",
-                      tur=int(veri.get("num_turns") or 0), girdi=int(_u.get("input_tokens") or 0),
+                      tur=_toplam_tur, girdi=int(_u.get("input_tokens") or 0),
                       cikti=int(_u.get("output_tokens") or 0), cache_yaz=int(_u.get("cache_creation_input_tokens") or 0),
                       cache_oku=int(_u.get("cache_read_input_tokens") or 0), sure_sn=int(time.time() - _cagri_bas),
                       tekrar=int(_tekrar), max_tur_takildi=bool(_max_tur_takildi), prompt_kc=len(tam_prompt))
@@ -4533,7 +4555,7 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
     # gözlem 29-57 tur başarıyla yapılsa bile yanlışlıkla "yapılmadı" damgası basılıyordu).
     if canli_uygulama_kapsami and _live_args:
         _denials = veri.get("permission_denials") or []
-        _turns = veri.get("num_turns") or 0
+        _turns = _toplam_tur if _live_args else (veri.get("num_turns") or 0)   # tavana takılan koşu: gerçek toplam tur
         _izinli_araclar = set(LIVE_APP_ALLOWED_TOOLS)
         _red_araclar = [(d.get("tool_name") if isinstance(d, dict) else str(d)) or "" for d in _denials]
         _browser_reddi = any(a in _izinli_araclar for a in _red_araclar)

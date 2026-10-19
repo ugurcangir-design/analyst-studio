@@ -156,8 +156,15 @@ cmds.clear()
 yanitlar[:] = [{"result": "## R", "num_turns": 9, "usage": {"input_tokens": 10, "output_tokens": 20, "cache_creation_input_tokens": 30, "cache_read_input_tokens": 400}}]
 B._api_cagri_cli("s", MSJ, canli_uygulama_kapsami="gorev", max_turns=25)
 chk("canlı çağrıda --max-turns 25", "--max-turns" in cmds[0][0] and cmds[0][0][cmds[0][0].index("--max-turns") + 1] == "25")
-chk("canlı çağrıda yerleşik araçlar AÇIK (--tools '' YOK), slash kapalı, boş MCP config YOK (Playwright strict)",
-    "--tools" not in cmds[0][0] and "--disable-slash-commands" in cmds[0][0] and str(B.MCP_BOS_CONFIG) not in cmds[0][0])
+chk("canlı çağrıda İLK denemede yerleşik araçlar KAPALI (--tools ''; ~27k/tur tasarruf), slash kapalı, boş MCP config YOK (Playwright strict)",
+    "--tools" in cmds[0][0] and cmds[0][0][cmds[0][0].index("--tools") + 1] == "" and "--disable-slash-commands" in cmds[0][0]
+    and str(B.MCP_BOS_CONFIG) not in cmds[0][0])
+os.environ["LIVE_APP_YERLESIK_ARACLAR"] = "true"
+cmds.clear()
+yanitlar[:] = [{"result": "## R", "num_turns": 9}]
+B._api_cagri_cli("s", MSJ, canli_uygulama_kapsami="gorev")
+chk("LIVE_APP_YERLESIK_ARACLAR=true → canlıda araçlar açık (eski davranış)", "--tools" not in cmds[0][0])
+os.environ.pop("LIVE_APP_YERLESIK_ARACLAR", None)
 cmds.clear()
 yanitlar[:] = [{"result": "x", "num_turns": 1}]
 B._api_cagri_cli("s", MSJ)
@@ -183,9 +190,34 @@ r = B._api_cagri_cli("s", MSJ, canli_uygulama_kapsami="gorev")
 chk("tavana takıldı → --resume sid ile araçsız tamamlatma, sonuç ikinci çağrıdan", len(cmds) == 2 and "--resume" in cmds[1][0]
     and "sid-1" in cmds[1][0] and cmds[1][0][cmds[1][0].index("--max-turns") + 1] == "3" and "ARAÇ KULLANMA" in cmds[1][1] and "tamam" in r, cmds[1][0])
 satirlar = [json.loads(sat) for sat in B.CAGRI_LOG.read_text(encoding="utf-8").splitlines()]
-chk("tekrar denemesinde yerleşik araçlar AÇIK (--tools '' yok), ilk denemede kapalı", True)
+chk("tavan koşusu + tamamlatma kullanımı BİRİKİMLİ kaydedildi (tur 40+2=42, girdi 1) ve araçsız tekrar TETİKLENMEDİ (2 çağrı)",
+    satirlar[-1]["tur"] == 42 and satirlar[-1]["girdi"] == 1 and len(cmds) == 2, satirlar[-1])
+# tur_devam: tavana takılınca bütçe yenilenip AYNI oturum sürdürülür (kabul kontrolü / BFF), sonra tamamlatma
+cmds.clear()
+yanitlar[:] = [{"subtype": "error_max_turns", "is_error": True, "session_id": "sid-2", "num_turns": 40, "usage": {"cache_read_input_tokens": 1000}},
+               {"subtype": "error_max_turns", "is_error": True, "session_id": "sid-2", "num_turns": 40, "usage": {"cache_read_input_tokens": 2000}},
+               {"result": "<kabul_sonuc>{}</kabul_sonuc>", "num_turns": 3, "usage": {"cache_read_input_tokens": 50}}]
+r = B._api_cagri_cli("s", MSJ, canli_uygulama_kapsami="gorev", max_turns=60, tur_devam=2)
+chk("tur_devam=2: iki devam --resume + aynı tavan (60) + 'bütçen YENİLENDİ' promptu; 2. devam bitirdi → tamamlatma GEREKMEDİ; 3 çağrı, tekrar yok",
+    len(cmds) == 3 and "--resume" in cmds[1][0] and cmds[1][0][cmds[1][0].index("--max-turns") + 1] == "60"
+    and "YENİLENDİ" in cmds[1][1] and "YENİLENDİ" in cmds[2][1] and "--resume" in cmds[2][0] and "kabul_sonuc" in r, [c[0][-3:] for c in cmds])
+satirlar = [json.loads(sat) for sat in B.CAGRI_LOG.read_text(encoding="utf-8").splitlines()]
+chk("devam koşuları birikimli: tur 83, cache_oku 3050, max_tur_takildi", satirlar[-1]["tur"] == 83 and satirlar[-1]["cache_oku"] == 3050 and satirlar[-1]["max_tur_takildi"] is True, satirlar[-1])
+cmds.clear()
+yanitlar[:] = [{"subtype": "error_max_turns", "is_error": True, "session_id": "sid-3", "num_turns": 40},
+               {"result": "<gozlem_raporu>t</gozlem_raporu>", "num_turns": 2}]
+B._api_cagri_cli("s", MSJ, canli_uygulama_kapsami="gorev")
+chk("tur_devam verilmezse (gözlem fazı) devam YOK — doğrudan tamamlatma (2 çağrı)", len(cmds) == 2 and "ARAÇ KULLANMA" in cmds[1][1])
+satirlar = [json.loads(sat) for sat in B.CAGRI_LOG.read_text(encoding="utf-8").splitlines()]
+cmds.clear()
+B.time.sleep = lambda s: None
+yanitlar[:] = [{"result": "tool_use: browser_navigate", "num_turns": 1}, {"result": "## R", "num_turns": 6}]
+B._api_cagri_cli("s", MSJ, canli_uygulama_kapsami="gorev")
+chk("araçsız ilk tur → tekrar; ilk denemede --tools '' VAR, tekrar denemesinde YOK (yerleşik araçlar açık)",
+    len(cmds) == 2 and "--tools" in cmds[0][0] and "--tools" not in cmds[1][0], [c[0] for c in cmds])
+satirlar = [json.loads(sat) for sat in B.CAGRI_LOG.read_text(encoding="utf-8").splitlines()]
 chk("cagri.jsonl: aşama/model/canlı/tur/token/max_tur_takildi", satirlar[0]["asama"] == "test:asama" and satirlar[0]["canli"] is True
-    and satirlar[0]["tur"] == 9 and satirlar[0]["cache_oku"] == 400 and satirlar[-1]["max_tur_takildi"] is True, satirlar[0])
+    and satirlar[0]["tur"] == 9 and satirlar[0]["cache_oku"] == 400 and any(r["max_tur_takildi"] for r in satirlar), satirlar[0])
 oz = B.cagri_ozeti(gun=1)
 chk("cagri_ozeti: toplam + aşama satırı", oz["toplam"]["cagri"] == len(satirlar) and any(a["asama"] == "test:asama" and a["cache_oku"] >= 400 for a in oz["asamalar"]))
 src_b = Path(B.__file__).read_text(encoding="utf-8")

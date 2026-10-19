@@ -149,3 +149,24 @@ Sonuç: aynı doğru çıktı; Opus 5.5 daha az tur + daha kısa çıktı + daha
 **Opus 5.5** önerildi (owner makinesinde `.env` `CLAUDE_CLI_MODEL=claude-opus-5-5`); yardımcı işler Sonnet 5.5 (Opus'un ~yarısı,
 aynı çıktı). Tokenizer aynı → girdi token sayısı değişmez; kazanç tur sayısı + birim fiyat + katmanlama. Test: `tests/test_kota_faz23.py`.
 Her faz: offline testler (0 token) + 1 gerçek Task analizi ölçümü (önce/sonra token tablosu Kullanım Raporu'nda).
+
+## 8. Kullanım taraması 2 (2026-10-19 akşam) — ekip "kota çabuk doluyor" şikâyeti
+`logs/usage/cagri.jsonl` (128 çağrı, bugün) aşama bazında okuma hacmi: **gözlem fazı** 4 çağrı / 56 tur / **5.5M cache okuma**
+(tek 31 turluk gözlem 3.0M) · **giriş testi** 12 çağrı / 2.4M (çağrı başı ~9 tur, 0.5–0.7M) · BFF keşfi 3×(~40 tur) ·
+kabul doğrulama 8 tur / 0.5M · görev analizi çağrı başı ~134k yazma (referans 100k kc + few-shot 16k kc + domain + raporlar).
+Tur başına bağlam ~96–100k → kalemler: CLI sistem promptu + yerleşik araç şemaları (~35k) + Playwright şemaları (24 araç, ~5k) +
+biriken snapshot'lar. **Bulgular ve uygulananlar:**
+1. **BUG — tavan sonrası yanlış tekrar (3× koşu):** tavana takılıp `--resume` ile tamamlatılan çağrının JSON'u yalnız
+   tamamlatma turunu (num_turns 1-3) gösteriyordu → (a) `cagri.jsonl` 40 turu "1 tur" yazdı, (b) "model araç çağırmadı"
+   tespiti tetiklenip TÜM gözlem 2 kez daha koştu (BFF keşfi 3×40 tur ≈ 650 s, 3×~100k yazma). Düzeltme: tavan/devam/
+   tamamlatma koşularının kullanımı birikimli (`_onceki_koşular`), tespit birikimli tura bakar → tekrar yok.
+2. **Canlı çağrıda `--tools ""` (ilk deneme):** MCP boot ısıtması sonrası 4/4 koşu başarılı; tur başına ~100k→~73k
+   (cache okuma −35%). İlk denemede kapalı, tekrar denemesinde açık; `LIVE_APP_YERLESIK_ARACLAR=true` eski davranış.
+3. **Giriş testi atlama:** agent girişiyle kaydedilmiş taze oturum (`oturum_durumu`, < GIRIS_TEST_GECERLILIK) varsa
+   kapı 0-token geçer (gözlem zaten oturumla açılır; düşerse OTOMATİK GİRİŞ). Başarısız taze sonuç atlamayı ezer.
+4. **BFF keşfi bütçesi:** `BFF_MAX_TUR` (70) + 1 devam → 40'a takılıp baştan koşmaz.
+**Kalan öneriler (ölçümden sonra, Faz 4/5):** (a) snapshot şişmesi — `browser_find`/`browser_evaluate` ile hedefli okuma,
+`--snapshot-mode none` + açık `browser_snapshot` (araç yanıtlarının otomatik snapshot'ını kapatır; en büyük kalan kalem),
+(b) referans bütçesi CLI 100k→70k kc + few-shot 16k→12k kc (görev analizinde ~10k token/çağrı), (c) giriş testi tamamen
+0-token (Playwright script, LLM'siz), (d) analist makinelerinde ana model: Sonnet 5.5 ile süreç/teknik kalite karşılaştırması
+(Opus yalnız denetçi/FE-BE bölme). Analistlerin kendi `.env`'inde `CLAUDE_CLI_MODEL` değeri kotayı doğrudan belirler.

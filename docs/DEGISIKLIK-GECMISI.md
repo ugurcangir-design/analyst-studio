@@ -6,6 +6,11 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## Kota taraması 2 — tavan sonrası yanlış tekrar bug'ı, canlıda --tools "", giriş testi atlama, BFF bütçesi ✅ (plan §8)
+- Tavana takılan gözlem tamamlatma JSON'u yüzünden "araç çağırmadı" sanılıp 2 kez daha koşuyordu (BFF 3×40 tur) → kullanım
+  birikimli, tekrar yok. Canlı ilk denemede `--tools ""` (tur başına −27k, 4/4 koşu). Taze agent oturumu varsa giriş testi
+  atlanır. `BFF_MAX_TUR`=70 + devam. Test: `test_gozlem_fazi` (birikim/devam/tools), `test_canli_giris`.
+
 ## Kabul Kontrolü eksiksiz tamamlama — tur bütçesi + devam + tamamlama turu ✅
 - Owner: "canlı gözlem olmasına rağmen işaretli maddeleri check yapamamış; eksik bırakmamalı". Neden: 21 madde 40 turluk
   tavana takıldı, agent kalanları "oturum sona erdi" diye bıraktı. Çözüm: madde sayısına göre tavan (`tur_butcesi`),

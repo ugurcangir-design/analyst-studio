@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 from .base import (
     OUTPUT_DIR, MAX_TOKENS_KISA,
     _api_cagri, _xml_ayir, _metin_sikistir, load_context_filter, asama_ayarla,
-    canli_uygulama_baglami_hazirla, gorev_live_app_urls, live_app_urls,
+    canli_uygulama_baglami_hazirla, gorev_live_app_urls, live_app_urls, oturum_durumu,
 )
 
 KAPSAMLAR = ("gorev", "surec")
@@ -81,6 +81,18 @@ def durum(kapsam: str) -> dict:
                 "mesaj": "Canlı uygulama hedefi tanımlı değil — analiz canlı gözlem YAPILMADAN üretilecek."}
     g = _oku(kapsam)
     taze = bool(g) and g.get("imza") == _imza(kapsam) and (time.time() - float(g.get("ts") or 0)) < gecerlilik_sn()
+    # Kota (2026-10-19): agent'ın KENDİ girişiyle kaydedilmiş TAZE oturum varsa (profil havuzu geri yazımı) giriş testi
+    # ATLANIR — her analiz öncesi ~9 turluk/0.5M okuma testi gereksiz; gözlem zaten kayıtlı oturumla açılır, düşerse
+    # OTOMATİK GİRİŞ devreye girer. Yalnız başarısız taze sonuç (şifre yanlış) bu atlamayı ezer (analiz başlamasın).
+    try:
+        o = oturum_durumu() or {}
+    except Exception:
+        o = {}
+    oturum_taze = bool(o.get("var")) and o.get("kaynak") == "agent" and float(o.get("yas_dk") or 1e9) * 60 < gecerlilik_sn()
+    if oturum_taze and not (taze and g and not g.get("ok")):
+        return {"kapsam": kapsam, "url": url, "var": True, "gerekli": False, "oturum": o,
+                "giris": {"ok": True, "neden": "", "ekran": "", "ts": float(o.get("son_giris") or 0), "taze": True},
+                "mesaj": f"Kayıtlı oturum var (agent girişi · {int(o.get('yas_dk') or 0)} dk önce) — giriş testi atlandı."}
     giris = None
     if g:
         giris = {"ok": bool(g.get("ok")), "neden": str(g.get("neden") or ""), "ekran": str(g.get("ekran") or ""),

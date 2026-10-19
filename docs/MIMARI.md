@@ -963,6 +963,13 @@ diyordu) ve içerik sonradan değişebilir.
 - Kısmi yazım kalıcı: `jiraYazildi` sette (`_jgSetKaydet`) → sayfa yenilense de "FE KEY açıldı ✓" görünür, diğer katman
   sonra yazılabilir. Test: `tests/test_katman_secimi.py`.
 
+### Kota taraması 2 — tavan-sonrası tekrar bug'ı, canlıda yalın CLI, giriş atlama (2026-10-19, plan §8)
+`_api_cagri_cli`: tavan/devam/tamamlatma koşularının `usage`/`num_turns`'ü `_onceki_koşular` ile BİRİKTİRİLİR (eskiden son
+koşunun 1-3 turluk JSON'u kaydediliyor ve `num_turns<=1` "araç çağırmadı" tekrarını yanlış tetikliyordu → gözlem 3× koşuyordu).
+Canlı çağrı ilk denemede `--tools ""` (yerleşik araç şemaları ~27k/tur; MCP ısıtma sonrası 4/4 başarılı), `_tekrar>0`'da açık;
+`LIVE_APP_YERLESIK_ARACLAR=true` hep açık. `canli_giris.durum`: `oturum_durumu()` agent kaynaklı ve `GIRIS_TEST_GECERLILIK`
+içinde taze ise `gerekli=False` (başarısız taze sonuç varsa atlanmaz). `bff_kesif.kesfet`: `BFF_MAX_TUR` (70) + `tur_devam=1`.
+
 ### Kabul Kontrolü — tur bütçesi, devam ve tamamlama turu (2026-10-19)
 **Sorun:** 21 maddelik kabul kontrolü genel 40 turluk tavana takılıyor, agent `_MAX_TUR_TAMAMLA` ile rapora zorlanınca kalan
 maddeleri "oturum sona erdi / test edilemedi" diye bırakıyordu (app.log: 16:10–16:28 arası 4 tavan uyarısı).
