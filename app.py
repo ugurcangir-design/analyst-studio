@@ -5737,8 +5737,20 @@ def _agent_jira_projeleri() -> dict:
                 proj.setdefault(k, k)
     except Exception:
         pass
-    # Sıra: ANA proje (JIRA_PROJECT_KEY) her zaman ilk, kalanlar alfabetik (owner: "MBSTRADE ilk sırada gelsin").
-    return dict(sorted(proj.items(), key=lambda kv: (0 if kv[0] == mk else 1, kv[0])))
+    # Sıra (owner: "MBSTRADE ilk sırada gelsin"): (1) Jira Köprüsü çalışma projeleri — ekip varsayılanı
+    # (`jira_kopru.json` projeler, sırayla) → (2) ANA proje (JIRA_PROJECT_KEY) → (3) kalanlar alfabetik.
+    oncelik: list[str] = []
+    try:
+        from skills.jira_kopru import ayarlar as _kopru_ayarlar
+        oncelik = [str(k).strip().upper() for k in (_kopru_ayarlar().get("projeler") or []) if str(k).strip()]
+    except Exception:
+        oncelik = []
+    if mk and mk not in oncelik:
+        oncelik.append(mk)
+
+    def _sira(kv):
+        return (oncelik.index(kv[0]), "") if kv[0] in oncelik else (len(oncelik), kv[0])
+    return dict(sorted(proj.items(), key=_sira))
 
 
 @app.route("/api/jira/projeler", methods=["GET"])
