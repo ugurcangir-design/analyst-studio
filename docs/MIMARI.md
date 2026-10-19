@@ -939,7 +939,8 @@ kopyalamaz). Sonraki her slot alımı `_slot_oturum_kopyala` ile bu oturumu devr
 İnteraktif · Kabul Kontrolü · Süreç analizlerinin hepsi girişsiz başlar. Oturum düşerse agent yeniden girer ve
 tazeler; prompt kuralı: "oturum zaten açıksa giriş adımını ATLA, asla logout yapma". `oturum_durumu()` →
 `/api/live-app/status.oturum`; iki ekranın canlı-app durum satırı kayıtlı oturumu (kaynak agent/tarayıcı + yaş) gösterir.
-"Tarayıcıda Giriş Yap" yalnız 2FA/captcha gibi agent'ın aşamayacağı durumlar için kalır.
+Düğme "Elle giriş (ayrı Chrome)" adını aldı, soluk/ikincil; tıklamadan önce onay: kayıtlı oturum varsa bildirilir ve
+"agent'ın KENDİ profiliyle AYRI bir Chrome penceresi açılır (kişisel Chrome değil)" açıklanır — yalnız 2FA/captcha için.
 
 ### Katman seçimli Jira yazımı — FE+BE setinden yalnız FE / yalnız BE (2026-10-16)
 **Sorun (owner):** FE+BE ayrı analizde "Onayla" her zaman iki işi birden yapıyordu (BE'yi kaynak task'a yaz + FE için yeni

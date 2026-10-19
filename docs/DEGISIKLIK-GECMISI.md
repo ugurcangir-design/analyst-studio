@@ -22,6 +22,10 @@
   tek ucuz hedefli düzeltmeyle (`gorev_analiz_duzelt`) analize işlenir, listeden düşer, katlanmış "analize işlendi"
   kutusunda görünür; yalnız kısmen/karar gerekli olanlar kalır. `SORU_COZUMLEME_UYGULA=onay` eski davranış. Test §7.
 
+## "Tarayıcıda Giriş Yap" → "Elle giriş (ayrı Chrome)" ✅
+- Owner: "tarayıcıda giriş yap deyince yeni Chrome açıyor" → beklenen davranış (agent'ın kendi profili); düğme ikincil
+  hâle getirildi, tıklamadan önce kayıtlı oturum + "ayrı Chrome penceresi açılır, yalnız 2FA/captcha" onayı.
+
 ## Oturum kalıcılığı — agent bir kez girer, tüm akışlar oturumlu ✅
 - Owner: "her seferinde tarayıcıdan giriş yapmak zorunda kalmasın". Slotta yapılan agent girişi `_slot_birak` ile ana
   profile geri yazılır, diğer slotlar devralır; durum satırı "Oturum kayıtlı (agent girişi · N dk önce)"; prompt

@@ -1027,7 +1027,9 @@ Doküman yükle <span class="arr">→</span> Süreç Analizi <span class="arr">�
         <li><strong>Giriş için tarayıcı açmanıza gerek yok <span class="pill new">Yeni</span></strong> — Bağlam Filtresi → Giriş
             Bilgileri doluysa agent ilk analizde kayıtlı hesapla kendisi giriş yapar ve oturumu saklar; sonraki Task / İnteraktif /
             Kabul Kontrolü / Süreç analizleri yeniden giriş yapmadan başlar (durum satırında "Oturum kayıtlı · N dk önce"). Oturum
-            düşerse agent otomatik yeniden girer. "Tarayıcıda Giriş Yap" yalnız 2FA, captcha gibi agent'ın aşamayacağı durumlar içindir.</li>
+            düşerse agent otomatik yeniden girer. <strong>"Elle giriş (ayrı Chrome)"</strong> düğmesi yalnız 2FA, captcha gibi agent'ın
+            aşamayacağı durumlar içindir; tıklanınca agent'ın <em>kendi</em> tarayıcı profiliyle ayrı bir Chrome penceresi açılır
+            (kişisel Chrome'unuz değil, çünkü agent kişisel oturumunuzu kullanamaz) — bu beklenen davranıştır, normalde kullanmazsınız.</li>
         <li><strong>Analiz öncesi giriş kapısı <span class="pill new">Yeni</span></strong> — bu ekranda Canlı Uygulama URL'i doluysa
             analiz başlamadan agent kayıtlı test hesabıyla <em>giriş dener</em> (≈1 dk; sonuç bir saat geçerli, URL/şifre değişince
             yenilenir). Giriş başarısızsa <strong>analiz başlamaz</strong>: panelde neden (örn. <em>Wrong Password</em>) ve
