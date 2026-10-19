@@ -2,7 +2,7 @@
 
 Sink (Apps Script) `token` alanını DÜŞÜRÜR → `olay_yaz` token özetini `baglam.dokuman`'a `⟨tok …⟩` olarak gömer;
 `_olay_normalize` (okuma + Uzaktan Çek) işareti `token`'a geri taşır ve dokümandan siler. `kota_karsilastirma` olay tipi
-bazında KOTA_OLCUM_BASLANGIC öncesi/sonrası ortalama okuma/süre/maliyet + Δ% verir; `ozet()` bunu döner."""
+bazında KOTA_OLCUM_BASLANGIC öncesi/sonrası ortalama okuma/süre/maliyet + Δ% verir; `istatistik()` bunu döner."""
 from __future__ import annotations
 
 import json
@@ -69,7 +69,7 @@ chk("önce/sonra ortalama okuma + Δ% (2M → 1M = -50%)", g["once"]["n"] == 2 a
     and g["sonra"]["ort_okuma"] == 1_000_000 and g["degisim_okuma_pct"] == -50 and g["sonra"]["ort_sure_sn"] == 300, g)
 chk("yalnız 'sonra' olan olay: Δ yok", k["olaylar"]["surec_analizi"].get("once") is None and k["olaylar"]["surec_analizi"]["degisim_okuma_pct"] is None)
 chk("token'sız olay tabloya girmez", "mutabakat" not in k["olaylar"])
-chk("ozet() karşılaştırmayı döner", "karsilastirma" in T.ozet(gun=30) and T.ozet(gun=30)["karsilastirma"]["esik"] == "2026-10-19T18:00:00")
+chk("ozet() karşılaştırmayı döner", "karsilastirma" in T.istatistik(gun=30) and T.istatistik(gun=30)["karsilastirma"]["esik"] == "2026-10-19T18:00:00")
 os.environ.pop("KOTA_OLCUM_BASLANGIC", None)
 
 print()

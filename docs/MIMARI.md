@@ -967,7 +967,7 @@ diyordu) ve içerik sonradan değişebilir.
 `telemetri`: sink `token`'ı saklamadığından `olay_kaydet` `_tok_gom(token)` işaretini `baglam.dokuman` sonuna ekler (`⟨tok
 g,c,cy,co,n,usd⟩`); `olaylari_oku` ve `uzaktan_cek` her satırı `_olay_normalize` ile geçirir (`_tok_coz` → `token`, doküman
 temizlenir). `kota_karsilastirma(olaylar)` → `{esik, olaylar{olay:{once,sonra{n,ort_okuma,ort_yazma,ort_cikti,ort_sure_sn,
-ort_maliyet}, degisim_okuma_pct}}}` (`KOTA_OLCUM_BASLANGIC`, vars. 2026-10-19T18:00:00); `ozet()` `karsilastirma` alanı →
+ort_maliyet}, degisim_okuma_pct}}}` (`KOTA_OLCUM_BASLANGIC`, vars. 2026-10-19T18:00:00); `istatistik()` `karsilastirma` alanı →
 Kullanım Raporu "Kota ölçümü — güncelleme öncesi / sonrası" tablosu (`karsGrubu`). Yeni sürümü alan analistin her işi
 token'lı geldiğinden 'sonra' kovası kendiliğinden dolar; owner Uzaktan Çek ile toplar.
 
