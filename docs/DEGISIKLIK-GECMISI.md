@@ -22,6 +22,9 @@
   tek ucuz hedefli düzeltmeyle (`gorev_analiz_duzelt`) analize işlenir, listeden düşer, katlanmış "analize işlendi"
   kutusunda görünür; yalnız kısmen/karar gerekli olanlar kalır. `SORU_COZUMLEME_UYGULA=onay` eski davranış. Test §7.
 
+## Task Analizi aksiyon çubuğu 3 adıma gruplandı + proje listesinde ana proje ilk ✅
+- Owner: 'butonlar karışık, hangisi ne zaman'. 1 İyileştir / 2 Jira'ya aktar (Onayla vs Yeni Task farkı açık) / 3 Sonrası; her düğmede alt açıklama; id'ler aynı. `/api/jira/projeler` ana proje başta.
+
 ## "Tarayıcıda Giriş Yap" → "Elle giriş (ayrı Chrome)" ✅
 - Owner: "tarayıcıda giriş yap deyince yeni Chrome açıyor" → beklenen davranış (agent'ın kendi profili); düğme ikincil
   hâle getirildi, tıklamadan önce kayıtlı oturum + "ayrı Chrome penceresi açılır, yalnız 2FA/captcha" onayı.

@@ -5737,7 +5737,8 @@ def _agent_jira_projeleri() -> dict:
                 proj.setdefault(k, k)
     except Exception:
         pass
-    return proj
+    # Sıra: ANA proje (JIRA_PROJECT_KEY) her zaman ilk, kalanlar alfabetik (owner: "MBSTRADE ilk sırada gelsin").
+    return dict(sorted(proj.items(), key=lambda kv: (0 if kv[0] == mk else 1, kv[0])))
 
 
 @app.route("/api/jira/projeler", methods=["GET"])

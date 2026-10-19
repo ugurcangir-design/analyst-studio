@@ -1929,6 +1929,16 @@ html[data-theme="light"] .suspend-overlay { background: rgba(245,247,250,.92); }
 .jg-modal-tab.aktif .badge { background: var(--accent-soft); color: var(--accent); }
 .jg-modal-body { padding: 16px 22px; flex: 1; overflow: auto; min-height: 0; }
 .jg-modal-aksiyon { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 22px; border-top: 1px solid var(--border); background: var(--surface2); }
+.jg-aksiyon-gruplu { display: grid; grid-template-columns: 1fr; gap: 10px; align-items: stretch; }
+.jg-ak-grup { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.jg-ak-grup.jg-ak-jira { border-color: var(--accent); }
+.jg-ak-baslik { display: flex; align-items: baseline; gap: 10px; font-size: 12px; color: var(--text); }
+.jg-ak-baslik span { font-size: 11.5px; color: var(--text3); }
+.jg-ak-satir { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.jg-ak-btn { display: inline-flex; flex-direction: column; gap: 3px; }
+.jg-ak-alt { font-size: 11px; color: var(--text3); line-height: 1.3; max-width: 190px; }
+.jg-aksiyon-gruplu .jg-duzelt-row { flex: 1 1 100%; }
+.jg-aksiyon-gruplu .jg-warn { flex: none; }
 /* Görev analizi — JARVIS işlem paneli (üretim/düzeltme sırasında modal içi) */
 .jg-proc { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; min-height: 360px; }
 .jg-proc-kicker { font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: .16em; color: var(--run); opacity: .85; }
@@ -3114,40 +3124,73 @@ function temaDegistir() {
           </div>
           <div class="jg-msg" id="jg-mockup-msg" style="margin-top:8px"></div>
         </div>
-        <div class="jg-modal-aksiyon">
-          <!-- İteratif düzelt sohbeti (ilgili kısmı düzelt; tam yeniden yazma değil) -->
-          <div class="jg-duzelt-row" id="jg-duzelt-row" style="display:none">
-            <input type="text" id="jg-duzelt" autocomplete="off" placeholder="Bu analizi düzelt — örn: 'Kabul kriterlerine boş tarih senaryosunu ekle'" onkeydown="if(event.key==='Enter')jgAnalizDuzelt()">
-            <button class="btn btn-outline btn-sm" id="jg-duzelt-btn" onclick="jgAnalizDuzelt()">Düzelt</button>
+        <div class="jg-modal-aksiyon jg-aksiyon-gruplu">
+          <!-- Aksiyonlar İŞ AKIŞI sırasına göre üç grupta (owner 2026-10-19: "hangisi hangi işi yapıyor belli değil").
+               id/onclick'ler KORUNDU; yalnız yerleşim + alt açıklama. -->
+          <div class="jg-ak-grup" id="jg-ak-iyilestir">
+            <div class="jg-ak-baslik"><b>1 · Analizi iyileştir</b><span>analiz henüz taslakken</span></div>
+            <div class="jg-ak-satir">
+              <!-- İteratif düzelt sohbeti (ilgili kısmı düzelt; tam yeniden yazma değil) -->
+              <div class="jg-duzelt-row" id="jg-duzelt-row" style="display:none">
+                <input type="text" id="jg-duzelt" autocomplete="off" placeholder="Bu analizi düzelt — örn: 'Kabul kriterlerine boş tarih senaryosunu ekle'" onkeydown="if(event.key==='Enter')jgAnalizDuzelt()">
+                <button class="btn btn-outline btn-sm" id="jg-duzelt-btn" onclick="jgAnalizDuzelt()">Düzelt</button>
+              </div>
+              <div class="jg-ak-btn">
+                <button class="btn btn-outline btn-sm" id="jg-bff-btn" onclick="jgBffKesif()" title="Agent hedef ekranda KENDİSİ oluştur/güncelle/sil yapar (AI-TEST kayıtları), BFF istek/yanıtlarını yakalayıp sözleşme raporu çıkarır. Rapor 7 gün bu ekranın analizlerine otomatik girer.">
+                  <svg class="ico"><use href="#i-server"/></svg> BFF Keşfi (CRUD)
+                </button><span class="jg-ak-alt">servisleri ekranda kendisi gözler</span>
+              </div>
+              <div class="jg-ak-btn">
+                <button class="btn btn-outline btn-sm" id="jg-akis-btn" onclick="jgAkisKapat()" title="Analizi uçtan uca yürütür: süreç/ekran işleyişindeki boşlukları bulur, bilgi varsa ilgili yeri minimal düzeltir, yoksa açık soru ekler (analizi büyütmez). Geri alınabilir.">
+                  <svg class="ico"><use href="#i-check"/></svg> Akışı Kapat
+                </button><span class="jg-ak-alt">akıştaki boşlukları kapatır</span>
+              </div>
+            </div>
           </div>
-          <span class="jg-warn">⚠ Onayla'ya basınca Jira görevinin açıklaması ÜZERİNE YAZILIR (geri alınamaz). Açık Sorular Jira'ya YAZILMAZ.</span>
-          <button class="btn btn-outline btn-sm" onclick="jgPreviewKapat()">İptal</button>
-          <button class="btn btn-outline btn-sm" id="jg-bff-btn" onclick="jgBffKesif()" title="Agent hedef ekranda KENDİSİ oluştur/güncelle/sil yapar (AI-TEST kayıtları), BFF istek/yanıtlarını yakalayıp sözleşme raporu çıkarır. Rapor 7 gün bu ekranın analizlerine otomatik girer.">
-            <svg class="ico"><use href="#i-server"/></svg> BFF Keşfi (CRUD)
-          </button>
-          <button class="btn btn-outline btn-sm" id="jg-kabul-btn" onclick="jgKabulKontrol()" title="Geliştirmesi biten (ANALIZ CHECK) task'ı test ortamında testçi gibi fiilen dener: alanlar, butonlar, başarılı/başarısız mesajlar, servis çağrıları. ✅/❌ rapor üretir; Jira durumu değişmez — teste iletme kararı sizindir.">
-            <svg class="ico"><use href="#i-check"/></svg> Kabul Kontrolü
-          </button>
-          <button class="btn btn-outline btn-sm" id="jg-akis-btn" onclick="jgAkisKapat()" title="Analizi uçtan uca yürütür: süreç/ekran işleyişindeki boşlukları bulur, bilgi varsa ilgili yeri minimal düzeltir, yoksa açık soru ekler (analizi büyütmez). Geri alınabilir.">
-            <svg class="ico"><use href="#i-check"/></svg> Akışı Kapat
-          </button>
-          <button class="btn btn-outline btn-sm" id="jg-egitim-btn" onclick="jgEgitimeEkle()" title="Bu analizi (Jira'ya yazılmasa da) ortak eğitim havuzuna + sunucuya ekler — agent kaliteli analizlerden öğrensin.">
-            <svg class="ico"><use href="#i-zap"/></svg> Eğitime Ekle
-          </button>
-          <button class="btn btn-outline" id="jg-yenitask-btn" onclick="jgYeniTaskPanelAc()" title="Analiz OK ise: seçtiğiniz board/proje'ye, girdiğiniz Epic/Story/Task'a İLİŞKİLİ yeni Task açar (kaynak task'ın üzerine yazmaz).">
-            <svg class="ico"><use href="#i-plus"/></svg> Yeni Task Aç
-          </button>
-          <button class="btn btn-outline" id="jg-mockup-panel-btn" onclick="jgMockupPanelAc()" title="Analiz edilen göreve EK yeni bir isteye göre, mevcut uygulama tasarımını baz alan HTML ekran mockup'ı üretir.">
-            <svg class="ico"><use href="#i-zap"/></svg> Ekran Mockup'ı
-          </button>
-          <span class="jg-katman-sec" id="jg-katman-sec" style="display:none" title="FE+BE ayrı analiz: hangi katman(lar) Jira'ya yazılsın? Bazen yalnız FE ya da yalnız BE işi vardır.">
-            <label><input type="checkbox" id="jg-kat-be" onchange="_jgKatmanEtiketGuncelle()"> BE → <span id="jg-kat-be-hedef">kaynak task</span>'a yaz</label>
-            <label><input type="checkbox" id="jg-kat-fe" onchange="_jgKatmanEtiketGuncelle()"> FE → yeni task aç</label>
-            <span class="jg-katman-not" id="jg-katman-not"></span>
-          </span>
-          <button class="btn btn-success" id="jg-approve-btn" onclick="jgJiraGuncelle()">
-            <svg class="ico"><use href="#i-check"/></svg> <span id="jg-approve-lbl">Onayla ve Jira'da Güncelle</span>
-          </button>
+          <div class="jg-ak-grup jg-ak-jira" id="jg-ak-jira">
+            <div class="jg-ak-baslik"><b>2 · Jira'ya aktar</b><span>analiz hazır olunca — ikisinden birini seçin</span></div>
+            <div class="jg-ak-satir">
+              <span class="jg-katman-sec" id="jg-katman-sec" style="display:none" title="FE+BE ayrı analiz: hangi katman(lar) Jira'ya yazılsın? Bazen yalnız FE ya da yalnız BE işi vardır.">
+                <label><input type="checkbox" id="jg-kat-be" onchange="_jgKatmanEtiketGuncelle()"> BE → <span id="jg-kat-be-hedef">kaynak task</span>'a yaz</label>
+                <label><input type="checkbox" id="jg-kat-fe" onchange="_jgKatmanEtiketGuncelle()"> FE → yeni task aç</label>
+                <span class="jg-katman-not" id="jg-katman-not"></span>
+              </span>
+              <div class="jg-ak-btn">
+                <button class="btn btn-success" id="jg-approve-btn" onclick="jgJiraGuncelle()">
+                  <svg class="ico"><use href="#i-check"/></svg> <span id="jg-approve-lbl">Onayla ve Jira'da Güncelle</span>
+                </button><span class="jg-ak-alt"><b>bu task'ın</b> açıklamasını değiştirir (geri alınamaz)</span>
+              </div>
+              <div class="jg-ak-btn">
+                <button class="btn btn-outline" id="jg-yenitask-btn" onclick="jgYeniTaskPanelAc()" title="Analiz OK ise: seçtiğiniz board/proje'ye, girdiğiniz Epic/Story/Task'a İLİŞKİLİ yeni Task açar (kaynak task'ın üzerine yazmaz).">
+                  <svg class="ico"><use href="#i-plus"/></svg> Yeni Task Aç
+                </button><span class="jg-ak-alt">bu task'a dokunmaz, <b>yeni</b> task açar</span>
+              </div>
+              <div class="jg-ak-btn">
+                <button class="btn btn-outline" id="jg-mockup-panel-btn" onclick="jgMockupPanelAc()" title="Analiz edilen göreve EK yeni bir isteye göre, mevcut uygulama tasarımını baz alan HTML ekran mockup'ı üretir.">
+                  <svg class="ico"><use href="#i-zap"/></svg> Ekran Mockup'ı
+                </button><span class="jg-ak-alt">isteğe bağlı: task'a ekran taslağı ekle</span>
+              </div>
+            </div>
+            <span class="jg-warn">Açık Sorular, Yönetici Özeti ve kanıt etiketleri Jira'ya yazılmaz.</span>
+          </div>
+          <div class="jg-ak-grup" id="jg-ak-sonra">
+            <div class="jg-ak-baslik"><b>3 · Sonrası</b><span>geliştirme bitince / kapanış</span></div>
+            <div class="jg-ak-satir">
+              <div class="jg-ak-btn">
+                <button class="btn btn-outline btn-sm" id="jg-kabul-btn" onclick="jgKabulKontrol()" title="Geliştirmesi biten (ANALIZ CHECK) task'ı test ortamında testçi gibi fiilen dener: alanlar, butonlar, başarılı/başarısız mesajlar, servis çağrıları. ✅/❌ rapor üretir; Jira durumu değişmez — teste iletme kararı sizindir.">
+                  <svg class="ico"><use href="#i-check"/></svg> Kabul Kontrolü
+                </button><span class="jg-ak-alt">geliştirme bitince kriterleri doğrula</span>
+              </div>
+              <div class="jg-ak-btn">
+                <button class="btn btn-outline btn-sm" id="jg-egitim-btn" onclick="jgEgitimeEkle()" title="Bu analizi (Jira'ya yazılmasa da) ortak eğitim havuzuna + sunucuya ekler — agent kaliteli analizlerden öğrensin.">
+                  <svg class="ico"><use href="#i-zap"/></svg> Eğitime Ekle
+                </button><span class="jg-ak-alt">nihai analizi örnek havuzuna</span>
+              </div>
+              <div class="jg-ak-btn">
+                <button class="btn btn-outline btn-sm" onclick="jgPreviewKapat()">İptal</button><span class="jg-ak-alt">paneli kapat</span>
+              </div>
+            </div>
+          </div>
         </div>
         <div id="jg-preview-msg" class="jg-msg" style="padding:0 22px 14px"></div>
       </div>
