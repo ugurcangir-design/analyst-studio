@@ -5220,6 +5220,7 @@ async function _jgGirisDurumGoster() {
     out.style.color = g && g.ok ? 'var(--green)' : g ? 'var(--red)' : 'var(--text3)';
   } catch (e) { out.textContent = ''; }
 }
+function _laYas(dk) { if (dk === null || dk === undefined) return ''; return dk < 1 ? 'az önce' : dk < 60 ? `${dk} dk önce` : dk < 1440 ? `${Math.round(dk/60)} sa önce` : `${Math.round(dk/1440)} gün önce`; }
 async function jgLiveAppDurumYenile() {
   _jgGirisDurumGoster();
   const nokta = document.getElementById('jg-la-nokta');
@@ -5242,15 +5243,16 @@ async function jgLiveAppDurumYenile() {
       ipucu.textContent = 'Bir URL girip kaydedin — bu görev için Teknik Analiz Et ekranı ve servisleri gezer.';
       return;
     }
-    if (!d.profil) {
+    const ot = d.oturum || {};
+    if (!d.profil || !ot.var) {
       nokta.className = 'la-nokta warn';
-      metin.textContent = 'Tarayıcı profili yok — giriş gerekli';
-      ipucu.textContent = 'Uygulama giriş istiyorsa "Tarayıcıda Giriş Yap" ile bir kez giriş yapın; oturum profile kaydedilir.';
+      metin.textContent = 'Kayıtlı oturum yok — agent ilk analizde kayıtlı hesapla kendisi giriş yapar';
+      ipucu.textContent = 'Bağlam Filtresi → Giriş Bilgileri doluysa tarayıcı açmanıza gerek yok: agent girer, oturumu saklar, sonraki analizler girişsiz başlar. "Tarayıcıda Giriş Yap" yalnız 2FA/captcha gibi agent\'ın aşamayacağı durumlar içindir.';
       return;
     }
     nokta.className = 'la-nokta ok';
-    metin.textContent = 'Profil hazır — analizde ekran + servisler gezilecek';
-    ipucu.textContent = `Hedef: ${d.hedef} · Not: profil hazır olması giriş yapıldığını garanti etmez.`;
+    metin.textContent = `Oturum kayıtlı (${ot.kaynak === 'agent' ? 'agent girişi' : 'tarayıcı girişi'} · ${_laYas(ot.yas_dk)}) — analizler yeniden giriş yapmadan başlar`;
+    ipucu.textContent = `Hedef: ${d.hedef} · Oturum süresi dolarsa agent kayıtlı hesapla otomatik yeniden girer ve oturumu tazeler.`;
   } catch {
     nokta.className = 'la-nokta err';
     metin.textContent = 'Durum alınamadı';
@@ -7984,16 +7986,16 @@ async function liveAppDurumYenile() {
       ipucu.textContent = 'Yukarıya bir URL girerseniz analiz sırasında ekran ve servisler gezilir.';
       return;
     }
-    if (!d.profil) {
+    const ot = d.oturum || {};
+    if (!d.profil || !ot.var) {
       nokta.className = 'la-nokta warn';
-      metin.textContent = 'Tarayıcı profili yok — giriş gerekli';
-      ipucu.textContent = 'Uygulama giriş istiyorsa "Tarayıcıda Giriş Yap" ile bir kez giriş yapın; oturum profile kaydedilir ve analizler onu kullanır.';
+      metin.textContent = 'Kayıtlı oturum yok — agent ilk analizde kayıtlı hesapla kendisi giriş yapar';
+      ipucu.textContent = 'Bağlam Filtresi → Giriş Bilgileri doluysa tarayıcı açmanıza gerek yok: agent girer, oturumu saklar, sonraki analizler girişsiz başlar. "Tarayıcıda Giriş Yap" yalnız 2FA/captcha gibi durumlar içindir.';
       return;
     }
     nokta.className = 'la-nokta ok';
-    metin.textContent = 'Profil hazır — analizde ekran + servisler gezilecek';
-    ipucu.textContent = `Hedef: ${d.hedef} · Not: profil hazır olması giriş yapıldığını garanti etmez; `
-      + 'analiz login sayfasına düşerse bunu rapor eder (varsayım üretmez).';
+    metin.textContent = `Oturum kayıtlı (${ot.kaynak === 'agent' ? 'agent girişi' : 'tarayıcı girişi'} · ${_laYas(ot.yas_dk)}) — analizler yeniden giriş yapmadan başlar`;
+    ipucu.textContent = `Hedef: ${d.hedef} · Oturum süresi dolarsa agent kayıtlı hesapla otomatik yeniden girer ve oturumu tazeler.`;
   } catch {
     nokta.className = 'la-nokta err';
     metin.textContent = 'Durum alınamadı';

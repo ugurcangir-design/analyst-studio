@@ -6,6 +6,11 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## Oturum kalıcılığı — agent bir kez girer, tüm akışlar oturumlu ✅
+- Owner: "her seferinde tarayıcıdan giriş yapmak zorunda kalmasın". Slotta yapılan agent girişi `_slot_birak` ile ana
+  profile geri yazılır, diğer slotlar devralır; durum satırı "Oturum kayıtlı (agent girişi · N dk önce)"; prompt
+  "oturum açıksa giriş atla, logout yapma". `/api/live-app/status.oturum`. Test `tests/test_live_app_slot.py` §6.
+
 ## Katman seçimli Jira yazımı — yalnız FE / yalnız BE task'ı ✅
 - FE+BE setinde onay satırına BE/FE kutuları (varsayılan bakılan sekme; agent "Bu katmanda iş: YOK" → işaretsiz; yazılan
   katman işaretsiz), düğme metni seçime göre; `fe-be-olustur {katmanlar}` (yalnız FE → kaynak task'a Relates); Yeni Task Aç

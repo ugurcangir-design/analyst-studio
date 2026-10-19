@@ -143,6 +143,38 @@ chk("status: slotlar alanı", '"slotlar": _slot_durumu_guvenli()' in src)
 src_b = Path(B.__file__).read_text(encoding="utf-8")
 chk("analiz yolu ana profili KAPATMAZ (kilit temizleme yalnız giriş penceresinde)", "live_app_kilidi_temizle()           # kapatılmamış giriş penceresi" not in src_b)
 
+print("6) oturum geri yazımı (agent girişi kalıcı)")
+B._base_profil_kullanimda = lambda: False
+slotA = B.LIVE_APP_PROFILE_HAVUZ / "slot-7"
+(slotA / "Default" / "Local Storage" / "leveldb").mkdir(parents=True, exist_ok=True)
+time.sleep(0.05)
+(slotA / "Default/Cookies").write_bytes(b"agent-session")
+(slotA / "Default/Local Storage/leveldb/001.log").write_bytes(b"jwt")
+_ileri = time.time() + 30          # gerçekte agent girişi dakikalar sonra olur; 1 sn tolerans (copy2 mtime eşitliği) aşılsın
+os.utime(slotA / "Default/Cookies", (_ileri, _ileri))
+chk("slot daha yeni → ana profile geri yazıldı + işaret", B._slot_oturum_geri_yaz(slotA, 7) is True
+    and (B.LIVE_APP_PROFILE_DIR / "Default/Cookies").read_bytes() == b"agent-session"
+    and (B.LIVE_APP_PROFILE_DIR / "Default/Local Storage/leveldb/001.log").exists()
+    and json.loads((B.LIVE_APP_PROFILE_DIR / ".oturum-son-giris").read_text())["slot"] == 7)
+od = B.oturum_durumu()
+chk("oturum_durumu: var + kaynak agent + yaş", od["var"] and od["kaynak"] == "agent" and od["yas_dk"] == 0, od)
+chk("ikinci çağrı: slot yeni değil → yazmaz", B._slot_oturum_geri_yaz(slotA, 7) is False)
+slotB = B.LIVE_APP_PROFILE_HAVUZ / "slot-8"
+B._slot_oturum_kopyala(slotB)
+chk("başka slot alımda agent oturumunu devralır", (slotB / "Default/Cookies").read_bytes() == b"agent-session")
+time.sleep(0.05)
+(slotA / "Default/Cookies").write_bytes(b"newer")
+os.utime(slotA / "Default/Cookies", (_ileri + 60, _ileri + 60))
+B._base_profil_kullanimda = lambda: True
+chk("ana profil başlı Chrome'da açıkken geri yazım atlanır", B._slot_oturum_geri_yaz(slotA, 7) is False
+    and (B.LIVE_APP_PROFILE_DIR / "Default/Cookies").read_bytes() == b"agent-session")
+B._base_profil_kullanimda = lambda: False
+chk("_slot_birak geri yazımı tetikler", (B._slot_birak(7) or True) and (B.LIVE_APP_PROFILE_DIR / "Default/Cookies").read_bytes() == b"newer")
+src_p = Path(B.__file__).read_text(encoding="utf-8")
+chk("prompt: oturum açıksa giriş atla + logout yok", "Oturum ZATEN AÇIKSA" in src_p and "asla çıkış (logout) yapma" in src_p)
+src_app = Path(B.__file__).parent.parent.joinpath("app.py").read_text(encoding="utf-8")
+chk("status: oturum alanı", '"oturum": _oturum_durumu_guvenli()' in src_app)
+
 print()
 if _hata:
     print(f"PROFİL HAVUZU TESTLERİ BAŞARISIZ ({_hata} hata)")

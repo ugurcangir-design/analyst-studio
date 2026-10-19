@@ -2719,7 +2719,8 @@ def canli_uygulama_baglami_hazirla(gorev: bool = False, base_url_override: str =
             f"- Kullanıcı adı / e-posta: {kullanici_adi}\n"
             f"- Şifre: {sifre}\n"
             "Formu snapshot ile bul, ilgili alanlara yaz, gönder/giriş butonuna tıkla, yönlendirmeyi "
-            "bekle. Giriş başarısız olursa (hatalı bilgi, captcha, 2FA, hesap kilidi vb.) varsayım "
+            "bekle. Oturum ZATEN AÇIKSA (giriş formu çıkmıyor, uygulama doğrudan açılıyor) giriş adımını ATLA ve "
+            "asla çıkış (logout) yapma — kayıtlı oturum sonraki analizler için korunur. Giriş başarısız olursa (hatalı bilgi, captcha, 2FA, hesap kilidi vb.) varsayım "
             "üretmeden bunu açık soru olarak bildir — tekrar deneme. ŞİFREYİ ÇIKTIYA/RAPORA ASLA "
             "YAZMA veya tekrarlama; yalnızca formu doldurmak için kullan.\n"
         )
@@ -3537,11 +3538,99 @@ def _slot_al(bekle_sn: int | None = None) -> tuple[int, Path] | None:
         time.sleep(2)
 
 
+_OTURUM_ISARET = ".oturum-son-giris"     # ana profilde: en son hangi slot/zaman oturumu geri yazdı
+
+
+def _oturum_mtime(profil: Path) -> float:
+    """Profildeki oturum dosyalarının (çerez/Login Data) en yeni mtime'ı; yoksa 0."""
+    try:
+        return max((profil / rel).stat().st_mtime for rel in _SLOT_OTURUM_DOSYALARI if (profil / rel).exists())
+    except ValueError:
+        return 0.0
+
+
+def _base_profil_kullanimda() -> bool:
+    """Ana profili bir Chrome (başlı 'Tarayıcıda Giriş Yap' penceresi) açık tutuyor mu? (pgrep TAM eşleşme)"""
+    try:
+        r = subprocess.run(["pgrep", "-f", f"--user-data-dir={re.escape(str(LIVE_APP_PROFILE_DIR))}(\\s|$)"],
+                           capture_output=True, text=True, timeout=5)
+        return bool((r.stdout or "").strip())
+    except Exception:
+        return False
+
+
+def _slot_oturum_geri_yaz(slot_dir: Path, slot_no: int | None = None) -> bool:
+    """OTURUM KALICILIĞI (owner isteri 2026-10-19: 'her seferinde tarayıcıdan giriş yapmak zorunda kalmasın'):
+    agent slotta kayıtlı hesapla giriş yaptıysa slotun çerez/Login Data/Local Storage'ı ana profilden YENİ olur →
+    ana profile GERİ yazılır; diğer slotlar bir sonraki alımda (`_slot_oturum_kopyala`) bu oturumu devralır. Böylece
+    bir kez agent girişi = tüm akışlar (Task · İnteraktif · Kabul · Süreç) oturumlu başlar, 'Tarayıcıda Giriş Yap'
+    yalnız 2FA/captcha gibi agent'ın aşamayacağı durumlar için kalır. Ana profil başlı Chrome'da açıksa (dosyalar
+    kilitli/yarım yazılabilir) ATLANIR. Best-effort; hata analizi kırmaz. Dönen: geri yazıldı mı."""
+    try:
+        if not (slot_dir / "Default").exists():
+            return False
+        slot_m = _oturum_mtime(slot_dir)
+        if slot_m <= 0 or slot_m <= _oturum_mtime(LIVE_APP_PROFILE_DIR) + 1:
+            return False                       # slotta yeni oturum yok
+        if _base_profil_kullanimda():
+            logger.info("Oturum geri yazımı atlandı: ana profil başlı Chrome'da açık.")
+            return False
+        import shutil
+        (LIVE_APP_PROFILE_DIR / "Default" / "Network").mkdir(parents=True, exist_ok=True)
+        for rel in _SLOT_OTURUM_DOSYALARI:
+            src = slot_dir / rel
+            if src.exists():
+                try:
+                    shutil.copy2(src, LIVE_APP_PROFILE_DIR / rel)
+                except Exception:
+                    pass
+        for rel in _SLOT_OTURUM_DIZINLERI:
+            src = slot_dir / rel
+            if src.is_dir():
+                try:
+                    hedef = LIVE_APP_PROFILE_DIR / rel
+                    if hedef.exists():
+                        shutil.rmtree(hedef, ignore_errors=True)
+                    shutil.copytree(src, hedef, dirs_exist_ok=True)
+                except Exception:
+                    pass
+        yeni_m = _oturum_mtime(LIVE_APP_PROFILE_DIR)
+        (LIVE_APP_PROFILE_DIR / _OTURUM_ISARET).write_text(json.dumps(
+            {"ts": time.time(), "slot": slot_no, "kaynak": "agent"}), encoding="utf-8")
+        try:
+            (slot_dir / ".oturum-damga").write_text(str(yeni_m), encoding="utf-8")   # bu slot kendini yeniden kopyalamasın
+        except Exception:
+            pass
+        logger.info("Canlı uygulama oturumu slot-%s → ana profile geri yazıldı (sonraki analizler giriş yapmadan başlar).", slot_no)
+        return True
+    except Exception as e:
+        logger.warning("Oturum geri yazımı başarısız: %s", str(e)[:160])
+        return False
+
+
+def oturum_durumu() -> dict:
+    """UI: kayıtlı canlı-uygulama oturumu var mı? {var, son_giris(ts|None), kaynak:'agent'|'tarayici'|None, yas_dk}."""
+    m = _oturum_mtime(LIVE_APP_PROFILE_DIR)
+    if m <= 0:
+        return {"var": False, "son_giris": None, "kaynak": None, "yas_dk": None}
+    kaynak, ts = "tarayici", m
+    try:
+        isaret = LIVE_APP_PROFILE_DIR / _OTURUM_ISARET
+        if isaret.exists():
+            d = json.loads(isaret.read_text(encoding="utf-8"))
+            if abs(float(d.get("ts") or 0) - m) < 300 or float(d.get("ts") or 0) >= m:
+                kaynak, ts = "agent", float(d.get("ts") or m)
+    except Exception:
+        pass
+    return {"var": True, "son_giris": ts, "kaynak": kaynak, "yas_dk": int((time.time() - ts) / 60)}
+
+
 def _slot_birak(n: int | None = None) -> None:
     n = n if n is not None else getattr(_SLOT_TL, "slot", None)
     if not n:
         return
     kilit = LIVE_APP_PROFILE_HAVUZ / f"slot-{n}.lock"
+    _slot_oturum_geri_yaz(LIVE_APP_PROFILE_HAVUZ / f"slot-{n}", n)   # agent girişi varsa ana profile taşı
     with _SLOT_LOCK:
         _SLOT_SAHIPLI.discard(n)
         try:

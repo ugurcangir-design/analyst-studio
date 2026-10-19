@@ -4610,6 +4610,14 @@ def context_filter_oku():
 
 # ─── Canlı Uygulama (Chrome MCP) — durum + tek seferlik giriş ────────────────
 
+def _oturum_durumu_guvenli() -> dict:
+    try:
+        from skills.base import oturum_durumu
+        return oturum_durumu()
+    except Exception:
+        return {}
+
+
 def _slot_durumu_guvenli() -> dict:
     try:
         from skills.base import slot_durumu
@@ -4639,6 +4647,7 @@ def live_app_durum():
         "cli_modu": bool(USE_CLAUDE_CLI),   # canlı gözlem yalnız CLI yolunda (claude -p) çalışır
         "claude_var": claude_var,
         "slotlar": _slot_durumu_guvenli(),   # paralel gözlem profil havuzu {toplam, dolu[], bos}
+        "oturum": _oturum_durumu_guvenli(),  # kayıtlı canlı-uygulama oturumu {var, son_giris, kaynak, yas_dk}
         # hazir: canlı gözlemin FİİLEN mümkün olması için CLI modu + claude + npx + url + profil
         "hazir": bool(npx and urls and profil and USE_CLAUDE_CLI and claude_var),
         "hedef": urls[0] if urls else "",

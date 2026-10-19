@@ -916,6 +916,16 @@ gözlem + token yakıyordu); hedef yoksa "canlı gözlem yapılmadan analiz yap�
 - Kanıt: iki eşzamanlı headless gözlem (example.com) ayrı slotlarda çakışmadan tamamlandı.
 Test: `tests/test_live_app_slot.py`.
 
+**Oturum kalıcılığı (2026-10-19 — "her seferinde tarayıcıdan giriş yapmak zorunda kalmasın"):** oturum akışı artık
+ÇİFT yönlü. Agent bir slotta kayıtlı hesapla (prompt "OTOMATİK GİRİŞ") giriş yapınca `_slot_birak` →
+`_slot_oturum_geri_yaz(slot)`: slotun oturum dosyaları ana profilden yeniyse ana profile kopyalanır + `.oturum-son-giris`
+işareti; ana profil başlı Chrome'da açıksa atlanır (yarım dosya riski); slot damgası güncellenir (kendini yeniden
+kopyalamaz). Sonraki her slot alımı `_slot_oturum_kopyala` ile bu oturumu devralır → bir kez agent girişi = Task ·
+İnteraktif · Kabul Kontrolü · Süreç analizlerinin hepsi girişsiz başlar. Oturum düşerse agent yeniden girer ve
+tazeler; prompt kuralı: "oturum zaten açıksa giriş adımını ATLA, asla logout yapma". `oturum_durumu()` →
+`/api/live-app/status.oturum`; iki ekranın canlı-app durum satırı kayıtlı oturumu (kaynak agent/tarayıcı + yaş) gösterir.
+"Tarayıcıda Giriş Yap" yalnız 2FA/captcha gibi agent'ın aşamayacağı durumlar için kalır.
+
 ### Katman seçimli Jira yazımı — FE+BE setinden yalnız FE / yalnız BE (2026-10-16)
 **Sorun (owner):** FE+BE ayrı analizde "Onayla" her zaman iki işi birden yapıyordu (BE'yi kaynak task'a yaz + FE için yeni
 task + Blocks); "Yeni Task Aç" da hep iki task açıyordu. Oysa iş bazen tek katmandadır (FE analizi "BE'de düzenleme gerekmez"
