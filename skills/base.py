@@ -117,6 +117,7 @@ LIVE_APP_PROFILE_HAVUZ = BASE_DIR / ".live-app-profiles"
 # headless modda REDDEDİLİR (permission_denials). browser_evaluate (keyfi JS)
 # ve dosya yükleme bilinçli olarak DIŞARIDA — gözlem + temel etkileşim yeter.
 LIVE_APP_ALLOWED_TOOLS = [
+    "mcp__playwright__browser_take_screenshot",   # yalnız opt-in Ekran Görüntüsü akışı kullanır (gözlem promptu istemez)
     "mcp__playwright__browser_navigate",
     "mcp__playwright__browser_navigate_back",
     "mcp__playwright__browser_snapshot",        # DOM / erişilebilirlik ağacı
@@ -3463,6 +3464,9 @@ def _snapshot_mode_args() -> list[str]:
     return ["--snapshot-mode", "none"] if m == "none" else []
 
 
+EKRAN_GORUNTU_DIR = BASE_DIR / "output" / "ekran-goruntu"   # opt-in canlı ekran görüntüleri (Jira task eki)
+
+
 def live_app_mcp_config_yaz(profil_dir: Path | None = None, config_yol: Path | None = None) -> Path | None:
     """Playwright MCP config'ini MUTLAK yollarla üretir (headless + kalıcı profil).
     npx yoksa None döner → canlı uygulama özelliği sessizce devre dışı kalır.
@@ -3486,6 +3490,7 @@ def live_app_mcp_config_yaz(profil_dir: Path | None = None, config_yol: Path | N
                     "--headless",
                     "--browser", "chrome",
                     "--user-data-dir", str(profil),
+                    "--output-dir", str(EKRAN_GORUNTU_DIR),   # dosya-adsız screenshot buraya düşer (opt-in Ekran Görüntüsü akışı)
                     *_snapshot_mode_args(),
                 ],
             }

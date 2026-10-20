@@ -353,6 +353,9 @@ r = istemci.post("/api/revizyon/surec-analizi.md/onayla", json={"revizyon_id": r
 kontrol("revizyon onayla → çıktı yazıldı", json_al(r).get("ok") and "DEĞİŞTİ" in (_tmp / "surec-analizi.md").read_text(encoding="utf-8"))
 r = istemci.post("/api/revizyon/surec-analizi.md/geri-al", json={"versiyon_id": "v1"}, headers=ORIGIN)
 kontrol("revizyon geri-al", json_al(r).get("ok") and "DEĞİŞTİ" not in (_tmp / "surec-analizi.md").read_text(encoding="utf-8"))
+kontrol("ekran-goruntu: analiz boş → 400", istemci.post("/api/jira/gorev/ekran-goruntu", json={"key": "X-1"}, headers=ORIGIN).status_code == 400)
+kontrol("ekran-goruntu/durum bilinmeyen job → 404", istemci.get("/api/jira/gorev/ekran-goruntu/durum/yok").status_code == 404)
+
 
 # ── Denetim 2026-10-20: güvenlik + dayanıklılık (0 token) ────────────────────
 kontrol("_env_sanit CR/LF/NUL temizler (.env satır enjeksiyonu)", uygulama._env_sanit("x\nUSAGE_SINK_URL=evil\r\x00") == "xUSAGE_SINK_URL=evil")

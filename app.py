@@ -1038,7 +1038,8 @@ def _arka_plan_isleri_calisiyor() -> str | None:
                        ("_gorev_mockup_isler", "ekran mockup'ı üretimi"),
                        ("_kopru_isler", "Jira köprüsü işlemi"),
                        ("_sohbet_isler", "sohbet analizi üretimi"),
-                       ("_giris_isler", "canlı uygulama giriş doğrulaması")):
+                       ("_giris_isler", "canlı uygulama giriş doğrulaması"),
+                       ("_ekran_goruntu_isler", "ekran görüntüsü yakalama")):
         store = globals().get(ad)
         if isinstance(store, dict):
             try:
@@ -6731,6 +6732,106 @@ def _gorev_mockup_calistir(job_id: str) -> None:
             job["hata"] = str(e)
         _telemetri_olay("mockup", "error", int((time.time() - _bas) * 1000),
                         model=_model, ai_modu=_ai, token_bas=_tbas)
+
+
+_ekran_goruntu_isler: dict = {}
+_ekran_goruntu_lock = threading.Lock()
+
+
+def _ekran_goruntu_calistir(job_id: str) -> None:
+    """Opt-in: analizin adlandırdığı canlı ekranları screenshot'lar, istenirse Jira task'ına ekler (arka plan)."""
+    job = _ekran_goruntu_isler.get(job_id)
+    if not job:
+        return
+    _bas = time.time()
+    _tbas = _token_bas()
+    try:
+        from skills import ekran_goruntu as eg
+        from skills.base import canli_uygulama_baglami_hazirla, gorev_live_app_urls, live_app_urls
+        hedef = job.get("hedef_tarif") or ""
+        # Task kapsamı (live_app_gorev) önce; yoksa Süreç (live_app ana adresi)
+        if gorev_live_app_urls():
+            canli, kapsam = canli_uygulama_baglami_hazirla(gorev=True, hedef_tarif=hedef), "gorev"
+        elif live_app_urls():
+            from urllib.parse import urlparse as _up
+            p = _up(live_app_urls()[0])
+            canli, kapsam = canli_uygulama_baglami_hazirla(base_url_override=f"{p.scheme}://{p.netloc}", hedef_tarif=hedef), "surec"
+        else:
+            canli, kapsam = None, "gorev"
+        r = eg.yakala(job.get("analiz", ""), canli or "", kapsam)
+        sonuc = {"ok": r.get("ok"), "goruntular": r.get("goruntular", []), "neden": r.get("neden", "")}
+        # Jira'ya ek (key verildiyse ve görüntü alındıysa)
+        key = str(job.get("key") or "").strip()
+        if r.get("ok") and key and job.get("jira_ekle"):
+            try:
+                from skills.jira_gorevleri import _cloud_id
+                ek = eg.jiraya_ekle(key, r["goruntular"], cloud_id=_cloud_id() or "")
+                sonuc["jira"] = ek
+                if ek.get("eklenen"):
+                    _telemetri_olay("gorev_guncelle", "ok", 0, baglam={"gorev": key, "islem": "ekran görüntüsü eklendi"},
+                                    jira={"toplam": 0})
+            except Exception as _e:
+                sonuc["jira"] = {"ok": False, "hatalar": [str(_e)[:160]]}
+        with _ekran_goruntu_lock:
+            job["sonuc"] = sonuc
+            job["durum"] = "bitti"
+        _telemetri_olay("ekran_goruntu", "ok", int((time.time() - _bas) * 1000), token_bas=_tbas,
+                        baglam={"gorev": key})
+    except Exception as e:
+        logger.exception("Ekran görüntüsü işi hatası (%s)", job_id)
+        with _ekran_goruntu_lock:
+            job["durum"] = "hata"
+            job["hata"] = str(e)[:300]
+    finally:
+        with _ekran_goruntu_lock:
+            if job.get("durum") == "calisiyor":
+                job["durum"] = "hata"
+
+
+def _ekran_goruntu_is_baslat(job: dict) -> str:
+    job_id = uuid.uuid4().hex[:12]
+    with _ekran_goruntu_lock:
+        _ekran_goruntu_isler[job_id] = {"durum": "calisiyor", "sonuc": None, "hata": None,
+                                        "zaman": time.time(), "aktif_bas": time.time(), **job}
+        for eski in [j for j in sorted(_ekran_goruntu_isler, key=lambda j: _ekran_goruntu_isler[j]["zaman"])
+                     if _ekran_goruntu_isler[j]["durum"] != "calisiyor"][:max(0, len(_ekran_goruntu_isler) - 12)]:
+            _ekran_goruntu_isler.pop(eski, None)
+    threading.Thread(target=_ekran_goruntu_calistir, args=(job_id,), daemon=True,
+                     name=f"ekran-goruntu-{job_id}").start()
+    return job_id
+
+
+@app.route("/api/jira/gorev/ekran-goruntu", methods=["POST"])
+def gorev_ekran_goruntu():
+    """Opt-in: analizin adlandırdığı canlı ekranların görüntüsünü alır, `jira_ekle` ise task'a ek olarak koyar (arka plan).
+    {key, analiz, hedef_tarif, jira_ekle} → {job_id}. Durum: /api/jira/gorev/ekran-goruntu/durum/<job_id>."""
+    data = request.get_json(silent=True) or {}
+    analiz = (data.get("analiz") or "").strip()
+    if not analiz:
+        return jsonify({"ok": False, "error": "Analiz metni gerekli (hangi ekranların çekileceği analizden bellidir)."}), 400
+    job_id = _ekran_goruntu_is_baslat({
+        "key": str(data.get("key") or "").strip()[:40],
+        "analiz": analiz[:20000],
+        "hedef_tarif": (data.get("hedef_tarif") or "").strip()[:500],
+        "jira_ekle": bool(data.get("jira_ekle", True)),
+    })
+    return jsonify({"ok": True, "job_id": job_id})
+
+
+@app.route("/api/jira/gorev/ekran-goruntu/durum/<job_id>", methods=["GET"])
+def gorev_ekran_goruntu_durum(job_id):
+    """Ekran görüntüsü işi durumu/sonucu (polling)."""
+    job = _ekran_goruntu_isler.get(job_id)
+    if not job:
+        return jsonify({"ok": False, "error": "iş bulunamadı"}), 404
+    simdi = time.time()
+    ortak = {"gecen_sn": int(simdi - job.get("zaman", simdi)),
+             "adim_gecen_sn": int(simdi - job["aktif_bas"]) if job.get("aktif_bas") else 0}
+    if job["durum"] == "bitti":
+        return jsonify({"ok": True, "durum": "bitti", **(job.get("sonuc") or {}), **ortak})
+    if job["durum"] == "hata":
+        return jsonify({"ok": True, "durum": "hata", "hata": job.get("hata"), **ortak})
+    return jsonify({"ok": True, "durum": "calisiyor", **ortak})
 
 
 def _gorev_mockup_is_baslat(job: dict) -> str:

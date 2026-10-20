@@ -3171,6 +3171,11 @@ function temaDegistir() {
                   <svg class="ico"><use href="#i-zap"/></svg> Ekran Mockup'ı
                 </button><span class="jg-ak-alt">isteğe bağlı: task'a ekran taslağı ekle</span>
               </div>
+              <div class="jg-ak-btn">
+                <button class="btn btn-outline" id="jg-ekrangoruntu-btn" onclick="jgEkranGoruntuEkle()" title="Analizin adlandırdığı canlı ekranların görüntüsünü alır ve bu task'a EK olarak yükler (Jira'da görünür). Canlı iç uygulama görüntüsüdür — hassas veri içerebilir.">
+                  <svg class="ico"><use href="#i-monitor"/></svg> Ekran Görüntüsü Ekle
+                </button><span class="jg-ak-alt">isteğe bağlı: ilgili ekranların görüntüsünü task'a ekle</span>
+              </div>
             </div>
             <span class="jg-warn">Yönetici Özeti, kanıt etiketleri ve açık sorular Jira'ya yazılmaz — <b>cevapsız ZORUNLU sorular</b> ise onayda task gövdesine "Cevap Bekleyen Zorunlu Sorular" olarak EKLENİR.</span>
           </div>
@@ -6585,6 +6590,42 @@ function _jgYtFebeSet() {
   if (!s.feBeKaynak) return null;
   const be = _jgAnalizSeti[s.feBeKaynak] || {}, fe = _jgAnalizSeti[s.feBeKaynak + '::FE'] || {};
   return { kaynak: s.feBeKaynak, be, fe };
+}
+
+async function jgEkranGoruntuEkle() {
+  const key = _jgGercekKey(_jgAktifAnalizKey);
+  if (!key || /::/.test(key) || /^EKRAN-/.test(key)) { toast('Önce Jira\'da gerçek bir task gerekli (bu kaydın Jira karşılığı yok)', 'info'); return; }
+  const md = (document.getElementById('jg-preview-editor')?.value || '').trim();
+  if (!md) { toast('Analiz içeriği yok', 'info'); return; }
+  // Hassas içerik onayı (canlı iç uygulama görüntüsü)
+  let onay = true;
+  try { onay = confirm(`"${key}" için analizin adlandırdığı canlı ekranların görüntüsü alınıp task'a EK olarak yüklenecek.\n\nGörüntüler canlı iç uygulamadan alınır ve gerçek veri içerebilir. Devam edilsin mi?`); } catch (e) { onay = true; }
+  if (!onay) return;
+  const btn = document.getElementById('jg-ekrangoruntu-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Ekranlar yakalanıyor…'; }
+  try {
+    const r = await (await fetch('/api/jira/gorev/ekran-goruntu', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, analiz: md, hedef_tarif: (_jgAnalizSeti[_jgAktifAnalizKey] || {}).summary || '', jira_ekle: true }) })).json();
+    if (!r.ok || !r.job_id) { toast(r.error || 'Başlatılamadı', 'error'); return; }
+    // Polling (uzun — canlı gözlem)
+    let d = {};
+    for (let i = 0; i < 200; i++) {
+      await new Promise(res => setTimeout(res, 4000));
+      try { d = await (await fetch('/api/jira/gorev/ekran-goruntu/durum/' + r.job_id)).json(); } catch (e) { continue; }
+      if (d.durum === 'bitti' || d.durum === 'hata') break;
+      if (btn) btn.textContent = `⏳ Ekranlar yakalanıyor… ${d.gecen_sn || 0}s`;
+    }
+    if (d.durum === 'hata' || !d.ok) { toast(d.hata || d.neden || 'Ekran görüntüsü alınamadı', 'error'); return; }
+    const g = d.goruntular || [], ek = (d.jira || {}).eklenen || [];
+    if (!g.length) { toast(d.neden || 'Ekran görüntüsü alınamadı (ekranlara erişilemedi)', 'error'); return; }
+    toast(`${g.length} ekran görüntüsü alındı, ${ek.length} tanesi ${key}'e eklendi`, ek.length ? 'success' : 'info');
+    const kap = document.getElementById('jg-preview-msg-akis') || document.getElementById('jg-preview-msg');
+    if (kap) kap.innerHTML = `<div style="color:var(--text2);font-size:12px;margin-top:6px">🖼 Ekran görüntüleri: ${ek.map(e => escHtml(e.dosya)).join(', ') || '—'} → ${escHtml(key)} ekinde (Jira'da Attachments)</div>`;
+  } catch (e) {
+    toast('Ekran görüntüsü hatası: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<svg class="ico"><use href="#i-monitor"/></svg> Ekran Görüntüsü Ekle'; }
+  }
 }
 
 async function jgYeniTaskPanelAc() {

@@ -87,7 +87,9 @@ args = B._live_app_cli_argumanlari(kapsam="gorev")
 cfg = Path(args[args.index("--mcp-config") + 1])
 d = json.loads(cfg.read_text())
 n = getattr(B._SLOT_TL, "slot", None)
-chk("config slot dosyası + o slotun profili", cfg.name == f"mcp.slot-{n}.json" and d["mcpServers"]["playwright"]["args"][-1].endswith(f"slot-{n}"), (cfg, n))
+_args = d["mcpServers"]["playwright"]["args"]
+chk("config slot dosyası + o slotun profili (--user-data-dir)", cfg.name == f"mcp.slot-{n}.json"
+    and _args[_args.index("--user-data-dir") + 1].endswith(f"slot-{n}"), (cfg, n))
 chk("slot bu thread'de tutuluyor", n in B._SLOT_SAHIPLI)
 # _api_cagri_cli finally → bırakır (CLI mock)
 B._claude_yolu_bul = lambda: "/usr/bin/true"
