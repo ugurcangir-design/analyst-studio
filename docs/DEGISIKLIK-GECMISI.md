@@ -6,6 +6,26 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## Opt-in Ekran Görüntüsü — FE task'ına canlı ekran eki ✅ (CLAUDE.md "EKRAN GÖRÜNTÜSÜ", MIMARI yok — CLAUDE.md yeterli)
+- `skills/ekran_goruntu.py`: analizin adlandırdığı canlı ekranları Playwright `browser_take_screenshot` (dosya-adsız → `--output-dir`)
+  ile çeker, sırayla açıklamalarla eşler, `atlassian_attach` ile Jira task'ına PNG ek koyar. Uç `POST /api/jira/gorev/ekran-goruntu`
+  (arka plan) + UI "Ekran Görüntüsü Ekle" (gerçek key + hassas-içerik onayı). Test `tests/test_ekran_goruntu.py`.
+
+## Öz-çözümleme — gözlemlenemez (post-değişiklik/BE-sözleşmesi) sorulara tur yakma ✅
+- "Alan/switch kaldırıldığında BE davranışı" / "yeni kayıt varsayılanı" gibi sorular mevcut uygulamada gözlemlenemez (değişiklik
+  henüz yok) → canlı gözleme sokulmaz, `karar_gerekli`'de kalır (sınıflandırıcı kuralı + deterministik `_gozlemle_gereksiz`).
+  MBSUATEAM-181'de soru çözüm gözlemi 41 tur → 3 tura indi. Test `tests/test_soru_cozumleme.py`.
+
+## Gözlem kota ölçümü — batching + snapshot-mode env + çağrı başına maliyet ✅
+- Prompt'a "aynı turda bağımsız araçları birlikte çağır" (tur 42→28); `LIVE_APP_SNAPSHOT_MODE` env (vars. full; none ölçüldü,
+  önerilmez); `maliyet_usd` `cagri.jsonl`+`cagri_ozeti`+Kullanım Raporu aşama tablosu (CLI modunda 'API-eşd.*' — gerçek ücret değil).
+  Haiku/Opus 5.5 gözlem ölçümü: gözlem Sonnet'te kalır (kritik yakalama eş, Opus 2.7× kota). Soru çözüm gözlemi bütçesi soru
+  sayısına göre ölçeklenir (`soru_tur_butcesi`). BFF raporu okuma anında yeniden değerlendirilir (giriş-hatalı eski rapor taze değil).
+
+## Ekip sink sırrı tracked dosyada + Apps Script sertleştirme ✅
+- `reference/ekip_sink_token.json` (TRACKED; `telemetri._yazma_token`: env > dosya) → analist .env'e dokunmaz, güncellemeyle alır.
+  Apps Script `PAYLASILAN_SIR` + Owners kapısı (`docs/telemetri-apps-script.md`): URL'i bilen herkesin yaz/okuması kapatıldı.
+
 ## Tam denetim 2026-10-20 — ~110 bulgu kapatıldı ✅ (CLAUDE.md "TAM DENETİM", MIMARI "Denetim 2026-10-20")
 - Kritik: arka plan telemetri düşüyordu; canlı gözlem CLI-429'da API'ye düşüp UYDURMA rapor üretiyordu; canlı sonuçlar önbellekten dönebiliyordu;
   tavan-sonrası yanlış tekrar; macOS pgrep ölü; oturum geri yazımı kilitsiz; OAuth callback XSS; .env enjeksiyonu; Host allowlist; admin kapıları;
