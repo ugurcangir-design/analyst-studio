@@ -154,6 +154,7 @@ import skills.ornek_havuzu as OH  # noqa: E402
 OH.ornek_bloklari = lambda *a, **k: []
 JG._api_cagri = lambda s, m, **k: "<teknik_analiz>## 1. Amaç\nx `[K: ❓ Belirsiz]`\n</teknik_analiz>"
 JG._gorev_acik_sorular_uret = lambda *a, **k: MD
+_cozumle_gercek = SC.cozumle                                 # gerçek fonksiyon (entegrasyon testi için saklanır)
 SC.cozumle = lambda md, gorev, canli=True, **k: out          # çözümleme sonucu (Q-T-002 cevaplandı)
 duz: dict = {}
 JG.gorev_analiz_duzelt = lambda gorev, md, talimat: (duz.update({"md": md, "talimat": talimat}) or "## 1. Amaç\nx — menü kurulumu ve dashboard guard tüketir [K: Swagger:identity.json]\n")
@@ -177,6 +178,23 @@ SC._canli_hedef = lambda sg, k=None: "canlı blok"
 SC._gozlemle({"key": "X-1", "summary": "s"}, [({"id": "Q-T-001"}, {}), ({"id": "Q-T-002"}, {})])
 SC._api_cagri = _eski
 chk("_gozlemle: ölçekli max_turns + 1 devam + yardımcı katman", _yak.get("max_turns") == 65 and _yak.get("tur_devam") == 1 and _yak.get("katman") == "yardimci", _yak)
+
+# Değişiklik-sonrası / varsayılan sorular canlı gözleme SOKULMAZ (owner 2026-10-20: 40-70 turluk boşa gözlem)
+chk("_gozlemle_gereksiz: kaldırıldığında-sonrası + varsayılan-atama + yoksa-koru → True; gözlemlenebilir soru → False",
+    SC._gozlemle_gereksiz("switch kaldırıldığında istek kabul edilir mi, BE zorunlu tutar mı")
+    and SC._gozlemle_gereksiz("yeni market için hangi değer atanacak varsayılan mı")
+    and SC._gozlemle_gereksiz("switch-kaldırma sonrası BE'nin alan-yoksa-koru davranışı")
+    and not SC._gozlemle_gereksiz("Search butonu hangi endpoint'i tetikliyor")
+    and not SC._gozlemle_gereksiz("Action Log butonu her satırda görünüyor mu"))
+# Entegrasyon: sınıflandırıcı gozlem_gerekli=True dese bile post-değişiklik sorusu canlı gözleme GİRMEZ
+_canli_cagrildi = {"n": 0}
+SC._siniflandir = lambda g, sorular, kanitlar, _ai=None: {
+    s["id"]: {"durum": "kismi", "cevap": "x", "kanit": "", "gozlem_gerekli": True, "gozlem_adimi": "dene"} for s in sorular}
+SC._gozlemle = lambda g, lst, _ai=None, canli_kapsam=None: _canli_cagrildi.__setitem__("n", _canli_cagrildi["n"] + len(lst)) or {}
+SC.kanit_topla = lambda sorular, rag_ctx=None: {s["id"]: "" for s in sorular}
+_md = "## Açık Sorular\n\n### Q-T-001: Switch kaldırıldığında BE zorunlu tutar mı\n- Soru: alan kaldırıldığında istek kabul edilir mi\n\n### Q-T-002: Search endpoint\n- Soru: Search butonu hangi endpoint'i tetikliyor\n"
+_cozumle_gercek(_md, {"key": "X-1", "summary": "s"}, canli=True)   # gerçek cozumle (mock değil)
+chk("post-değişiklik sorusu canlı gözleme girmez, gözlemlenebilir soru girer (1 soru gözlendi, 2 değil)", _canli_cagrildi["n"] == 1, _canli_cagrildi)
 
 print()
 if _hata:

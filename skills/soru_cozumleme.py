@@ -227,6 +227,21 @@ def kanit_topla(sorular: list[dict], rag_ctx: dict | None = None) -> dict[str, s
     return out
 
 
+# Değişiklik-sonrası / varsayılan-değer sorusu (mevcut uygulamada gözlemlenemez) → canlı gözleme sokma
+_GOZLEMLE_GEREKSIZ = re.compile(
+    r"(kaldır[ıi](l|m)|çıkar[ıi](l|m)|silin|silme|devre\s*d[ıi]ş[ıi]|eklen)[a-zçğıöşü]*\s*-?\s*(sonra|sonras[ıi]|ard[ıi]ndan)"
+    r"|(kaldır[ıi]ld[ıi]ğ[ıi]|çıkar[ıi]ld[ıi]ğ[ıi]|silin(d|ced)iğ[ıi]|eklen(d|ced)iğ[ıi])[a-zçğıöşü]*nda"
+    r"|alan[- ]?(lar)?[- ]?(gönderilmediğinde|olmadan|yoksa)"
+    r"|yoksa[- ]?koru"
+    r"|(varsay[ıi]lan|default)\s+(değer|de[ğg]er).*(atan|yaz[ıi]l|türet)"
+    r"|hangi\s+(değer|de[ğg]er|kural).*(atan|yaz[ıi]l|türet)",
+    re.I)
+
+
+def _gozlemle_gereksiz(metin: str) -> bool:
+    return bool(_GOZLEMLE_GEREKSIZ.search(metin or ""))
+
+
 # ── AI: sınıflandır + cevapla ─────────────────────────────────────────────────
 _SISTEM = """# ROL
 Kıdemli teknik analistsin. Bir Jira görevinin teknik analizinden çıkan AÇIK SORULARI, analist görmeden ÖNCE sen araştırırsın.
@@ -238,9 +253,16 @@ Her soru için toplanmış KANITLAR (Swagger/Confluence/Jira/canlı-app referans
 - `kismi`: kanıt daraltıyor ama kesin değil → `cevap` = kanıta dayalı en olası yanıt + hangi parça belirsiz.
 - `karar_gerekli`: ürün/iş kararı, kanıtla kapanmaz (ör. "boş kümede baseline mi verilsin?") → `cevap` = kararı kolaylaştıran
   özet (seçenekler + kanıtın işaret ettiği taraf), kısa.
-- `gozlem_gerekli`: sorunun cevabı CANLI uygulamada gözlenerek kesinleşir mi? (ör. bir ekranın şu an izin kontrolünden geçip
-  geçmediği, bir isteğin hangi ekranlarda tetiklendiği) → true + `gozlem_adimi` (uygulamada ne yapılıp neye bakılacak, 1-3 adım).
+- `gozlem_gerekli`: sorunun cevabı CANLI uygulamada ŞU AN gözlenerek kesinleşir mi? (ör. bir ekranın şu an izin kontrolünden
+  geçip geçmediği, bir isteğin hangi ekranlarda tetiklendiği) → true + `gozlem_adimi` (uygulamada ne yapılıp neye bakılacak, 1-3 adım).
   Kod/sunucu içi ya da ürün kararı için false.
+  ⛔ gozlem_gerekli=FALSE (gözlemle KESİNLEŞMEZ, boşuna tur yakma) şu durumlarda — bunlar `karar_gerekli` (BE/ürün):
+  • DEĞİŞİKLİK SONRASI davranış: soru henüz UYGULANMAMIŞ bir değişikliğin ardından ne olacağını soruyorsa (ör. "alan/switch
+    KALDIRILDIĞINDA/ÇIKARILDIĞINDA istek kabul edilir mi, BE zorunlu tutar mı"). Alan şu an GÖNDERİLDİĞİ için "göndermeyince ne
+    olur" MEVCUT uygulamada gözlemlenemez — bu BE sözleşmesi sorusudur.
+  • VARSAYILAN/ATAMA KURALI: "yeni kayıtta X alanı hangi değerle (false/null/true) yazılır / nereden türetilir" gibi DB/BE
+    default kuralı — UI'da görünmez.
+  • Gözlemlense bile yıkıcı/geri-alınamaz işlem gerektiren (paylaşımlı ortamda yeni kayıt oluşturup silememe) → false.
 # KURALLAR
 - UYDURMA: kanıtta olmayan endpoint/alan/kural yazma; kanıt yoksa `karar_gerekli` ya da `gozlem_gerekli` de.
 - Tüketici taraması bir ucu/alanı başka ekran/servislerde gösteriyorsa bunu "etkilenen tüketiciler" olarak cevaba yaz.
@@ -400,6 +422,17 @@ def cozumle(acik_md: str, gorev: dict, canli: bool = True, _ai=None, _ai_canli=N
         cozum = _siniflandir(gorev, sorular, kanitlar, _ai=_ai)
         if not cozum:
             return acik_md
+        # Deterministik koruma (sınıflandırıcı yine de işaretlerse): değişiklik-sonrası davranış / varsayılan-değer kuralı
+        # MEVCUT uygulamada gözlemlenemez → canlı tur yakma, karar_gerekli'de bırak (owner 2026-10-20: 40-70 turluk boşa gözlem).
+        for s in sorular:
+            c = cozum.get(s["id"])
+            if c and c.get("gozlem_gerekli") and _gozlemle_gereksiz(s.get("baslik", "") + " " + s.get("govde", "")):
+                c["gozlem_gerekli"] = False
+                if c["durum"] not in ("cevaplandi", "kismi"):
+                    c["durum"] = "karar_gerekli"
+                c["cevap"] = (c.get("cevap") or "").strip() + (
+                    " [Not: Bu soru DEĞİŞİKLİK UYGULANDIKTAN sonraki BE davranışı/varsayılan değeri hakkında; mevcut uygulama "
+                    "gözlemlenerek kapatılamaz, BE sözleşmesinden teyit alınmalı.]")
         gozlem_listesi = [(s, cozum[s["id"]]) for s in sorular
                           if s["id"] in cozum and cozum[s["id"]]["gozlem_gerekli"] and cozum[s["id"]]["durum"] != "cevaplandi"]
         if canli and gozlem_listesi:
