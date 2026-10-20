@@ -17,6 +17,8 @@ import json
 import os
 import re
 import socket
+import sys
+import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
@@ -26,6 +28,18 @@ USAGE_DIR = BASE_DIR / "logs" / "usage"
 EVENTS_DOSYA = USAGE_DIR / "events.jsonl"          # bu makinenin kendi olayları
 UZAK_DOSYA = USAGE_DIR / "remote.jsonl"            # owner: sink'ten çekilen ekip verisi
 ANALIST_DOSYA = BASE_DIR / "analist.json"          # UI'dan girilen ad-soyad (gitignore)
+
+# ── TEST MODU — otomatik yalıtım (2026-10-20) ───────────────────────────────────────────────
+# Test betikleri (`tests/test_*.py`, `tests/smoke_test.py`) ya da `TELEMETRI_SINK=off|0|false` ile
+# çalışan süreçte: (1) sink'e HİÇ POST atılmaz (ekip Sheet'ine 'Smoke Analist' sızmıştı), (2) olay
+# dosyaları GEÇİCİ dizine yazılır (gerçek `logs/usage/` kirlenmez). Testler yine de kendi
+# `USAGE_DIR/EVENTS_DOSYA/UZAK_DOSYA` override'ını yapabilir (modül değişkenleri — eski testler çalışır).
+_TEST_MODU = Path(sys.argv[0] or "").name.startswith(("test_", "smoke_test"))   # test koşusu: olaylar GEÇİCİ dizine
+_SINK_KAPALI = os.getenv("TELEMETRI_SINK", "").strip().lower() in ("off", "0", "false")   # geliştirici: yalnız gönderim kapalı
+if _TEST_MODU:
+    USAGE_DIR = Path(tempfile.mkdtemp(prefix="telemetri-test-"))
+    EVENTS_DOSYA = USAGE_DIR / "events.jsonl"
+    UZAK_DOSYA = USAGE_DIR / "remote.jsonl"
 
 # Toplayıcı (Apps Script) varsayılan URL — analist makineleri hiçbir şey ayarlamasın diye
 # gömülü. Yalnız-YAZMA endpoint'i (okuma OKUMA_ANAHTARI ister). USAGE_SINK_URL env geçersizler.
@@ -53,6 +67,34 @@ def _sink_key() -> str:
     except Exception:
         pass
     return ""
+
+
+def _yazma_token() -> str:
+    """Sink YAZMA paylaşılan sırrı (opsiyonel, env `USAGE_SINK_TOKEN`). Doluysa POST gövdesine ve GET
+    isteklerine `t` olarak eklenir (docs/telemetri-apps-script.md 'Güvenlik sertleştirme'). Boş → eski davranış."""
+    return os.getenv("USAGE_SINK_TOKEN", "").strip()
+
+
+def _ts_parse(ts: str | None) -> datetime | None:
+    """ISO zaman damgasını TZ-FARKINDA datetime'a çevirir (yerel saat dilimine normalize).
+    Sink '…Z' (UTC) verir, eski yerel kayıtlar NAİF ('2026-10-19T18:00:00' → yerel saat varsayılır),
+    yeni kayıtlar ofsetli. Parse edilemezse None."""
+    s = str(ts or "").strip()
+    if not s:
+        return None
+    if s.endswith("Z") or s.endswith("z"):
+        s = s[:-1] + "+00:00"
+    try:
+        d = datetime.fromisoformat(s)
+    except ValueError:
+        try:
+            d = datetime.fromisoformat(s[:19])
+        except ValueError:
+            return None
+    try:
+        return d.astimezone()   # naif → yerel saat varsayılır; ofsetli/UTC → yerele çevrilir
+    except (ValueError, OverflowError, OSError):
+        return None
 
 
 def okuma_anahtari_var_mi() -> bool:
@@ -231,14 +273,18 @@ def _sink_gonder(olay: dict) -> None:
     gibi KISA ÖMÜRLÜ subprocess'te süreç çıkışından önce öldürülüp POST kayboluyordu →
     süreç/teknik/BRD/kapsam olayları Sheet'e HİÇ ulaşmıyordu (in-process Flask'ta çalışıyordu).
     Senkron POST bu yarışı bitirir; başarısızsa lokal JSONL yedek zaten var."""
-    if os.getenv("TELEMETRI_SINK", "").strip().lower() in ("off", "0", "false"):
-        return   # test/geliştirme makinesi: ekip Sheet'ine gönderme
+    if _TEST_MODU or _SINK_KAPALI:
+        return   # test betiği / TELEMETRI_SINK=off: ekip Sheet'ine ASLA gönderme (ağ yok)
     url = _sink_url()
     if not url:
         return
     try:
         import requests  # certifi CA paketi → macOS SSL doğrulaması sorunsuz
-        requests.post(url, json=olay, timeout=8)
+        govde = dict(olay)
+        tok = _yazma_token()
+        if tok:
+            govde["t"] = tok   # paylaşılan yazma sırrı (script sertleştirilince zorunlu; yoksa yok sayılır)
+        requests.post(url, json=govde, timeout=8)
     except Exception:
         pass
 
@@ -262,7 +308,8 @@ def olay_yaz(
     AI token/maliyet birikimi (base.token_delta). Yoksa None (0-token deterministik işlemler)."""
     try:
         kayit = {
-            "ts": datetime.now().isoformat(timespec="seconds"),
+            # TZ-farkında yerel ISO (ofsetli) — sink'in UTC 'Z' damgasıyla karışmasın (`_ts_parse` ikisini de çözer)
+            "ts": datetime.now().astimezone().isoformat(timespec="seconds"),
             "analist": _analist_belirle(analist),
             "eposta": analist_eposta_oku() or None,   # Kullanım Raporu'nda stabil atıf anahtarı
             "olay": olay,
@@ -410,48 +457,86 @@ def olaylari_oku() -> list[dict]:
 
     ÇİFT SAYIM ÖNLEME: owner'ın kendi olayları hem lokal `events.jsonl`'de hem de
     Sheet'e POST edildiği için `remote.jsonl`'de (Uzaktan Çek sonrası) bulunur. Bu yüzden
-    `remote.jsonl` VARSA yalnız o kullanılır (Sheet = tüm ekip, owner dahil, TEK doğruluk
-    kaynağı; hepsi aynı UTC saat biçiminde → tutarlı). Yoksa (henüz çekilmemiş) lokal
-    `events.jsonl` kullanılır. Owner en güncel veriyi 'Uzaktan Çek' ile tazeler."""
+    `remote.jsonl` VARSA o esas alınır (Sheet = tüm ekip, owner dahil, TEK doğruluk kaynağı).
+    Yoksa (henüz çekilmemiş) lokal `events.jsonl` kullanılır. Owner en güncel veriyi 'Uzaktan Çek' ile tazeler.
+
+    **Taze yerel olaylar (2026-10-20):** remote varken BU MAKİNENİN son çekimden SONRAKİ yerel olayları
+    da eklenir (ts > bu makinenin remote'taki en yeni ts'i; `makine == hostname`) — owner kendi son
+    işlerini 'Uzaktan Çek' yapmadan da görür. (ts, makine, olay) üçlüsü üzerinden tekilleştirilir
+    → çift sayım yok. Zaman kıyası `_ts_parse` ile (remote 'Z'/UTC vs yerel ofsetli)."""
     olaylar: list[dict] = []
     try:
-        if UZAK_DOSYA.exists():
-            dosyalar = [UZAK_DOSYA]
-        elif EVENTS_DOSYA.exists():
-            dosyalar = [EVENTS_DOSYA]
-        else:
+        if not UZAK_DOSYA.exists() and not EVENTS_DOSYA.exists():
             return olaylar
-        for yol in dosyalar:
-            try:
-                for satir in yol.read_text(encoding="utf-8").splitlines():
-                    satir = satir.strip()
-                    if not satir:
-                        continue
-                    try:
-                        o = _olay_normalize(json.loads(satir))
-                        if _test_kimligi_mi(o):
-                            continue
-                        olaylar.append(o)
-                    except Exception:
-                        continue
-            except Exception:
+        uzak_var = UZAK_DOSYA.exists()
+        uzak = _dosya_olaylari(UZAK_DOSYA) if uzak_var else []
+        if not uzak_var:
+            return _dosya_olaylari(EVENTS_DOSYA)
+        olaylar = list(uzak)
+        # Bu makinenin remote'taki EN YENİ damgası → ondan sonraki yerel olaylar eklenir
+        makine = socket.gethostname()
+        en_yeni = None
+        for o in uzak:
+            if (o.get("makine") or "") != makine:
                 continue
+            d = _ts_parse(o.get("ts"))
+            if d and (en_yeni is None or d > en_yeni):
+                en_yeni = d
+        gorulen = {(str(o.get("ts", "")), str(o.get("makine", "")), str(o.get("olay", ""))) for o in uzak}
+        for o in _dosya_olaylari(EVENTS_DOSYA):
+            if (o.get("makine") or "") != makine:
+                continue
+            d = _ts_parse(o.get("ts"))
+            if en_yeni is not None and (d is None or d <= en_yeni):
+                continue
+            anahtar = (str(o.get("ts", "")), str(o.get("makine", "")), str(o.get("olay", "")))
+            if anahtar in gorulen:
+                continue
+            gorulen.add(anahtar)
+            olaylar.append(o)
     except Exception:
         pass
     return olaylar
 
 
+def _dosya_olaylari(yol: Path) -> list[dict]:
+    """Bir JSONL dosyasının normalize edilmiş, test-kimliği filtrelenmiş olayları (hata yutulur)."""
+    out: list[dict] = []
+    try:
+        for satir in yol.read_text(encoding="utf-8").splitlines():
+            satir = satir.strip()
+            if not satir:
+                continue
+            try:
+                o = _olay_normalize(json.loads(satir))
+                if _test_kimligi_mi(o):
+                    continue
+                out.append(o)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return out
+
+
 def _donem_key(ts_str: str, donem: str) -> str:
-    """Bir olayın tarihini dönem kovasına çevirir: gün=YYYY-MM-DD, hafta=YYYY-Hnn, ay=YYYY-MM."""
+    """Bir olayın tarihini dönem kovasına çevirir: gün=YYYY-MM-DD, hafta=YYYY-Hnn, ay=YYYY-MM.
+    Zaman damgası `_ts_parse` ile YEREL saate çevrilir (sink UTC 'Z' verir; gece yarısı civarı
+    olaylar yanlış güne düşmesin). Parse edilemezse ham dize öneki."""
+    d = _ts_parse(ts_str)
+    if d is None:
+        return (ts_str or "")[:7] if donem == "ay" else (ts_str or "")[:10]
     if donem == "ay":
-        return ts_str[:7]
+        return d.strftime("%Y-%m")
     if donem == "hafta":
-        try:
-            y, w, _ = datetime.fromisoformat(ts_str[:10]).isocalendar()
-            return f"{y}-H{w:02d}"
-        except Exception:
-            return ts_str[:10]
-    return ts_str[:10]
+        y, w, _ = d.isocalendar()
+        return f"{y}-H{w:02d}"
+    return d.strftime("%Y-%m-%d")
+
+
+def _gun(ts_str: str) -> str:
+    """Olayın YEREL günü (YYYY-MM-DD) — `_donem_key(ts, 'gun')` kısayolu."""
+    return _donem_key(ts_str, "gun")
 
 
 def kota_olcum_baslangic() -> str:
@@ -464,13 +549,18 @@ def kota_karsilastirma(olaylar: list[dict]) -> dict:
     ort_yazma (cache_yaz), ort_sure_sn, ort_maliyet. Ekip verisi gömülü token'la geldiği için güncellemeyi alan
     analistlerin işleri otomatik 'sonra' kovasına düşer (ts kesimi + token var)."""
     esik = kota_olcum_baslangic()
+    esik_dt = _ts_parse(esik)
     grup: dict[str, dict[str, dict]] = {}
     for e in olaylar:
         tk = e.get("token")
         if not isinstance(tk, dict) or not (tk.get("girdi") or tk.get("cache_oku") or tk.get("cikti")):
             continue
         olay = e.get("olay") or "diger"
-        kova = "sonra" if str(e.get("ts", "")) >= esik else "once"
+        e_dt = _ts_parse(e.get("ts"))
+        if esik_dt is not None and e_dt is not None:
+            kova = "sonra" if e_dt >= esik_dt else "once"
+        else:   # parse edilemeyen damga → dize kıyası (eski davranış)
+            kova = "sonra" if str(e.get("ts", "")) >= esik else "once"
         g = grup.setdefault(olay, {}).setdefault(kova, {"n": 0, "okuma": 0, "yazma": 0, "cikti": 0, "sure_sn": 0, "maliyet": 0.0})
         g["n"] += 1
         g["okuma"] += int(tk.get("girdi", 0) or 0) + int(tk.get("cache_oku", 0) or 0)
@@ -493,27 +583,38 @@ def kota_karsilastirma(olaylar: list[dict]) -> dict:
 
 _ANALIZ_OLAYLARI = ("gorev_analiz", "surec_analizi", "teknik_analiz")
 _DUZELTME_ISLEMLERI = ("duzelt", "cevap")
+# 'analiz' sayılan işlem modları — formatla / kabul-kontrol / bff-kesif / akis-kapat gibi diğer modlar analiz DEĞİL
+_ANALIZ_ISLEMLERI = (None, "", "analiz", "fe-be-ayir")
 
 
 def kalite_ozeti(olaylar: list[dict]) -> dict:
     """Analiz kalitesi vekilleri — haftalık, olay tipi bazında: analiz sayısı, ort. açık soru, ort. zorunlu soru,
     düzeltme/cevap oranı (düzelt+cevap işlemi ÷ analiz). Yalnız `kalite` taşıyan (yeni sürüm) olaylar soru ortalamasına
-    girer; düzeltme işlemleri `baglam.islem` ile sayılır. Azalan açık soru + düzeltme oranı = iyileşme sinyali."""
+    girer; düzeltme işlemleri `baglam.islem` ile sayılır. Azalan açık soru + düzeltme oranı = iyileşme sinyali.
+
+    Sayım kuralı (2026-10-20): yalnız `durum=="ok"` olaylar; 'analiz' = islem ∈ {yok, analiz, fe-be-ayir};
+    'düzeltme' = islem ∈ {duzelt, cevap}; diğer modlar (formatla, kabul-kontrol, bff-kesif, akis-kapat…) ve
+    hatalı koşular HARİÇ (kalite vekilini şişirmesin). Hafta kovası yerel saatle (`_ts_parse`)."""
     grup: dict[tuple, dict] = {}
     for e in olaylar:
         olay = e.get("olay") or ""
         if olay not in _ANALIZ_OLAYLARI:
             continue
-        ts = str(e.get("ts", ""))[:10]
-        try:
-            hafta = datetime.strptime(ts, "%Y-%m-%d").strftime("%G-W%V")
-        except ValueError:
+        if (e.get("durum") or "ok") != "ok":
             continue
-        g = grup.setdefault((hafta, olay), {"hafta": hafta, "olay": olay, "analiz": 0, "duzeltme": 0, "soru_n": 0, "acik": 0, "zorunlu": 0})
-        islem = str((e.get("baglam") or {}).get("islem") or "analiz") if isinstance(e.get("baglam"), dict) else "analiz"
+        d = _ts_parse(e.get("ts"))
+        if d is None:
+            continue
+        hafta = d.strftime("%G-W%V")
+        islem = (e.get("baglam") or {}).get("islem") if isinstance(e.get("baglam"), dict) else None
+        islem = str(islem).strip() if islem else None
         if islem in _DUZELTME_ISLEMLERI:
+            g = grup.setdefault((hafta, olay), {"hafta": hafta, "olay": olay, "analiz": 0, "duzeltme": 0, "soru_n": 0, "acik": 0, "zorunlu": 0})
             g["duzeltme"] += 1
             continue
+        if islem not in _ANALIZ_ISLEMLERI:
+            continue
+        g = grup.setdefault((hafta, olay), {"hafta": hafta, "olay": olay, "analiz": 0, "duzeltme": 0, "soru_n": 0, "acik": 0, "zorunlu": 0})
         g["analiz"] += 1
         k = e.get("kalite")
         if isinstance(k, dict):
@@ -534,12 +635,9 @@ def _olaylari_filtrele(gun: int, analist: str | None = None) -> list[dict]:
     kesim = time.time() - gun * 86400
     out = []
     for e in olaylari_oku():
-        ts_str = str(e.get("ts", ""))
-        try:
-            if datetime.fromisoformat(ts_str[:19]).timestamp() < kesim:
-                continue
-        except Exception:
-            pass  # ts parse edilemezse dahil et
+        d = _ts_parse(e.get("ts"))
+        if d is not None and d.timestamp() < kesim:
+            continue   # ts parse edilemezse dahil et
         if analist and (e.get("analist") or "") != analist:
             continue
         out.append(e)
@@ -611,11 +709,11 @@ def istatistik(gun: int = 90, donem: str = "gun", analist: str | None = None) ->
                 "islem": jira.get("islem", ""),
             })
         trend[_donem_key(ts_str, donem)] = trend.get(_donem_key(ts_str, donem), 0) + 1
-        if ts_str[:10] == bugun:
+        if _donem_key(ts_str, "gun") == bugun:
             ozet["bugun"] += 1
         if _donem_key(ts_str, "hafta") == bu_hafta:
             ozet["bu_hafta"] += 1
-        if ts_str[:7] == bu_ay:
+        if _donem_key(ts_str, "ay") == bu_ay:
             ozet["bu_ay"] += 1
 
     for an in analistler.values():
@@ -650,9 +748,11 @@ def istatistik(gun: int = 90, donem: str = "gun", analist: str | None = None) ->
 
 def donem_detay(baslangic: str, bitis: str) -> dict:
     """[baslangic, bitis] (YYYY-MM-DD, iki uç dahil) aralığındaki olaylar için drill-down verisi:
-    analist × işlem-tipi matrisi + gün-gün dağılım (hafta/ay bloğuna tıklayınca alt-kırılım)."""
+    analist × işlem-tipi matrisi + gün-gün dağılım (hafta/ay bloğuna tıklayınca alt-kırılım).
+    'kimlik' olayları (roster bildirimi) `istatistik` gibi HARİÇ; gün yerel saatle (`_ts_parse`)."""
     b, s = (baslangic or "")[:10], (bitis or "")[:10]
-    filt = [e for e in olaylari_oku() if b <= str(e.get("ts", ""))[:10] <= s]
+    filt = [e for e in olaylari_oku()
+            if (e.get("olay") or "") != "kimlik" and b <= _gun(str(e.get("ts", ""))) <= s]
 
     analistler: dict[str, dict] = {}
     tip_toplam: dict[str, int] = {}
@@ -664,7 +764,7 @@ def donem_detay(baslangic: str, bitis: str) -> dict:
         an["toplam"] += 1
         an["tipler"][olay] = an["tipler"].get(olay, 0) + 1
         tip_toplam[olay] = tip_toplam.get(olay, 0) + 1
-        g = str(e.get("ts", ""))[:10]
+        g = _gun(str(e.get("ts", "")))
         if g:
             gunluk[g] = gunluk.get(g, 0) + 1
 
@@ -701,6 +801,8 @@ def uzaktan_cek() -> tuple[bool, str]:
         return False, "USAGE_SINK_URL tanımlı değil."
     if not key and not eposta:
         return False, "Kimlik yok — Ayarlar'dan şirket e-postanızı girin (owner listesinde olmalı)."
+    if _TEST_MODU:
+        return False, "test modu — ağ erişimi kapalı."
     try:
         import requests
         params: dict = {}
@@ -708,6 +810,11 @@ def uzaktan_cek() -> tuple[bool, str]:
             params["email"] = eposta        # sunucu-tarafı e-posta kapısı (birincil)
         if key:
             params["read"] = key            # geri uyum: eski anahtar yolu
+            # NOT: okuma anahtarı hâlâ sorgu dizesinde gidiyor (Apps Script header okuyamaz; URL
+            # proxy/erişim loglarında görünebilir). Script `op:"read"` POST'u destekleyince gövdeye taşınacak.
+        tok = _yazma_token()
+        if tok:
+            params["t"] = tok               # paylaşılan sır (sertleştirilmiş script GET'te de ister)
         r = requests.get(url, params=params, timeout=15)
         try:
             veri = r.json()
@@ -729,4 +836,5 @@ def uzaktan_cek() -> tuple[bool, str]:
                 f.write(json.dumps(_olay_normalize(e) if isinstance(e, dict) else e, ensure_ascii=False) + "\n")
         return True, f"{len(veri)} olay çekildi."
     except Exception as e:
-        return False, f"Çekme başarısız: {e}"
+        # Hata metnine URL/sorgu KOYMA — sorgu dizesi okuma anahtarını içerir (log/UI'a sızmasın).
+        return False, f"Çekme başarısız: {type(e).__name__} — ağ/VPN bağlantısını ve sink erişimini kontrol edin."

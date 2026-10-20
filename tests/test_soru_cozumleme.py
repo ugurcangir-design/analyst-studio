@@ -119,7 +119,20 @@ chk("varsayılan açık", SC.acik_mi() is True)
 print("6) entegrasyon")
 from skills import jira_gorevleri as JG  # noqa: E402
 src = Path(JG.__file__).read_text(encoding="utf-8")
-chk("gorev_analiz_et: açık sorulardan sonra öz-çözümleme (canlı bayrağıyla)", "_sc.cozumle(acik, gorev, canli=bool(canli_baglam))" in src and "_sc.uygula_acik_mi()" in src)
+chk("gorev_analiz_et: açık sorulardan sonra öz-çözümleme (canlı bayrağı + köprü bağlamı rag_ctx/canli_kapsam)",
+    "_sc.cozumle(acik, gorev, canli=canli, rag_ctx=rag_ctx, canli_kapsam=canli_kapsam)" in src and "_sc.uygula_acik_mi()" in src
+    and "_soru_asamasi([teknik], gorev" in src)
+# köprü bağlamı: rag_ctx kanıt corpus'una, canli_kapsam gözlem URL seçimine gider
+rag_gor: list = []
+SC._corpus = lambda rag_ctx=None: (rag_gor.append(rag_ctx) or [])
+SC.cozumle(MD, GOREV, canli=False, _ai=lambda s, m: "bozuk", rag_ctx={"keywords": ["permissions"]})
+chk("cozumle(rag_ctx=…) → kanıt corpus'u task keyword'leriyle", rag_gor and rag_gor[-1] == {"keywords": ["permissions"]}, rag_gor)
+SC.gorev_live_app_urls = lambda: ["https://g.local/app"]
+SC.live_app_urls = lambda: ["https://s.local/app"]
+chk("_canli_kapsam_sec: açık 'surec' → live_app; açık 'gorev' → live_app_gorev; verilmezse eski sıra (gorev önce)",
+    SC._canli_kapsam_sec("surec") == "surec" and SC._canli_kapsam_sec("gorev") == "gorev" and SC._canli_kapsam_sec(None) == "gorev")
+SC.gorev_live_app_urls = lambda: []
+chk("_canli_kapsam_sec: 'gorev' istendi ama live_app_gorev boş → 'surec'e düşer", SC._canli_kapsam_sec("gorev") == "surec")
 ui = Path(JG.__file__).parent.parent.joinpath("templates/index.html").read_text(encoding="utf-8")
 chk("UI: Agent alanları parse + ön-doldurma + rozet", "al('Agent durumu')" in ui and "agentOn" in ui and "jg-sk-agent-ozet" in ui)
 

@@ -69,7 +69,7 @@ POST /api/reference/fetch-be   Backend'den içerik çek
 ## Jira
 ```
 GET  /api/jira/config             {client_id,project_key,jira_url(yedek),site_url(otomatik algılanan gerçek site),cloud_id,connected}
-GET  /api/jira/auth-url            OAuth başlat
+POST /api/jira/auth-url            OAuth başlat ({url, redirect_uri}; jira_auth.auth_url_olustur — rastgele `state` için `yeni_state()`)
 GET  /api/jira/callback            OAuth dönüş
 POST /api/jira/test                Bağlantı testi (JIRA_URL ZORUNLU DEĞİL — site otomatik algılanır)
 POST /api/jira/hierarchy/preview   AI hiyerarşi önerir (Jira'ya YAZMAZ)
@@ -383,7 +383,7 @@ UI: Ana Sayfa panosu AI/Kota kartında `<select>` (CLI modunda). `--model` DAİM
 ## Confluence + diğer
 ```
 POST /api/confluence/publish   Markdown → Confluence sayfası
-POST /api/confluence/diagnose  Scope/erişim teşhisi
+GET  /api/confluence/diagnose  Scope/erişim teşhisi (mevcut access token'ın Confluence scope'ları)
 POST /api/mockup/generate      HTML prototip üret (süreç analizi + opsiyonel canlı gözlem)
 POST /api/mockup/duzelt        {talimat} → prototipi SOHBETLE iteratif düzelt (mevcut HTML + talimat →
                                güncellenmiş HTML; sadece istenen değişir). Düzeltmeden önce yedek alınır.
@@ -402,3 +402,43 @@ POST /api/context-filter       PATCH semantiği (eksik üst-anahtar korunur): ke
                                + live_app_auth + ozel_prompt + gorev_analist_notu
 GET  /api/history              Son 5 çalıştırma arşivi
 ```
+
+## Dokümante edilmemiş uçlar (2026-10-20 denetimi — app.py'de var, yukarıdaki bölümlerde geçmiyordu)
+| Metot · Yol | Amaç (tek satır) |
+|---|---|
+| `POST /api/upload` | Doküman yükle (yeni oturum: `wf.sifirla()`; çalışırken 409) |
+| `POST /api/upload-revised-brd` | Revize BRD yükle (BRD_REVIZE_BEKLENIYOR adımı) |
+| `POST /api/run-teknik` | Yalnız teknik analizi başlat ("Sadece Teknik") |
+| `POST /api/delta-analiz` | CR/Delta analizi: mevcut teknik analiz + değişiklik isteği → `delta-analizi.md` (senkron; workflow'a girmez) |
+| `POST /api/skip-kapsam` | Kapsam analizini atla — BRD_REVIZE_BEKLENIYOR → IDLE (yalnız final kaydet) |
+| `POST /api/reject-teknik` | Teknik analizi reddet (workflow geri) |
+| `POST /api/save-output` | UI'da düzenlenen çıktı dosyasını kaydet (`IZIN_VERILEN_CIKTILAR`) |
+| `POST /api/save-history` | Mevcut çıktıları `history/` arşivine yaz |
+| `GET /api/rerun-status/<dosya>` | Yeniden çalıştırılan çıktının son güncelleme zamanı |
+| `GET /api/history/<id>/<dosya>` | Arşivlenmiş çalıştırmanın bir dosyasını getir |
+| `GET/POST /api/users` (+`DELETE /api/users/<ad>`) | AUTH açıkken kullanıcı listesi/ekleme/silme (yalnız admin) |
+| `POST /api/auth/login` · `POST /api/auth/logout` | Oturum aç/kapat (brute-force kilidi; AUTH açıkken) |
+| `GET /login` | Giriş sayfası (AUTH açıkken; girişliyse `/`'e yönlendirir) |
+| `GET /kilavuz` | Uygulama-içi kullanıcı kılavuzu (`KILAVUZ.html`, iframe) |
+| `GET /api/sources` · `POST/DELETE /api/sources/confluence[/<key>]` · `POST/DELETE /api/sources/jira[/<key>]` | Referans kaynakları (Confluence space / Jira projesi) listele-ekle-sil |
+| `GET /api/sources/sync/status` | Çalışan referans senkronunun durumu |
+| `GET /api/uat-senkron/durum` · `POST /api/uat-senkron/ayar` · `POST /api/uat-senkron/calistir` | UAT Durum Senkronu: durum/ayar/şimdi çalıştır (`{uygula}`; arka plan) |
+| `GET /api/ornekler/durum` · `GET /api/ornekler/tani` | Few-shot havuz adedi + son çekim · sink `ornekler` ucunun ham teşhisi (owner) |
+| `POST /api/ornekler/paylas` | Yerel örnekleri merkeze (yeniden) push et (Yol 1) |
+| `POST /api/ornekler/yildiz` | App-sahibi: örneği ★ iyi örnek işaretle/kaldır (`reference/ornek_yildiz.json`, id hex doğrulanır) |
+| `POST /api/ornekler/jira-import` · `GET /api/ornekler/jira-import/durum` | Geçmiş Jira analizlerini örnek havuzuna aktar (arka plan) + durum |
+| `POST /api/jira/gorev/mockup/geri-al` · `POST /api/jira/gorev/mockup/jira` | Task mockup'ı: son düzeltmeyi geri al · Jira'ya ek/tasarım task'ı olarak ekle (`mode: ek|yeni-task`) |
+| `POST /api/live-app/login` | Kalıcı profille HEADED Chrome aç ('Elle giriş (ayrı Chrome)') |
+| `DELETE /api/reference/services/<name>` | Kayıtlı servis Swagger'ını sil (`sources.json` + `services/<name>.json`) |
+| `GET /api/cli-usage` | Claude CLI limit durumu (header göstergesi; `?probe=1` tazeler) |
+| `POST /api/bye` | Sayfa `pagehide` beacon'ı (DESKTOP_MODE watchdog; CSRF muaf) |
+| `POST /api/guncelleme/sifirla` | Uzak sürümle eşitle (`git reset --hard origin/<dal>` + restart; yalnız temiz ağaçta) |
+| `GET /api/jira/redirect-uri` | Atlassian console'a kaydedilmesi gereken callback URL'i |
+
+## Denetim 2026-10-20 — uç davranış notları
+- `GET /api/rerun-status/<dosya>` → ek alanlar `calisiyor`, `hata` (tam yeniden üretim `RERUN_TIMEOUT` ile process grubuyla öldürülür; hata UI'da görünür).
+- `POST /api/update` → `/api/guncelleme/simdi` ile aynı güvenli gövde (iş sürerken 409, ıraksama engeli, pip hatası restart'ı düşürmez).
+- `POST /api/jira/gorev/mockup` → opsiyonel `key`; `GET /api/jira/gorev/mockup/mevcut` → `key`, `baslik`, `ts`.
+- `POST /api/jira/auth-url` session'a `jira_oauth_state` yazar; `GET /api/jira/callback` `state`'i doğrular (uyuşmazsa hata sayfası).
+- Admin kapısı (`@admin_gerekli`, AUTH açıkken): `/api/restart`, `/api/update`, `/api/guncelleme/simdi|sifirla`, `POST /api/settings`, `POST /api/jira/config`.
+- Tüm istekler Host allowlist'inden geçer (localhost/127.0.0.1/[::1]; HOST loopback dışına bağlıysa atlanır); `/api/bye` yabancı Origin'de 403.

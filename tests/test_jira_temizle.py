@@ -93,11 +93,24 @@ chk("4→2 haritası alt başlık + atıflara uygulanır", "## 2. B" in t2 and "
 chk("zaten ardışıksa değişmez", B._bolumleri_yeniden_numarala("## 1. A\n## 2. B\n") == "## 1. A\n## 2. B\n")
 chk("boş/None güvenli", B.jira_icin_temizle("") == "" and B.jira_icin_temizle(None) is None)
 
+print("2b) parantez / tablo satırı / kod bloğu korumaları")
+ORNEK3 = ("## 1. A\n\n- Çağrı `liste()` ile yapılır ( ) ve (  ) artığı gider.\n\n"
+          "| Alan | Kural |\n|---|---|\n| x | Bu yol servise parametre ekleme yaklaşımına kıyasla en doğrudan çözümdür. Zorunlu alan. |\n\n"
+          "```js\nfoo( )\n```\n\n## 4. B\n\n### 4.1. C\n\n(4.1) ve (1.5 sn) ve (2.0 sürümü)\n")
+t3 = B.jira_icin_temizle(ORNEK3)
+chk("`liste()` fonksiyon çağrısı korunur; boşluk sonrası içi boş parantez gider", "`liste()`" in t3 and "( )" not in t3.split("```")[0]
+    and "(  )" not in t3 and "artığı gider" in t3, t3)
+chk("çitli kod bloğu dokunulmaz", "foo( )" in t3)
+chk("tablo satırı yaşar: meta cümle hücreden silinir, hücreler/ayraçlar kalır", "| x |" in t3 and "kıyasla" not in t3 and "Zorunlu alan." in t3, t3)
+chk("(4.1) gerçek `###` alt başlık → (2.1); (1.5 sn) / (2.0 sürümü) sayıları dokunulmaz",
+    "(2.1)" in t3 and "### 2.1. C" in t3 and "(1.5 sn)" in t3 and "(2.0 sürümü)" in t3, t3)
+
 print("3) tüm Jira yazım yolları tek kapıdan")
 jg = Path(B.__file__).parent.joinpath("jira_gorevleri.py").read_text(encoding="utf-8")
 jk = Path(B.__file__).parent.joinpath("jira_kopru.py").read_text(encoding="utf-8")
 chk("gorev_jiraya_yaz / fe-be-olustur / _analiz_adf → jira_icin_temizle", jg.count("jira_icin_temizle(") >= 3)
-chk("köprü gövde yazımı → jira_icin_temizle", "temiz = jira_icin_temizle(analiz_md)" in jk)
+chk("köprü gövde yazımı → ortak govde_birlestir (jira_gorevleri) → jira_icin_temizle", "govde_birlestir(analiz_md, mevcut_desc)" in jk
+    and "temiz = jira_icin_temizle(analiz_md or \"\")" in jg)
 chk("prompt: Jira task dili kuralı", "JİRA TASK DİLİ" in B.VARSAYILAN_PROMPTLAR["gorev_teknik_analiz"]["icerik"]
     and "KAYNAK ALINTISI YAZMA" in B.VARSAYILAN_PROMPTLAR["gorev_teknik_analiz"]["icerik"])
 

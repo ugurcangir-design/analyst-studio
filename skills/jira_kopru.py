@@ -42,7 +42,6 @@ from .base import (
     canli_gozlem_kapsamini_cikar,
     canli_uygulama_baglami_hazirla,
     kanit_etiketlerini_temizle,
-    jira_icin_temizle,
     load_context_filter,
     yonetici_ozetini_cikar,
 )
@@ -50,6 +49,7 @@ from .jira_gorevleri import (
     _adf_to_text, _cloud_id, _ID_DESENI,
     gorev_getir, gorev_analiz_et, gorev_analiz_duzelt, gorev_jiraya_yaz,
     gorev_cevap_uygula, cevap_hedefli_acik,
+    orijinal_talep_ayikla as _orijinal_talep_ayikla_ortak, govde_birlestir,
 )
 from .jira_tasks import _issue_olustur, _proje_bilgi, _katman_prefix   # canonical OAuth issue create
 from jira_agent import markdown_to_adf  # ADF: teknik analiz task'ı formatı
@@ -323,7 +323,10 @@ def _task_keywords(gorev: dict, azami: int = 8) -> list[str]:
     0 token). Durak kelimeler elenir; **≥5 harfli** en sık/ilk geçen **en çok 8** terim.
     filtrele_referanslar bunları alt-dize olarak arar → CLI'de token doğrudan RAG boyutuna
     bağlı olduğundan az/isabetli kelime = daha küçük getirim (kısa/genel terim aşırı-isabet önlenir)."""
-    metin = f"{gorev.get('summary', '')} {gorev.get('summary', '')} {gorev.get('description', '')}".lower()
+    # Türkçe küçültme: 'İ'→'i', 'I'→'ı' — Python .lower() 'İ'yi 'i̇' (i + birleşik nokta) yapar, 'I'yı 'i' yapar →
+    # 'İŞLEM'/'ISIM' token'ları referanslardaki 'işlem'/'ısım' ile eşleşmiyordu.
+    metin = f"{gorev.get('summary', '')} {gorev.get('summary', '')} {gorev.get('description', '')}"
+    metin = metin.replace("İ", "i").replace("I", "ı").lower()
     tokenler = re.findall(r"[a-zçğıiöşü0-9][a-zçğıiöşü0-9\-]{4,}", metin)
     sayac: dict[str, int] = {}
     sira: list[str] = []
@@ -339,25 +342,30 @@ def _task_keywords(gorev: dict, azami: int = 8) -> list[str]:
     return sirali[:azami]
 
 
-def _canli_gorev_baglam(gorev: dict) -> str | None:
+_URL_KAPSAM = {"live_app_gorev": "gorev", "live_app": "surec"}
+
+
+def _canli_gorev_baglam(gorev: dict) -> tuple[str | None, str | None]:
     """#2 — Bridge canlı gözlem bağlamı: kayıtlı live-app URL'inden ANA giriş (base)
     türetilir; hedef ekran task içeriğinden bulunur (login zaten live_app_auth ile).
-    Sabit `live_app_gorev` ekranına bağlı DEĞİL. Yapılandırma yoksa None."""
+    Sabit `live_app_gorev` ekranına bağlı DEĞİL. Dönen: (canlı blok, kapsam) — kapsam, URL'in geldiği alana göre
+    'gorev' (live_app_gorev) ya da 'surec' (live_app): gözlem profili/URL seti o alanla eşleşir (eskiden her
+    zaman 'surec' geçiliyordu → live_app_gorev adresi için yanlış profil). Yapılandırma yoksa (None, None)."""
     ctx = load_context_filter() or {}
-    url = ""
+    url, kapsam = "", None
     for k in ("live_app_gorev", "live_app"):
         v = ctx.get(k) or {}
         if isinstance(v, dict) and str(v.get("target_url", "")).strip():
-            url = str(v["target_url"]).strip()
+            url, kapsam = str(v["target_url"]).strip(), _URL_KAPSAM[k]
             break
     if not url:
-        return None
+        return None, None
     p = urlparse(url)
     if not (p.scheme and p.netloc):
-        return None
+        return None, None
     base = f"{p.scheme}://{p.netloc}"
     hedef = f"{gorev.get('summary', '')}\n\n{gorev.get('description', '')}".strip()
-    return canli_uygulama_baglami_hazirla(base_url_override=base, hedef_tarif=hedef)
+    return canli_uygulama_baglami_hazirla(base_url_override=base, hedef_tarif=hedef), kapsam
 
 
 def _orijinal_gorev(gorev: dict) -> dict:
@@ -397,11 +405,11 @@ def _bridge_uret(gorev: dict, arg: str, onceki_sorular: str = "") -> dict:
     ekran notu/filtresi YOK. `onceki_sorular` verilirse açık sorular yakınsar (cevap turu)."""
     gorev = _orijinal_gorev(gorev)
     kws = _task_keywords(gorev)
-    canli = _canli_gorev_baglam(gorev)
+    canli, kapsam = _canli_gorev_baglam(gorev)
     sonuc = gorev_analiz_et(gorev, cevaplar=arg or "", onceki_sorular=onceki_sorular,
                             ekran_baglami=False,
                             rag_ctx={"keywords": kws} if kws else {},
-                            canli_baglam_override=canli)
+                            canli_baglam_override=canli, canli_kapsam=kapsam)
     sonuc["_keywords"] = kws
     return sonuc
 
@@ -436,26 +444,14 @@ def _orijinal_talep_ayikla(desc: str) -> str:
     geri OKURKEN `##` işaretleri DÜŞER → marker'ları `#`'li VE `#`'siz eşleştir.
     Ayrıca kaz-boynu ekleme (çift '📌 Orijinal Talep') olmasın diye baştaki
     BİR VEYA DAHA ÇOK orijinal başlığı temizlenir."""
-    d = (desc or "").strip()
-    if not d:
-        return ""
-    ust = re.split(r"\n*(?:#{1,6}\s*)?🤖\s*Teknik Analiz", d, maxsplit=1)[0]
-    ust = re.sub(r"^(?:\s*(?:#{1,6}\s*)?📌\s*Orijinal Talep\s*\n+)+", "", ust)
-    ust = re.sub(r"\n*-{3,}\s*$", "", ust).strip()
-    return ust
+    return _orijinal_talep_ayikla_ortak(desc)   # tek kaynak: jira_gorevleri (BE'yi yaz / Güncelle de aynı kuralı kullanır)
 
 
 def _govdeye_yaz(key: str, analiz_md: str, mevcut_desc: str) -> None:
     """#1 — Analizi task GÖVDESİNE (açıklama) yazar; ORİJİNAL talep korunur.
     Açıklama = '## 📌 Orijinal Talep' + orijinal + '## 🤖 Teknik Analiz' + analiz.
     Yönetici Özeti / Canlı Gözlem Kapsamı gövdeye YAZILMAZ (analist bilgisi)."""
-    temiz = jira_icin_temizle(analiz_md).strip()
-    orijinal = _orijinal_talep_ayikla(mevcut_desc)
-    combined = (
-        f"## 📌 Orijinal Talep\n\n{orijinal or '(açıklama yok)'}\n\n"
-        f"---\n\n## 🤖 Teknik Analiz (Analyst Agent)\n\n{temiz}"
-    )
-    gorev_jiraya_yaz(key, combined)
+    gorev_jiraya_yaz(key, govde_birlestir(analiz_md, mevcut_desc))   # işaret içerir → gorev_jiraya_yaz yeniden okumaz
 
 
 def _analiz_islet(key: str, arg: str, durum: dict) -> str:

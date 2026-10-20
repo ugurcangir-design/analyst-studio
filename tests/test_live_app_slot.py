@@ -133,7 +133,10 @@ chk("ana profil yenilenince (giriş) slota yeniden kopyalanır", (slot / "Defaul
 
 print("5) desen / gitignore / status")
 import re  # noqa: E402
-desen = f"--user-data-dir={re.escape(str(B.LIVE_APP_PROFILE_DIR))}(\\s|$)"
+kmt = B._pgrep_komutu(B.LIVE_APP_PROFILE_DIR)
+chk("pgrep komutu: '--' ayracı (BSD pgrep deseni seçenek sanmasın) + [[:space:]] (macOS ERE'de \\s yok)",
+    kmt[:3] == ["pgrep", "-f", "--"] and kmt[3].startswith("--user-data-dir=") and "[[:space:]]" in kmt[3] and "\\s" not in kmt[3], kmt)
+desen = kmt[3].replace("[[:space:]]", r"\s")     # Python re için POSIX sınıfı çevrilir
 chk("pgrep deseni: ana profil eşleşir, slot dizini EŞLEŞMEZ", re.search(desen, f"chrome --user-data-dir={B.LIVE_APP_PROFILE_DIR} --x")
     and not re.search(desen, f"chrome --user-data-dir={B.LIVE_APP_PROFILE_DIR}s/slot-1 --x"))
 gi = Path(B.__file__).parent.parent.joinpath(".gitignore").read_text(encoding="utf-8")
@@ -174,6 +177,57 @@ src_p = Path(B.__file__).read_text(encoding="utf-8")
 chk("prompt: oturum açıksa giriş atla + logout yok", "Oturum ZATEN AÇIKSA" in src_p and "asla çıkış (logout) yapma" in src_p)
 src_app = Path(B.__file__).parent.parent.joinpath("app.py").read_text(encoding="utf-8")
 chk("status: oturum alanı", '"oturum": _oturum_durumu_guvenli()' in src_app)
+
+print("7) gerçek pgrep / atomik kilit / Preferences / slot sızıntısı / bırakırken Chrome kapatma")
+hedef = tmp / "pgrep-ana"
+tasiyan = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(20)", f"--user-data-dir={hedef}"])
+try:
+    time.sleep(0.4)
+    r1 = subprocess.run(B._pgrep_komutu(hedef), capture_output=True, text=True, timeout=5)
+    r2 = subprocess.run(B._pgrep_komutu(tmp / "pgrep-an"), capture_output=True, text=True, timeout=5)   # önek — eşleşmemeli
+    chk("gerçek pgrep: profili taşıyan süreç bulunur (exit 0), önek/alt-dizin eşleşmez (exit 1, 'illegal option' exit 2 DEĞİL)",
+        str(tasiyan.pid) in r1.stdout.split() and r1.returncode == 0 and r2.returncode == 1 and not r2.stdout.strip(),
+        (r1.returncode, r1.stdout, r1.stderr, r2.returncode, r2.stderr))
+finally:
+    tasiyan.kill()
+B._SLOT_SAHIPLI.clear()
+for f in B.LIVE_APP_PROFILE_HAVUZ.glob("slot-*.lock"):
+    f.unlink()
+genc = B.LIVE_APP_PROFILE_HAVUZ / "slot-1.lock"
+genc.write_text("")                                   # pid'siz ama TAZE: başka süreç tam o anda yazıyor olabilir
+s = B._slot_al(bekle_sn=0)
+chk("pid'siz GENÇ (<5 sn) kilit tutuluyor sayılır → slot-2", s and s[0] == 2, s)
+B._slot_birak(s[0])
+_eski_ts = time.time() - 30
+os.utime(genc, (_eski_ts, _eski_ts))
+s = B._slot_al(bekle_sn=0)
+chk("pid'siz ESKİ boş kilit bayat → slot-1 devralınır, pid ATOMİK yazılı", s and s[0] == 1 and genc.read_text().strip() == str(os.getpid()))
+B._slot_birak(1)
+chk("geçici kilit dosyası kalmaz", not list(B.LIVE_APP_PROFILE_HAVUZ.glob(".slot-*.tmp")) and not genc.exists())
+pref_slot = B.LIVE_APP_PROFILE_HAVUZ / "slot-5"
+(pref_slot / "Default").mkdir(parents=True, exist_ok=True)
+(pref_slot / "Default" / "Preferences").write_text("{}")
+_ileri2 = time.time() + 300
+os.utime(pref_slot / "Default" / "Preferences", (_ileri2, _ileri2))
+chk("yalnız Preferences yeni → 'giriş yapıldı' sayılmaz (mtime 0, geri yazım YOK)",
+    B._oturum_mtime(pref_slot) == 0 and B._slot_oturum_geri_yaz(pref_slot, 5) is False)
+chk("flock dosyası havuzda", (B.LIVE_APP_PROFILE_HAVUZ / ".oturum.lock").exists())
+_orj_kop = B._slot_oturum_kopyala
+B._slot_oturum_kopyala = lambda d: (_ for _ in ()).throw(OSError("disk dolu"))
+try:
+    B._slot_al(bekle_sn=0)
+    chk("kopyalama hatası yükselir", False)
+except OSError:
+    chk("kopyalama hatası yükselir", True)
+B._slot_oturum_kopyala = _orj_kop
+chk("alım sonrası hata → slot SIZMAZ (kilit yok, sahipli boş)", not B._SLOT_SAHIPLI and B.slot_durumu()["bos"] == 3, B.slot_durumu())
+kapatilan: list = []
+B._profil_sureclerini_kapat = lambda profil: kapatilan.append(profil) or 0
+s = B._slot_al(bekle_sn=0)
+kapatilan.clear()
+B._slot_birak(s[0])
+chk("_slot_birak: geri yazımdan ÖNCE slot Chrome'u kapatılır", bool(kapatilan) and kapatilan[0].name == f"slot-{s[0]}", kapatilan)
+B._profil_sureclerini_kapat = lambda profil: 0
 
 print()
 if _hata:

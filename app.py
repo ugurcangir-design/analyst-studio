@@ -8,6 +8,7 @@ Analyst Studio — Uğur Cangir tarafından geliştirilmiştir.
 import os
 import re
 import sys
+import html
 import json
 import time
 import signal
@@ -25,7 +26,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify, render_template, abort, session, redirect, url_for, send_file
+from flask import Flask, request, jsonify, render_template, abort, session, redirect, url_for, send_file, g
 from werkzeug.security import generate_password_hash, check_password_hash
 from skills.atlassian import (
     env_oku as _env_oku,
@@ -261,9 +262,10 @@ def _kimlik_tam_mi() -> bool:
 _KIMLIK_GEREKLI_ONEKLER = (
     "/api/upload", "/api/run", "/api/rerun", "/api/delta-analiz",
     "/api/mockup/generate", "/api/jira/gorev", "/api/jira/fe-be",
-    "/api/jira/hierarchy", "/api/approve-teknik", "/api/jira-kopru",
+    "/api/jira/hierarchy", "/api/approve", "/api/jira-kopru",          # /api/approve: hem onay (teknik analizi başlatır) hem approve-teknik
     "/api/sorular/uygula", "/api/adim/duzelt", "/api/geri-don",
     "/api/sohbet", "/api/ornekler", "/api/uat-senkron",
+    "/api/revizyon", "/api/mockup", "/api/live-app/giris-test", "/api/confluence/publish",   # AI/agent başlatan diğer mutating uçlar
 )
 
 
@@ -351,15 +353,15 @@ GORUNURLUK_PATH = BASE_DIR / "gorunurluk.json"
 # id = nav-item / element id (UI gizleme) · endpoints = sunucu tarafı engellenen ön ekler
 GIZLENEBILIR_KATALOG = [
     {"id": "delta",           "ad": "Delta / CR Analizi",   "grup": "Analiz",   "aciklama": "Mevcut teknik analiz üzerine değişiklik isteği", "endpoints": ["/api/delta-analiz"]},
-    {"id": "brd",             "ad": "BRD Analizi",          "grup": "Analiz",   "aciklama": "BRD → Kapsam akışı", "endpoints": ["/api/run/brd", "/api/brd"]},
-    {"id": "revizyon",        "ad": "Revizyon",             "grup": "Çıktılar", "aciklama": "Sohbetle bölüm-hedefli düzeltme + onay", "endpoints": ["/api/revizyon"]},
+    {"id": "brd",             "ad": "BRD Analizi",          "grup": "Analiz",   "aciklama": "BRD → Kapsam akışı", "endpoints": ["/api/run?pipeline=brd", "/api/upload-revised-brd", "/api/skip-kapsam"]},
+    {"id": "revizyon",        "ad": "Revizyon",             "grup": "Çıktılar", "aciklama": "Sohbetle bölüm-hedefli düzeltme + onay", "endpoints": ["/api/revizyon", "/api/adim/duzelt"]},
     {"id": "history",         "ad": "Geçmiş",               "grup": "Çıktılar", "aciklama": "Önceki oturum arşivi", "endpoints": ["/api/history"]},
     {"id": "jira-gorevler",   "ad": "Task Analizi",         "grup": "Jira",     "aciklama": "Task çekme / görev analizi / güncelleme", "endpoints": ["/api/jira/gorev"]},
-    {"id": "backlog-senkron", "ad": "UAT Mutabakat",        "grup": "Jira",     "aciklama": "UAT ↔ hedef board karşılaştırma", "endpoints": ["/api/backlog"]},
+    {"id": "backlog-senkron", "ad": "UAT Mutabakat",        "grup": "Jira",     "aciklama": "UAT ↔ hedef board karşılaştırma", "endpoints": ["/api/backlog", "/api/uat-senkron"]},
     {"id": "kopru",           "ad": "Jira Köprüsü",         "grup": "Jira",     "aciklama": "Jira'yı web-chat gibi kullan (analiz/cevap/düzelt). Bridge self-scope ile kendi kimliğine kilitli.", "endpoints": ["/api/jira-kopru"]},
     {"id": "referanslar",     "ad": "Referanslar",          "grup": "Kaynaklar","aciklama": "Confluence/Jira kaynak senkronu", "endpoints": ["/api/sources/sync"]},
     {"id": "kod",             "ad": "Kod Kaynağı",          "grup": "Kaynaklar","aciklama": "Salt-okuma repo/dosya tarama (analiz bağlamı). Config zaten owner-only.", "endpoints": ["/api/kod"]},
-    {"id": "btn-mockup-onay", "ad": "Prototip üretme",      "grup": "Aksiyon",  "aciklama": "Süreç analizinden HTML prototip (Chrome MCP)", "endpoints": ["/api/mockup/generate"]},
+    {"id": "btn-mockup-onay", "ad": "Prototip üretme",      "grup": "Aksiyon",  "aciklama": "Süreç analizinden HTML prototip (Chrome MCP)", "endpoints": ["/api/mockup/generate", "/api/mockup/duzelt"]},
     {"id": "conf-publish-row","ad": "Confluence'a yayınla", "grup": "Aksiyon",  "aciklama": "Çıktıyı Confluence sayfası olarak yaz", "endpoints": ["/api/confluence/publish"]},
     {"id": "prompts",         "ad": "Sistem Promptları",    "grup": "Yönetim",  "aciklama": "Kalıcı prompt düzenleme (Yönetim grubu zaten owner-only)", "endpoints": ["/api/prompts"]},
 ]
@@ -514,6 +516,23 @@ def _etkin_gizli() -> list[str]:
     return sorted(hidden)
 
 
+def _endpoint_eslesir(desen: str) -> bool:
+    """Katalog deseni: düz önek ya da `yol?anahtar=deger` (POST JSON gövdesindeki alanla eşleşir — ör. BRD akışı
+    `/api/run` üzerinden `{"pipeline":"brd"}` ile başlar; eski katalog var olmayan `/api/run/brd`'yi listeliyordu → gizleme
+    sunucuda hiç çalışmıyordu)."""
+    if "?" not in desen:
+        return request.path.startswith(desen)
+    yol, kv = desen.split("?", 1)
+    if request.path != yol or "=" not in kv:
+        return False
+    k, v = kv.split("=", 1)
+    try:
+        d = request.get_json(silent=True) or {}
+    except Exception:
+        d = {}
+    return str(d.get(k, request.args.get(k, ""))).strip().lower() == v.lower()
+
+
 @app.before_request
 def gorunurluk_kontrol():
     """Analist için gizlenen ekranların endpoint'lerini sunucu tarafında engeller
@@ -524,7 +543,7 @@ def gorunurluk_kontrol():
     if not gizli:
         return None
     for k in GIZLENEBILIR_KATALOG:
-        if k["id"] in gizli and any(request.path.startswith(p) for p in k["endpoints"]):
+        if k["id"] in gizli and any(_endpoint_eslesir(p) for p in k["endpoints"]):
             return jsonify({"error": "Bu işlem sizin için kapalı (owner tarafından gizlendi)", "gizli": k["id"]}), 403
     return None
 
@@ -565,7 +584,10 @@ def _telemetri_olay(olay: str, durum: str, sure_ms: int,
     `token_bas`: _token_bas() ile bu thread'de capture başlatıldıysa True; biriken token olaya eklenir."""
     try:
         from skills import telemetri
-        analist = session.get("username") or None  # None → telemetri analist.json/env'e düşer
+        from flask import has_request_context
+        # Arka plan thread'lerinde (Task işi, sohbet üretimi, mockup) request bağlamı YOK → session erişimi RuntimeError
+        # fırlatıyor ve dış except TÜM olayı yutuyordu (denetim 2026-10-20: Task Analizi token/kalite verisi hiç yazılmadı).
+        analist = (session.get("username") or None) if has_request_context() else None  # None → analist.json/env
         token = None
         if token_bas:
             try:
@@ -626,6 +648,22 @@ CSRF_MUAF = {
 }
 
 
+_YEREL_HOSTLAR = {"localhost", "127.0.0.1", "::1", "[::1]"}
+
+
+def _host_izinli(host: str) -> bool:
+    try:
+        h = (host or "").split("@")[-1]
+        h = h.rsplit(":", 1)[0] if (h.count(":") == 1 or h.startswith("[")) else h
+        h = h.strip("[]").lower()
+        if h in _YEREL_HOSTLAR or h.endswith(".localhost"):
+            return True
+        bind = (os.getenv("HOST") or "127.0.0.1").strip()
+        return bind not in ("127.0.0.1", "localhost", "::1")   # LAN'a bilerek açıldıysa her host kabul
+    except Exception:
+        return True
+
+
 @app.before_request
 def csrf_kontrol():
     """State-değiştiren isteklerin same-origin'den geldiğini doğrular.
@@ -633,9 +671,17 @@ def csrf_kontrol():
     Cross-site bir sayfa, kullanıcı login iken POST atmaya çalışırsa
     Origin/Referer header'ı kendi domain'i olur — engelleriz.
     """
+    # Host başlığı allowlist'i (DNS rebinding): yerel kurulumda yalnız localhost/127.0.0.1/[::1]; LAN'a bilerek açılmışsa
+    # (HOST≠loopback) atlanır. Sahte Host'la gelen istek same-origin kontrolünü de geçemez (host_url Host'tan türer).
+    if not _host_izinli(request.host):
+        return jsonify({"error": "Geçersiz Host başlığı"}), 403
     if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
         return None
     if request.path in CSRF_MUAF:
+        if request.path == "/api/bye":
+            _o = request.headers.get("Origin", "")
+            if _o and _o.rstrip("/") != request.host_url.rstrip("/"):
+                return jsonify({"ok": False}), 403   # başka siteden kapanış sinyali
         return None
     if request.path.startswith("/static/"):
         return None
@@ -996,11 +1042,22 @@ def _arka_plan_isleri_calisiyor() -> str | None:
         store = globals().get(ad)
         if isinstance(store, dict):
             try:
-                if any((j or {}).get("durum") == "calisiyor" for j in list(store.values())):
+                simdi = time.time()
+                for j in list(store.values()):
+                    j = j or {}
+                    if j.get("durum") != "calisiyor":
+                        continue
+                    # Yaş sınırı: worker try/finally dışında düşüp 'calisiyor' kalan iş restart/güncellemeyi sonsuza dek bloklamasın
+                    bas = float(j.get("olusturuldu") or j.get("zaman") or j.get("ts") or j.get("baslangic") or simdi)
+                    if simdi - bas > _ARKA_PLAN_IS_AZAMI_SN:
+                        continue
                     return etiket + " sürüyor"
             except Exception:
                 pass
     return None
+
+
+_ARKA_PLAN_IS_AZAMI_SN = int(os.getenv("ARKA_PLAN_IS_AZAMI_SN", str(2 * 3600)))
 
 
 def _kapanmayi_ertele(gecen: float, sebep_onek: str) -> str | None:
@@ -1097,11 +1154,18 @@ def _history_kaydet() -> None:
     logger.info(f"History kaydedildi: {ts}")
 
 
-def _surec_calistir(mod: str) -> None:
+def _surec_calistir(mod: str) -> bool:
+    """run.py alt sürecini başlatır. Dönen: başlatıldı mı. Önceki alt süreç hâlâ kapanıyorsa (durumu yazdıktan sonra
+    telemetri POST'u ~8 sn sürebiliyor) 15 sn'ye kadar beklenir; yine canlıysa False → çağıran 409 döner (eskiden sessizce
+    dönüyordu ve onay kayboluyordu: durum TEKNIK_CALISIYOR'a geçmiş ama süreç başlamamış → stale kurtarma IDLE'a çekiyordu)."""
     global _process
     with _process_lock:
         if _process and _process.poll() is None:
-            return
+            try:
+                _process.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                logger.warning("Önceki alt süreç hâlâ çalışıyor — %s başlatılamadı.", mod)
+                return False
         cmd = [sys.executable, str(BASE_DIR / "run.py"), mod]
         # Telemetri: analist kimliğini subprocess'e geçir (session > ANALYST_NAME env).
         _env = os.environ.copy()
@@ -1128,6 +1192,7 @@ def _surec_calistir(mod: str) -> None:
 
     def _bekle():
         global _process, _durduruldu
+        p = _process   # YEREL referans: reset+yeni koşuda eski bekleyici yeni süreci okumasın/öldürmesin
         hata_mesaji: str | None = None
         # Zaman aşımı MOD-BAZLI: teknik/brd analizi ÇOK AŞAMALIDIR (Aşama 1 teknik +
         # canlı-uygulama MCP gezinme, Aşama 2 açık sorular = 2 ayrı claude çağrısı,
@@ -1138,18 +1203,27 @@ def _surec_calistir(mod: str) -> None:
         # asılı kalmasını yine engeller.
         _timeout = 2700 if mod in ("teknik_analiz", "brd_analizi") else 1800
         try:
-            out, _ = _process.communicate(timeout=_timeout)
+            out, _ = p.communicate(timeout=_timeout)
             if out:
                 logger.info(f"[{mod}] çıktı:\n{out}")
-            if _process.returncode != 0:
-                hata_mesaji = f"Alt süreç hata kodu {_process.returncode} ile sonlandı."
+            if p.returncode != 0:
+                hata_mesaji = f"Alt süreç hata kodu {p.returncode} ile sonlandı."
                 logger.error(f"[{mod}] {hata_mesaji}")
         except subprocess.TimeoutExpired:
             try:
-                _process.kill()
-                _process.wait(timeout=5)
+                # Önce SIGTERM (process grubu) → run.py'nin SIGTERM handler'ı claude çocuğunu kapatır; sonra SIGKILL
+                os.killpg(os.getpgid(p.pid), signal.SIGTERM)
+                try:
+                    p.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+                    p.wait(timeout=5)
             except Exception:
-                pass
+                try:
+                    p.kill()
+                    p.wait(timeout=5)
+                except Exception:
+                    pass
             hata_mesaji = f"Zaman aşımı ({_timeout // 60} dakika). Alt süreç sonlandırıldı."
             logger.error(f"[{mod}] {hata_mesaji}")
             # Telemetri: subprocess öldürüldüğü için run.py emit edemedi — parent yazar.
@@ -1192,6 +1266,7 @@ def _surec_calistir(mod: str) -> None:
                 logger.exception(f"[{mod}] Workflow temizleme başarısız.")
 
     threading.Thread(target=_bekle, daemon=True).start()
+    return True
 
 
 # ─── Routes ──────────────────────────────────────────────────────────────────
@@ -1264,7 +1339,9 @@ def _yeniden_baslat_zamanla():
     komutla başlar; böylece port boşaldıktan sonra bind eder."""
     komut = [sys.executable, os.path.abspath(sys.argv[0]), *sys.argv[1:]]
     boot_log = str(BASE_DIR / "logs" / "son_restart.log")
-    kabuk = f"sleep 1.5; exec {shlex.join(komut)} >> {shlex.quote(boot_log)} 2>&1"
+    # '>' (truncate): 'son_restart' = SON yeniden başlatmanın logu. '>>' ile her heartbeat satırı sonsuza dek birikiyordu
+    # (7.9 MB'a ulaştı — rotasyonsuz). Ayrıntılı geçmiş zaten rotasyonlu logs/app.log'da.
+    kabuk = f"sleep 1.5; exec {shlex.join(komut)} > {shlex.quote(boot_log)} 2>&1"
 
     def _calis():
         time.sleep(1)   # yanıtın flush olması için
@@ -1279,6 +1356,7 @@ def _yeniden_baslat_zamanla():
 
 
 @app.route("/api/restart", methods=["POST"])
+@admin_gerekli
 def yeniden_baslat():
     """Kod çekmeden (git pull yapmadan) süreci KOŞULSUZ yeniden başlatır.
     Yerelde düzenlenen backend değişiklikleri 'Güncelle'de 'zaten güncel' çıkıp
@@ -1313,38 +1391,27 @@ def cli_usage():
 
 
 @app.route("/api/update", methods=["POST"])
+@admin_gerekli
 def guncelle():
+    """Elle 'Güncelle': `/api/guncelleme/simdi` ile AYNI güvenli gövde — iş sürerken 409, güncelleme kilidi, ıraksama
+    engeli; pip hatası restart'ı düşürmez. (Eskiden bağımsız kopyaydı: iş ortasında pull+os._exit yapabiliyordu.)"""
     if _auth_aktif_mi() and not _giris_yapildi_mi():
         return jsonify({"error": "Yetkisiz"}), 403
+    neden = _mesgul_mu()
+    if neden:
+        return jsonify({"ok": False, "mesaj": f"Şu an {neden}; bitince tekrar deneyin."}), 409
     try:
-        # git pull — EXPLICIT origin + branch (upstream takibine BAĞIMLI DEĞİL; takip
-        # bilgisi silinse bile "no tracking information" hatası vermez).
-        _dal = (subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=BASE_DIR,
-                               capture_output=True, text=True, timeout=15).stdout or "").strip() or "main"
-        pull = subprocess.run(
-            ["git", "pull", "--ff-only", "origin", _dal], cwd=BASE_DIR, capture_output=True, text=True, timeout=60
-        )
-        cikti = (pull.stdout + pull.stderr).strip()
-
-        if "Already up to date" in cikti or "Zaten güncel" in cikti:
-            return jsonify({"ok": True, "guncelleme_var": False, "mesaj": "Zaten en güncel sürümdesiniz."})
-
-        # Bağımlılıklar değiştiyse güncelle
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-r", str(BASE_DIR / "requirements.txt"), "-q"],
-            capture_output=True, timeout=120
-        )
-
-        logger.info("Güncelleme tamamlandı, uygulama yeniden başlatılıyor...")
-        _denetim("guncelleme", "git pull", ozet=cikti[:200])
-        _yeniden_baslat_zamanla()
-        return jsonify({"ok": True, "guncelleme_var": True, "mesaj": cikti, "yeniden_basliyor": True})
-
-    except subprocess.TimeoutExpired:
-        return jsonify({"ok": False, "mesaj": "Zaman aşımı — ağ bağlantısını kontrol edin."}), 500
+        d = _guncelleme_kontrol()
     except Exception as e:
-        return jsonify({"ok": False, "mesaj": str(e)}), 500
-
+        return jsonify({"ok": False, "mesaj": f"Güncelleme kontrolü başarısız: {e}"}), 500
+    if d.get("engel"):
+        return jsonify({"ok": False, "mesaj": d["engel"], "iraksama": bool(d.get("iraksama"))}), 409
+    if not d.get("behind"):
+        return jsonify({"ok": True, "guncelleme_var": False, "mesaj": "Zaten en güncel sürümdesiniz."})
+    ok, mesaj = _guncelleme_uygula("manuel")
+    if not ok:
+        return jsonify({"ok": False, "mesaj": mesaj}), 500
+    return jsonify({"ok": True, "guncelleme_var": True, "mesaj": mesaj, "yeniden_basliyor": True})
 
 @app.route("/api/shutdown", methods=["POST"])
 def shutdown():
@@ -1685,7 +1752,12 @@ def approve():
         return jsonify({"error": str(e)}), 409
 
     _ornek_yakala("surec", "surec-analizi.md")   # onaylı süreç analizi → few-shot örnek
-    _surec_calistir("teknik_analiz")
+    if not _surec_calistir("teknik_analiz"):
+        try:
+            wf.surec_adimina_geri_don()   # durumu onay-bekliyor'a geri al → analist tekrar onaylar
+        except Exception:
+            pass
+        return jsonify({"error": "Önceki analiz süreci hâlâ kapanıyor — birkaç saniye sonra tekrar onaylayın."}), 409
     logger.info("Analist onayı verildi.")
     return jsonify({"ok": True, "durum": state["durum"]})
 
@@ -1822,7 +1894,9 @@ def output_dosyasi(dosya_adi: str):
         return jsonify({"error": "Dosya henüz oluşturulmadı"}), 404
     icerik = yol.read_text(encoding="utf-8")
     if dosya_adi.endswith(".html"):
-        return icerik, 200, {"Content-Type": "text/html; charset=utf-8"}
+        # AI üretimi HTML doğrudan açılırsa uygulama origin'inde script çalıştırmasın (UI zaten sandbox iframe kullanır)
+        return icerik, 200, {"Content-Type": "text/html; charset=utf-8",
+                             "Content-Security-Policy": "sandbox allow-scripts allow-forms"}
     return icerik, 200, {"Content-Type": "text/markdown; charset=utf-8"}
 
 
@@ -1891,6 +1965,8 @@ def save_output():
     data = request.get_json(silent=True) or {}
     dosya_adi = data.get("dosya", "")
     icerik = data.get("icerik", "")
+    if not isinstance(icerik, str):
+        return jsonify({"ok": False, "error": "icerik metin olmalı"}), 400
 
     if dosya_adi not in IZIN_VERILEN_CIKTILAR:
         return jsonify({"error": "Geçersiz dosya adı"}), 400
@@ -1912,32 +1988,60 @@ def rerun():
     """
     data = request.get_json(silent=True) or {}
     dosya_adi = data.get("dosya", "")
-    duzeltme = data.get("duzeltme", "").strip()
+    duzeltme = str(data.get("duzeltme") or "").strip()
 
     if dosya_adi not in IZIN_VERILEN_CIKTILAR:
         return jsonify({"error": "Geçersiz dosya adı"}), 400
     if not duzeltme:
         return jsonify({"error": "Düzeltme notu boş"}), 400
 
+    import workflow as _wf
+    if _wf.calisiyor_mu():
+        return jsonify({"error": "Analiz çalışıyor — aynı çıktı dosyasını yeniden üretmek için bitmesini bekleyin."}), 409
     if not _rerun_lock.acquire(blocking=False):
         return jsonify({"error": "Başka bir revize işlemi devam ediyor"}), 409
 
-    # Düzeltme notunu geçici dosyaya yaz
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as tmp:
-        tmp.write(duzeltme)
-        tmp_yol = tmp.name
+    # Düzeltme notunu geçici dosyaya yaz (hata olursa kilit SIZMASIN)
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as tmp:
+            tmp.write(duzeltme)
+            tmp_yol = tmp.name
+    except Exception as e:
+        _rerun_lock.release()
+        return jsonify({"error": f"Geçici dosya yazılamadı: {e}"}), 500
+    _rerun_durum[dosya_adi] = {"calisiyor": True, "hata": None, "bas": time.time(), "bitti": None}
 
     def _calistir():
+        proc = None
         try:
             cmd = [sys.executable, str(BASE_DIR / "run.py"), "yeniden_calistir", dosya_adi, tmp_yol]
-            proc = subprocess.run(cmd, cwd=str(BASE_DIR), capture_output=True, text=True, timeout=300)
+            # Popen + kendi oturumu: zaman aşımında process GRUBU (run.py + claude çocuğu) öldürülür; eski
+            # subprocess.run(timeout=300) yalnız run.py'yi öldürüyor, claude token yakmaya devam ediyordu; 300 sn tek
+            # CLI çağrısının (1200 sn) altındaydı.
+            proc = subprocess.Popen(cmd, cwd=str(BASE_DIR), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                    text=True, start_new_session=True)
+            try:
+                out, _ = proc.communicate(timeout=_RERUN_TIMEOUT)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                    proc.wait(timeout=10)
+                except Exception:
+                    try:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    except Exception:
+                        pass
+                raise RuntimeError(f"Zaman aşımı ({_RERUN_TIMEOUT // 60} dk)")
             if proc.returncode != 0:
-                logger.error(f"rerun hatası: {proc.stderr}")
+                logger.error(f"rerun hatası: {(out or '')[-800:]}")
+                _rerun_durum[dosya_adi]["hata"] = f"Alt süreç hata kodu {proc.returncode}"
             else:
                 logger.info(f"rerun tamamlandı: {dosya_adi}")
         except Exception as e:
             logger.error(f"rerun exception: {e}")
+            _rerun_durum[dosya_adi]["hata"] = str(e)[:300]
         finally:
+            _rerun_durum[dosya_adi].update(calisiyor=False, bitti=time.time())
             try:
                 os.unlink(tmp_yol)
             except Exception:
@@ -1950,15 +2054,21 @@ def rerun():
     return jsonify({"ok": True, "dosya": dosya_adi})
 
 
+_rerun_durum: dict = {}     # dosya → {calisiyor, hata, bas, bitti} (UI hatayı görsün; eskiden sonsuz bekliyordu)
+_RERUN_TIMEOUT = int(os.getenv("RERUN_TIMEOUT", "1800"))
+
+
 @app.route("/api/rerun-status/<dosya_adi>")
 def rerun_status(dosya_adi: str):
-    """Yeniden çalıştırılan dosyanın son güncelleme zamanını döndür."""
+    """Yeniden çalıştırılan dosyanın son güncelleme zamanı + iş durumu (calisiyor/hata)."""
     if dosya_adi not in IZIN_VERILEN_CIKTILAR:
         abort(400)
     yol = OUTPUT_DIR / dosya_adi
+    d = _rerun_durum.get(dosya_adi) or {}
+    ek = {"calisiyor": bool(d.get("calisiyor")), "hata": d.get("hata")}
     if not yol.exists():
-        return jsonify({"var": False})
-    return jsonify({"var": True, "guncelleme": yol.stat().st_mtime})
+        return jsonify({"var": False, **ek})
+    return jsonify({"var": True, "guncelleme": yol.stat().st_mtime, **ek})
 
 
 # ─── Revizyon Oturumu — v2 Faz 1 (sohbetle bölüm-hedefli düzeltme + onay) ─────
@@ -2065,9 +2175,6 @@ def adim_duzelt():
     Arka planda çalışır; ilerleme GET /api/revizyon/<dosya> (`calisiyor`) ile izlenir."""
     data = request.get_json(silent=True) or {}
     dosya = (data.get("dosya") or "").strip()
-    if dosya:   # kalite vekili: analist bu adımı düzeltti (düzeltme oranı) — 0 token, fail-safe
-        _olay = {"surec-analizi.md": "surec_analizi", "teknik-analiz.md": "teknik_analiz"}.get(dosya, "brd_analizi")
-        _telemetri_olay(_olay, "ok", 0, baglam={"islem": "duzelt", "dokuman": dosya})
     talimat = (data.get("talimat") or "").strip()
     if dosya not in IZIN_VERILEN_CIKTILAR or not dosya.endswith(".md"):
         return jsonify({"ok": False, "error": "Geçersiz dosya"}), 400
@@ -2479,6 +2586,27 @@ _guncelleme_durumu: dict = {
 }
 
 
+_UZUN_ISTEK_ONEKLERI = ("/api/delta-analiz", "/api/mockup/generate", "/api/mockup/duzelt", "/api/jira/gorev/analiz",
+                        "/api/jira/gorev/duzelt", "/api/sohbet/mesaj", "/api/jira/hierarchy/preview", "/api/revizyon/")
+_uzun_istek_sayac = {"n": 0}
+_uzun_istek_lock = threading.Lock()
+
+
+@app.before_request
+def _uzun_istek_bas():
+    if request.method == "POST" and request.path.startswith(_UZUN_ISTEK_ONEKLERI):
+        g._uzun_istek = True
+        with _uzun_istek_lock:
+            _uzun_istek_sayac["n"] += 1
+
+
+@app.teardown_request
+def _uzun_istek_bit(_exc=None):
+    if getattr(g, "_uzun_istek", False):
+        with _uzun_istek_lock:
+            _uzun_istek_sayac["n"] = max(0, _uzun_istek_sayac["n"] - 1)
+
+
 def _mesgul_mu() -> str | None:
     """Uygulama şu an iş yapıyor mu? Dönen metin = bekleme nedeni; None = boş."""
     try:
@@ -2487,6 +2615,8 @@ def _mesgul_mu() -> str | None:
             return "analiz sürüyor"
     except Exception:
         pass
+    if _uzun_istek_sayac["n"] > 0:
+        return "uzun süren bir istek (analiz/düzeltme) sürüyor"
     if _rerun_lock.locked():
         return "yeniden üretim sürüyor"
     if _revizyon_lock.locked():
@@ -2579,13 +2709,25 @@ def _guncelleme_uygula(kaynak: str = "otomatik") -> tuple[bool, str]:
         if not pull["ok"]:
             _guncelleme_durumu.update(uygulaniyor=False, hata=cikti[:300])
             return False, cikti[:300]
-        subprocess.run([sys.executable, "-m", "pip", "install", "-r", str(BASE_DIR / "requirements.txt"), "-q"],
-                       capture_output=True, timeout=180)
+        _pip_kur_sessiz()   # pip hatası/zaman aşımı güncellemeyi DÜŞÜRMEZ (pull zaten yapıldı; eski kodla kalmak daha kötü)
         logger.info("Otomatik güncelleme uygulandı (%s): %s", kaynak, cikti[:120])
         _yeniden_baslat_zamanla()
         return True, cikti[:300]
+    except Exception as e:
+        _guncelleme_durumu.update(hata=str(e)[:300])
+        return False, str(e)[:300]
     finally:
+        _guncelleme_durumu["uygulaniyor"] = False
         _guncelleme_lock.release()
+
+
+def _pip_kur_sessiz() -> None:
+    """requirements kurulumu — best-effort: zaman aşımı/hata loglanır, akış (restart) sürer."""
+    try:
+        subprocess.run([sys.executable, "-m", "pip", "install", "-r", str(BASE_DIR / "requirements.txt"), "-q"],
+                       capture_output=True, timeout=180)
+    except Exception as e:
+        logger.warning("pip install atlandı (%s) — bağımlılıklar restart sonrası eksik olabilir.", type(e).__name__)
 
 
 def _oto_guncelleme_dongusu() -> None:
@@ -2822,9 +2964,9 @@ def _analiz_bildirim_kontrol() -> None:
     elif ozet.get("hata"):
         anahtar = f"hata:{ozet.get('durum')}"
     else:
-        # çalışan/idle → bildirilecek durum yok; koşu bitince dedup sıfırla (sonraki analize izin)
-        if not ozet.get("calisiyor"):
-            _son_bildirilen_analiz["anahtar"] = None
+        # çalışan/idle → bildirilecek durum yok; dedup'ı burada sıfırla (yeni koşu IDLE'dan geçmese de
+        # HATA→koşu→HATA / ONAY→koşu→ONAY tekrar bildirilsin)
+        _son_bildirilen_analiz["anahtar"] = None
         return
     if _son_bildirilen_analiz["anahtar"] == anahtar:
         return   # bu duruma zaten bildirim gitti (tek sefer)
@@ -3026,7 +3168,7 @@ def jira_kopru_tara():
         ozet = jira_kopru.tek_tur(pencere_dk=int(pencere) if pencere else None)
         return jsonify(ozet)
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 400
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 # ─── Jira Köprüsü — Agent UI kanalı (açık soruları arayüzden cevapla) ─────────
@@ -3047,11 +3189,17 @@ def _kopru_is_calistir(job_id: str) -> None:
         job["durum"] = "bitti" if r.get("ok") else "hata"
         if not r.get("ok"):
             job["hata"] = r.get("error")
-        _kopru_komut_bildir(job["key"], job["komut"], ok=r.get("ok", False), hata=r.get("error"))
+        try:
+            _kopru_komut_bildir(job["key"], job["komut"], ok=r.get("ok", False), hata=r.get("error"))
+        except Exception:
+            pass   # bildirim hatası başarılı işi 'hata' yapmasın
     except Exception as e:
         job["durum"] = "hata"
         job["hata"] = str(e)
-        _kopru_komut_bildir(job.get("key", "?"), job.get("komut", "?"), ok=False, hata=str(e))
+        try:
+            _kopru_komut_bildir(job.get("key", "?"), job.get("komut", "?"), ok=False, hata=str(e))
+        except Exception:
+            pass
 
 
 @app.route("/api/jira-kopru/liste", methods=["GET"])
@@ -3080,7 +3228,8 @@ def jira_kopru_is_baslat():
                                 "sonuc": None, "hata": None, "zaman": time.time()}
         # bellek sınırı: son 24 iş (kilit altında → eşzamanlı iterasyon/pop yarışı yok)
         if len(_kopru_isler) > 24:
-            for eski in sorted(_kopru_isler, key=lambda j: _kopru_isler[j]["zaman"])[:-24]:
+            for eski in [j for j in sorted(_kopru_isler, key=lambda j: _kopru_isler[j]["zaman"])
+                         if _kopru_isler[j].get("durum") != "calisiyor"][:max(0, len(_kopru_isler) - 24)]:
                 _kopru_isler.pop(eski, None)
     threading.Thread(target=_kopru_is_calistir, args=(job_id,), daemon=True, name=f"kopru-{job_id}").start()
     return jsonify({"ok": True, "job_id": job_id})
@@ -3147,6 +3296,7 @@ def guncelleme_durum():
 
 
 @app.route("/api/guncelleme/simdi", methods=["POST"])
+@admin_gerekli
 def guncelleme_simdi():
     """Kullanıcı 'Şimdi güncelle' dedi: iş yoksa hemen uygula (yerel değişiklik engeli yine geçerli)."""
     d = _guncelleme_kontrol(fetch=True)
@@ -3162,6 +3312,7 @@ def guncelleme_simdi():
 
 
 @app.route("/api/guncelleme/sifirla", methods=["POST"])
+@admin_gerekli
 def guncelleme_sifirla():
     """Uzak sürümle EŞİTLE: `git reset --hard origin/<dal>` + restart. Iraksama
     (eski klon + geçmiş yenileme) VE 'sadece geride' durumlarını da kapsar — yerel
@@ -3175,6 +3326,9 @@ def guncelleme_sifirla():
     # Uzaktan farklı bir şey yoksa (ne ıraksama ne geri ne ileri) yapacak iş yok
     if not (d.get("iraksama") or d.get("behind") or d.get("ahead")):
         return jsonify({"ok": False, "error": "Zaten uzak sürümle aynısınız — eşitlemeye gerek yok."}), 409
+    if d.get("ahead") and not d.get("iraksama"):
+        return jsonify({"ok": False, "error": "Push edilmemiş yerel commit var — sıfırlama bunları SİLER. Önce push edin "
+                                               "ya da terminalden bilinçli olarak `git reset --hard origin/<dal>` çalıştırın."}), 409
     neden = _mesgul_mu()
     if neden:
         return jsonify({"ok": False, "error": f"Şu an {neden}; bitince tekrar deneyin."}), 409
@@ -3196,13 +3350,13 @@ def guncelleme_sifirla():
         if not rs["ok"]:
             _guncelleme_durumu.update(uygulaniyor=False, hata=cikti[:300])
             return jsonify({"ok": False, "error": cikti[:300]}), 500
-        subprocess.run([sys.executable, "-m", "pip", "install", "-r", str(BASE_DIR / "requirements.txt"), "-q"],
-                       capture_output=True, timeout=180)
+        _pip_kur_sessiz()
         logger.info("Iraksama sıfırlaması uygulandı → origin/%s: %s", dal, cikti[:120])
         _yeniden_baslat_zamanla()
         return jsonify({"ok": True, "mesaj": f"Uzak sürümle eşitlendi ({dal}). Yeniden başlatılıyor…",
                         "yeniden_basliyor": True})
     finally:
+        _guncelleme_durumu["uygulaniyor"] = False
         _guncelleme_lock.release()
 
 
@@ -3362,6 +3516,11 @@ def analiz_mcp_kaydet():
 
 
 
+def _env_sanit(v) -> str:
+    """`.env` değeri: CR/LF/NUL temizlenir — tek değerle yeni anahtar enjekte edilemesin (denetim 2026-10-20)."""
+    return str(v if v is not None else "").replace("\r", "").replace("\n", "").replace("\x00", "").strip()
+
+
 def _env_yaz(degiskenler: dict) -> None:
     """Mevcut .env'i koru, sadece belirtilen anahtarları güncelle/ekle. Atomik yazım + 0o600."""
     env_yol = BASE_DIR / ".env"
@@ -3374,14 +3533,14 @@ def _env_yaz(degiskenler: dict) -> None:
             if e and not e.startswith("#") and "=" in e:
                 k = e.split("=", 1)[0].strip()
                 if k in degiskenler:
-                    satirlar.append(f"{k}={degiskenler[k]}")
+                    satirlar.append(f"{k}={_env_sanit(degiskenler[k])}")
                     guncellenenler.add(k)
                     continue
             satirlar.append(satir)
 
     for k, v in degiskenler.items():
         if k not in guncellenenler:
-            satirlar.append(f"{k}={v}")
+            satirlar.append(f"{k}={_env_sanit(v)}")
 
     tmp = env_yol.with_suffix(".env.tmp")
     tmp.write_text("\n".join(satirlar) + "\n", encoding="utf-8")
@@ -3838,6 +3997,7 @@ def settings_oku():
 
 
 @app.route("/api/settings", methods=["POST"])
+@admin_gerekli
 def settings_kaydet():
     data = request.get_json(silent=True) or {}
     degisiklikler = {}
@@ -4047,7 +4207,11 @@ def sorular_uygula():
 
     payload = request.get_json(silent=True) or {}
     zorla = bool(payload.get("zorla", False))
-    gruplar = uygulanacak_sorular(zorla=zorla)
+    try:
+        gruplar = uygulanacak_sorular(zorla=zorla)
+    except Exception as e:
+        _sorular_uygula_lock.release()   # kilit sızmasın (yoksa kalıcı 409 + otomatik güncelleme bloke)
+        return jsonify({"ok": False, "error": f"Sorular okunamadı: {e}"}), 500
     if not gruplar:
         _sorular_uygula_lock.release()
         return jsonify({"ok": True, "baslatildi": False,
@@ -4289,7 +4453,7 @@ def reference_delete():
 
     dizin = REFERANS_DIZINLER[kategori]
     hedef = (dizin / yol).resolve()
-    if not str(hedef).startswith(str(dizin.resolve())):
+    if not hedef.is_relative_to(dizin.resolve()):
         abort(400)
     if hedef.exists():
         hedef.unlink()
@@ -4306,7 +4470,7 @@ def reference_content():
         abort(400)
     dizin = REFERANS_DIZINLER[kategori]
     hedef = (dizin / yol).resolve()
-    if not str(hedef).startswith(str(dizin.resolve())):
+    if not hedef.is_relative_to(dizin.resolve()):
         abort(400)
     if not hedef.exists():
         abort(404)
@@ -4488,7 +4652,7 @@ def _referans_sync_calistir(kaynak: str = "elle") -> bool:
 def sources_sync_baslat():
     with _sync_lock:
         if _sync_state["running"]:
-            return jsonify({"ok": False, "error": "Zaten çalışıyor"}), 400
+            return jsonify({"ok": False, "error": "Zaten çalışıyor"}), 409
     threading.Thread(target=_referans_sync_calistir, args=("elle",), daemon=True).start()
     return jsonify({"ok": True})
 
@@ -4894,6 +5058,7 @@ def jira_config_oku():
 
 
 @app.route("/api/jira/config", methods=["POST"])
+@admin_gerekli
 def jira_config_kaydet():
     data = request.get_json(silent=True) or {}
     degisiklikler = {}
@@ -4924,7 +5089,11 @@ def jira_auth_url():
     developer console'a aynı callback URL'i kaydedebilsin."""
     try:
         from jira_auth import auth_url_olustur, REDIRECT_URI
-        url = auth_url_olustur()
+        import jira_auth as _ja
+        _state = _ja.yeni_state() if hasattr(_ja, "yeni_state") else None
+        if _state:
+            session["jira_oauth_state"] = _state
+        url = auth_url_olustur(state=_state) if _state else auth_url_olustur()
         return jsonify({"ok": True, "url": url, "redirect_uri": REDIRECT_URI})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
@@ -4942,13 +5111,19 @@ def jira_callback():
     """Atlassian OAuth callback — code'u token'a çevirir."""
     code = request.args.get("code", "")
     error = request.args.get("error", "")
+    # OAuth state doğrulaması (login-CSRF): auth-url üretirken session'a yazılan state ile eşleşmeli
+    _beklenen = session.pop("jira_oauth_state", None)
+    import jira_auth as _ja
+    _dogru = _ja.state_dogrula(_beklenen, request.args.get("state", "")) if hasattr(_ja, "state_dogrula") else (request.args.get("state", "") == _beklenen)
+    if _beklenen and not _dogru and not error:
+        error = "OAuth state eşleşmedi — bağlantı isteği bu oturumdan başlatılmamış (yeniden deneyin)."
 
     if error:
         logger.error(f"Jira OAuth hatası: {error}")
         _geri = request.host_url.rstrip("/")
         return f"""<!DOCTYPE html><html><head><meta charset=UTF-8></head><body style='font-family:sans-serif;text-align:center;padding:50px;background:#0f1117;color:#e2e8f0'>
 <h2 style='color:#ef4444'>Yetkilendirme Başarısız</h2>
-<p>{error}</p>
+<p>{html.escape(str(error))}</p>
 <p><a href='{_geri}' style='color:#6366f1'>Uygulamaya Dön</a></p>
 </body></html>"""
 
@@ -4963,7 +5138,7 @@ def jira_callback():
         _geri = request.host_url.rstrip("/")
         return f"""<!DOCTYPE html><html><head><meta charset=UTF-8></head><body style='font-family:sans-serif;text-align:center;padding:50px;background:#0f1117;color:#e2e8f0'>
 <h2 style='color:#22c55e'>Jira Bağlantısı Başarılı!</h2>
-<p>Instance: <strong>{cloud_name}</strong></p>
+<p>Instance: <strong>{html.escape(str(cloud_name))}</strong></p>
 <p style='margin-top:20px'><a href='{_geri}' style='color:#6366f1'>Uygulamaya Dön</a></p>
 <script>setTimeout(()=>window.close(),3000)</script>
 </body></html>"""
@@ -4972,7 +5147,7 @@ def jira_callback():
         _geri = request.host_url.rstrip("/")
         return f"""<!DOCTYPE html><html><head><meta charset=UTF-8></head><body style='font-family:sans-serif;text-align:center;padding:50px;background:#0f1117;color:#e2e8f0'>
 <h2 style='color:#ef4444'>Token Alınamadı</h2>
-<p>{e}</p>
+<p>{html.escape(str(e))}</p>
 <p><a href='{_geri}' style='color:#6366f1'>Uygulamaya Dön</a></p>
 </body></html>"""
 
@@ -5351,15 +5526,35 @@ def _gorev_is_calistir(job_id: str) -> None:
                 # Kota Faz 2: cevaplar mevcut analize HEDEFLİ işlenir (gözlem/RAG/öz-çözümleme tekrarı YOK).
                 # Mevcut analiz yoksa / kapalıysa eski yol: cevaplarla TAM yeniden üretim.
                 from skills.jira_gorevleri import cevap_hedefli_acik, gorev_cevap_uygula
+                sonuc = None
                 if cevap_hedefli_acik() and (adim.get("markdown") or "").strip():
-                    sonuc = gorev_cevap_uygula(gorev, adim.get("markdown", ""), adim.get("cevaplar", ""),
-                                               adim.get("onceki_sorular", ""))
-                else:
+                    try:
+                        sonuc = gorev_cevap_uygula(gorev, adim.get("markdown", ""), adim.get("cevaplar", ""),
+                                                   adim.get("onceki_sorular", ""))
+                    except ValueError as _ve:   # sözleşme: ValueError → tam üretime düş (hata sayma)
+                        logger.warning("Hedefli cevap uygulanamadı (%s): %s — tam üretime düşülüyor", key, _ve)
+                        sonuc = None
+                if sonuc is None:
                     mode = "analiz"
+                    # Tam üretim: ilk analizin BFF raporu önbellekten (yeniden keşif YOK — kota)
+                    try:
+                        from skills import bff_kesif as _bk
+                        from skills.base import gorev_live_app_urls as _glu
+                        _u = _glu()
+                        _rb = _bk.rapor_oku(_u[0], "") if _u else None
+                        if _rb and _rb.get("md") and _bk.taze_mi(_rb):
+                            _bff_blok = _bk.rapor_blogu(_rb)
+                    except Exception:
+                        pass
                     iliskili = []
                     for ik in adim.get("iliskili_keys", []):
                         try:
-                            iliskili.append(gorev_getir(ik))
+                            ik = str(ik).strip()
+                            if not ik or ik.upper() == str(key).upper():
+                                continue
+                            _g = gorev_getir(ik)
+                            if _g:
+                                iliskili.append(_g)
                         except Exception:
                             pass
                     _r2 = gorev_analiz_et(gorev, katman=adim.get("katman", ""), iliskili=iliskili,
@@ -5427,21 +5622,30 @@ def _gorev_is_calistir(job_id: str) -> None:
 
     adimlar = list(enumerate(job["adimlar"]))
     isci = min(_GOREV_PARALEL, len(adimlar)) or 1
-    if isci == 1:
-        for i, adim in adimlar:
-            if job.get("iptal"):
-                break
-            _adim_isle(i, adim)
-    else:
-        with ThreadPoolExecutor(max_workers=isci, thread_name_prefix="gorev") as ex:
-            list(ex.map(lambda ia: _adim_isle(ia[0], ia[1]), adimlar))
+    _worker_hata = None
+    try:
+        if isci == 1:
+            for i, adim in adimlar:
+                if job.get("iptal"):
+                    break
+                _adim_isle(i, adim)
+        else:
+            with ThreadPoolExecutor(max_workers=isci, thread_name_prefix="gorev") as ex:
+                list(ex.map(lambda ia: _adim_isle(ia[0], ia[1]), adimlar))
+    except Exception as e:   # beklenmedik worker hatası iş kaydını 'calisiyor'da BIRAKMASIN (restart/güncelleme bloke olurdu)
+        _worker_hata = str(e)[:300]
+        logger.exception("Görev işi worker hatası (%s)", job_id)
     with _gorev_is_lock:
         if job.get("iptal"):
             if job.get("durum") == "calisiyor":
                 job["durum"] = "durduruldu"
+        elif _worker_hata:
+            job["durum"] = "hata"
+            job["hata"] = _worker_hata
         else:
             job["durum"] = "bitti"
         job["aktif_key"] = None
+        job["aktif_bas"] = None   # /durum adim_gecen_sn bitince artmasın
 
 
 @app.route("/api/jira/gorev/is/baslat", methods=["POST"])
@@ -5453,6 +5657,9 @@ def jira_gorev_is_baslat():
     if not isinstance(adimlar, list) or not adimlar:
         return jsonify({"ok": False, "error": "adimlar gerekli"}), 400
     # Sentetik görevler (İnteraktif Analiz → ekran bazlı EKRAN-n) Jira okumaz → bağlantı şart değil
+    adimlar = [a for a in adimlar if isinstance(a, dict)]
+    if not adimlar:
+        return jsonify({"ok": False, "error": "Geçerli adım yok"}), 400
     if not all(isinstance((a or {}).get("gorev"), dict) and (a.get("gorev") or {}).get("description") for a in adimlar):
         hata = _jira_baglanti_eksik()
         if hata:
@@ -5479,7 +5686,10 @@ def jira_gorev_is_baslat():
         _gorev_isler[job_id] = job
         # Eski işleri buda (bellek)
         if len(_gorev_isler) > _GOREV_IS_LIMIT:
-            for eski in sorted(_gorev_isler, key=lambda j: _gorev_isler[j]["olusturuldu"])[:-_GOREV_IS_LIMIT]:
+            # Yalnız BİTMİŞ işleri düş — koşan iş düşerse /durum 404 (spinner asılı), Durdur çalışmaz, restart kesebilir
+            bitmis = [j for j in sorted(_gorev_isler, key=lambda j: _gorev_isler[j]["olusturuldu"])
+                      if _gorev_isler[j].get("durum") != "calisiyor"]
+            for eski in bitmis[:max(0, len(_gorev_isler) - _GOREV_IS_LIMIT)]:
                 _gorev_isler.pop(eski, None)
     threading.Thread(target=_gorev_is_calistir, args=(job_id,), daemon=True).start()
     return jsonify({"ok": True, "job": job_id, "toplam": len(temiz),
@@ -6074,6 +6284,10 @@ def _sohbet_is_baslat(hedef: str, metin: str = "") -> dict:
             return {"ok": False, "error": "Bir üretim/gözlem zaten sürüyor — bitmesini bekleyin."}
         job_id = f"sohbet-uret-{int(time.time() * 1000)}"
         _sohbet_isler[job_id] = {"durum": "calisiyor", "hedef": hedef, "bas_ts": time.time(), "metin": metin}
+        if len(_sohbet_isler) > 24:   # bellek: yalnız bitmiş işleri düş (koşan iş düşerse worker KeyError alır)
+            for eski in [k for k in sorted(_sohbet_isler, key=lambda k: _sohbet_isler[k].get("bas_ts", 0))
+                         if _sohbet_isler[k].get("durum") != "calisiyor"][:max(0, len(_sohbet_isler) - 24)]:
+                _sohbet_isler.pop(eski, None)
     threading.Thread(target=_sohbet_uret_calistir, args=(job_id, hedef), daemon=True).start()
     return {"ok": True, "job": job_id, "hedef": hedef}
 
@@ -6082,6 +6296,7 @@ def _sohbet_is_baslat(hedef: str, metin: str = "") -> dict:
 # Owner isteri: Task Analizi'nde canlı hedef varsa analiz başlamadan giriş doğrulanır; başarısızsa analiz BAŞLAMAZ;
 # hedef yoksa "gözlemsiz analiz" bilgisiyle başlar. Sonuç imzalı önbellekte (URL/şifre değişince geçersiz).
 _giris_isler: dict = {}
+_giris_lock = threading.Lock()
 
 
 @app.route("/api/live-app/giris-durum", methods=["GET"])
@@ -6114,14 +6329,15 @@ def live_app_giris_test():
         return jsonify({"ok": False, "error": "kapsam gorev|surec olmalı"}), 400
     if not canli_giris.hedef_url(kapsam):
         return jsonify({"ok": False, "error": "Canlı uygulama hedefi tanımlı değil (Bağlam Filtresi)."}), 400
-    for jid, j in _giris_isler.items():
-        if j.get("kapsam") == kapsam and j.get("durum") == "calisiyor":
-            return jsonify({"ok": True, "job": jid, "mevcut": True})
-    job_id = f"giris-{int(time.time() * 1000)}"
-    _giris_isler[job_id] = {"durum": "calisiyor", "kapsam": kapsam, "bas_ts": time.time(), "sonuc": None}
-    for eski in [k for k in list(_giris_isler)[:-12]]:
-        if _giris_isler[eski].get("durum") != "calisiyor":
-            _giris_isler.pop(eski, None)
+    with _giris_lock:   # eşzamanlı POST'ta 'dictionary changed size during iteration' olmasın
+        for jid, j in list(_giris_isler.items()):
+            if j.get("kapsam") == kapsam and j.get("durum") == "calisiyor":
+                return jsonify({"ok": True, "job": jid, "mevcut": True})
+        job_id = f"giris-{int(time.time() * 1000)}"
+        _giris_isler[job_id] = {"durum": "calisiyor", "kapsam": kapsam, "bas_ts": time.time(), "sonuc": None}
+        for eski in [k for k in list(_giris_isler)[:-12]]:
+            if _giris_isler[eski].get("durum") != "calisiyor":
+                _giris_isler.pop(eski, None)
     threading.Thread(target=_giris_is_calistir, args=(job_id, kapsam), daemon=True).start()
     return jsonify({"ok": True, "job": job_id})
 
@@ -6465,6 +6681,7 @@ def mockup_geri_al():
 _gorev_mockup_isler: dict = {}
 _gorev_mockup_lock = threading.Lock()
 _GOREV_MOCKUP_BAK = "_gorev-mockup.bak.html"   # düzelt öncesi yedek (geri-al); serve edilmez
+_GOREV_MOCKUP_META = ".gorev-mockup-meta.json"   # son mockup hangi task/iste için (mevcut uç + UI eşleşmesi)
 
 
 def _gorev_mockup_calistir(job_id: str) -> None:
@@ -6495,6 +6712,12 @@ def _gorev_mockup_calistir(job_id: str) -> None:
                                       job.get("hedef_tarif", ""))
         job["sonuc"] = sonuc
         job["durum"] = "bitti"
+        try:   # hangi task için üretildi → /mockup/mevcut başka task'ın mockup'ını 'bu task'ın' gibi sunmasın
+            (OUTPUT_DIR / _GOREV_MOCKUP_META).write_text(json.dumps({"key": job.get("key") or "", "baslik": job.get("baslik", ""),
+                                                                    "iste": (job.get("iste") or "")[:300], "ts": time.time()},
+                                                                   ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
         _telemetri_olay("mockup", "ok", int((time.time() - _bas) * 1000),
                         model=_model, ai_modu=_ai, token_bas=_tbas)
     except Exception as e:
@@ -6539,6 +6762,7 @@ def gorev_mockup_uret_route():
         "iste": iste[:2000],
         "baslik": (data.get("baslik") or "").strip()[:300],
         "hedef_tarif": (data.get("hedef_tarif") or "").strip()[:500],
+        "key": (data.get("key") or "").strip()[:40],   # hangi task için (mevcut/Jira eşleşmesi)
     })
     return jsonify({"ok": True, "job_id": job_id})
 
@@ -6579,8 +6803,16 @@ def gorev_mockup_mevcut():
     m = OUTPUT_DIR / "gorev-mockup.html"
     if not m.exists():
         return jsonify({"ok": True, "var": False})
+    meta = {}
     try:
-        return jsonify({"ok": True, "var": True, "html": m.read_text(encoding="utf-8", errors="replace")})
+        mp = OUTPUT_DIR / _GOREV_MOCKUP_META
+        if mp.exists():
+            meta = json.loads(mp.read_text(encoding="utf-8"))
+    except Exception:
+        meta = {}
+    try:
+        return jsonify({"ok": True, "var": True, "html": m.read_text(encoding="utf-8", errors="replace"),
+                        "key": meta.get("key") or "", "baslik": meta.get("baslik") or "", "ts": meta.get("ts")})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -6668,7 +6900,7 @@ def gorev_mockup_jiraya():
             attach_ok = False
         site = jira_site_url(cloud_id)
         link = f"{site}/browse/{hedef_key}" if site else ""
-        _telemetri_olay("jira_gonder", "ok" if attach_ok else "error", 0)
+        _telemetri_olay("mockup", "ok" if attach_ok else "error", 0, baglam={"islem": "jira-ek"})
         return jsonify({"ok": True, "key": hedef_key, "yeni_task": yeni_task,
                         "attach_ok": attach_ok, "attach_hata": attach_hata,
                         "eklenenler": eklenenler, "gorsel": ("görsel" in eklenenler),

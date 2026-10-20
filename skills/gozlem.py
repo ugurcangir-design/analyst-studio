@@ -42,8 +42,29 @@ def gecerlilik_sn() -> int:
         return 6 * 3600
 
 
-def _anahtar(canli_blok: str, kapsam: str) -> str:
-    return hashlib.sha1(f"{kapsam}|{(canli_blok or '').strip()}".encode("utf-8")).hexdigest()[:12]
+_ODAK_KC = 2_000               # anahtara giren görev odağı (gorev_ozet) karakteri
+
+
+def _anahtar(canli_blok: str, kapsam: str, gorev_ozet: str = "") -> str:
+    """Önbellek anahtarı = kapsam + canlı blok (URL/hedef) + GÖREV ODAĞI (özetin ilk ~2k karakteri).
+    Odak anahtara girmezse aynı URL'e gelen farklı task'lar birbirinin 6 saatlik raporunu devralırdı
+    (başka ekranın gözlemi 'taze' sayılırdı)."""
+    odak = hashlib.sha1((gorev_ozet or "").strip()[:_ODAK_KC].encode("utf-8")).hexdigest()[:10]
+    return hashlib.sha1(f"{kapsam}|{(canli_blok or '').strip()}|{odak}".encode("utf-8")).hexdigest()[:12]
+
+
+def _durum_bu_cagrinin_mi(durum: dict | None, baslangic: float) -> bool:
+    """`.gozlem-durum.json` bu çağrıdan ÖNCE yazılmışsa (başka bir akışın kalıntısı) bu gözleme ait değildir
+    → yapildi=False say. `zaman` yoksa (eski biçim) dosyaya güvenilir (geri uyum)."""
+    if not durum:
+        return False
+    z = durum.get("zaman")
+    if not z:
+        return True
+    try:
+        return datetime.fromisoformat(str(z)).timestamp() >= baslangic - 1.0
+    except (TypeError, ValueError):
+        return True
 
 
 def _yollar(anahtar: str) -> tuple[Path, Path]:
@@ -114,7 +135,7 @@ def rapor_al(canli_blok: str, kapsam: str, gorev_ozet: str = "", yeniden: bool =
     canli_blok: `canli_uygulama_baglami_hazirla(...)` çıktısı (URL + hedef + giriş + kurallar) — motorun zaten ürettiği blok.
     kapsam: 'gorev' | 'surec' (profil/URL seti). yeniden=False → taze önbellek varsa gözlem YAPILMAZ (cevap turu vb.).
     Dönen: {ok, md, anahtar, ts, yas_sn, yeniden_kullanildi, yapildi(num_turns>1), neden}."""
-    anahtar = _anahtar(canli_blok, kapsam)
+    anahtar = _anahtar(canli_blok, kapsam, gorev_ozet)
     if not (canli_blok or "").strip():
         return {"ok": False, "md": "", "anahtar": anahtar, "neden": "Canlı görev bloğu boş.", "yeniden_kullanildi": False}
     if not yeniden:
@@ -129,6 +150,7 @@ def rapor_al(canli_blok: str, kapsam: str, gorev_ozet: str = "", yeniden: bool =
               {"type": "text", "text": "Gözlemi uygula ve raporu yaz."}]
     ai = _ai or (lambda s, m: _api_cagri(s, m, max_tokens=MAX_TOKENS_COMBINED, thinking=False, onbellek=False,
                                          canli_uygulama_kapsami=kapsam, max_turns=max_turns, katman="yardimci"))
+    baslangic = time.time()      # durum dosyası tazeliği: bu çağrıdan önce yazılmış kalıntı 'yapıldı' sayılmaz
     try:
         yanit = ai(_SISTEM, [{"role": "user", "content": icerik}])
     except Exception as e:
@@ -144,8 +166,11 @@ def rapor_al(canli_blok: str, kapsam: str, gorev_ozet: str = "", yeniden: bool =
     if len(md) > _RAPOR_KC_TAVAN:
         md = md[:_RAPOR_KC_TAVAN] + "\n…(rapor tavana kırpıldı)"
     durum = gozlem_durum_oku() or {}
-    yapildi = bool(durum.get("yapildi", True))
-    ok = yapildi and ("[K: Network" in md or "[K: Canlı UI" in md or "## Aksiyonlar" in md)
+    # yapildi: makine-doğrulanmış (num_turns/araç reddi) ve BU çağrıya ait durum dosyası; dosya yoksa (test/mock, API modu)
+    # modelin çıktısına güvenilir. ok ayrıca GERÇEK kanıt etiketi ister — "## Aksiyonlar" başlığı biçim şablonunda zaten var,
+    # kanıt değil (eskiden boş şablon 'ok' sayılıp 6 saat önbellekleniyordu).
+    yapildi = bool(durum.get("yapildi", True)) if (not durum or _durum_bu_cagrinin_mi(durum, baslangic)) else False
+    ok = yapildi and ("[K: Network" in md or "[K: Canlı UI" in md)
     ts = time.time()
     GOZLEM_DIR.mkdir(parents=True, exist_ok=True)
     md_yol, meta_yol = _yollar(anahtar)
@@ -163,8 +188,25 @@ def rapor_blogu(rapor: dict) -> str:
     return ("### CANLI UYGULAMA GÖZLEM RAPORU (" + tarih + ek + ")\n"
             "Aşağıdaki ekran/alan/servis/mesaj bilgileri GERÇEK gözlemdir (agent uygulamayı gezdi). Analizde `[K: Canlı UI:…]` "
             "ve `[K: Network:…]` etiketlerini bu rapordan AYNEN taşı; raporda olmayan ekran/servis/alan UYDURMA; raporla referans "
-            "(Swagger/Confluence/BRD) çelişirse gözlenen gerçek kazanır ve çelişkiyi Açık Sorular'a yaz. Bu çağrıda tarayıcı "
-            "aracı YOK — gözlem tamamlandı, yalnız analizi yaz.\n\n" + (rapor.get("md") or ""))
+            "(Swagger/Confluence/BRD) çelişirse gözlenen gerçek kazanır; çelişkiyi ilgili yerde `[K: ❓ Belirsiz]` ile işaretle "
+            "(açık sorular ayrı adımda üretilir). Bu çağrıda tarayıcı aracı YOK — gözlem tamamlandı, yalnız analizi yaz.\n\n"
+            + (rapor.get("md") or ""))
+
+
+_SORU_RAPOR_KC = 4_000
+
+
+def rapor_soru_blogu(rapor: dict | None) -> str:
+    """Açık soru aşamasına (gorev/teknik) giren KISA gözlem özeti (~4k): raporla referans çelişkileri soruya dönüşebilsin.
+    Rapor yok/boş → ''."""
+    md = ((rapor or {}).get("md") or "").strip()
+    if not md:
+        return ""
+    if len(md) > _SORU_RAPOR_KC:
+        md = md[:_SORU_RAPOR_KC] + "\n…(kırpıldı)"
+    return ("### CANLI GÖZLEM RAPORU (özet — soru üretimi için)\n"
+            "Analizde `[K: ❓ Belirsiz]` ile işaretlenen gözlem↔referans çelişkileri (endpoint/alan/davranış farkı) bloklayıcıysa "
+            "açık soruya çevir.\n\n" + md)
 
 
 def gozlem_yok_blogu(neden: str) -> str:

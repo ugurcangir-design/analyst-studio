@@ -6,6 +6,12 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## Tam denetim 2026-10-20 — ~110 bulgu kapatıldı ✅ (CLAUDE.md "TAM DENETİM", MIMARI "Denetim 2026-10-20")
+- Kritik: arka plan telemetri düşüyordu; canlı gözlem CLI-429'da API'ye düşüp UYDURMA rapor üretiyordu; canlı sonuçlar önbellekten dönebiliyordu;
+  tavan-sonrası yanlış tekrar; macOS pgrep ölü; oturum geri yazımı kilitsiz; OAuth callback XSS; .env enjeksiyonu; Host allowlist; admin kapıları;
+  koşan iş budaması; approve yarışı; rerun orphan süreçler; FE'ye BE sözleşmesi gitmiyordu; 'Onayla ve Jira'da Güncelle' orijinal talebi eziyordu;
+  bölüm düzeltmesi kesilebiliyordu; UI Esc/yenileme analiz setini siliyordu. Yeni test `tests/test_guvenlik_hijyen.py`; 37 test dosyası yeşil.
+
 ## Açılan Task sayacı eksikleri ✅
 - FE/BE Task Aç (`/api/jira/fe-be/create`), Epic/Story hiyerarşisi (`/api/jira/hierarchy/create`) ve köprü `onayla` yollarında
   telemetri yoktu → Kullanım Raporu 'Açılan Task' eksik sayıyordu. Üçüne `jira.toplam` emit eklendi. Test izolasyonu ile birlikte.

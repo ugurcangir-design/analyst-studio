@@ -44,7 +44,7 @@ def sahte_ai(cevap):
     return f
 
 
-RAPOR = "<bff_rapor>\n## Ekran\n- /sports\n\n## CREATE\n- İstek: `POST /bff/sports` · status 201\n\n## UPDATE\n- `PUT /bff/sports/1`\n</bff_rapor>"
+RAPOR = "<bff_rapor>\n## Ekran\n- /sports\n\n## CREATE\n- İstek: `POST /bff/sports` · status 201 `[K: Network:POST /bff/sports → 201]`\n\n## UPDATE\n- `PUT /bff/sports/1` `[K: Network:PUT /bff/sports/1 → 200]`\n</bff_rapor>"
 
 print("1) önbellek")
 chk("rapor yok → None", BK.rapor_oku("https://uat.ornek/app/sports") is None)
@@ -82,8 +82,13 @@ chk("eksik rapor taze sayılmaz → otomatik tekrar dener", not BK.taze_mi(BK.ra
 r5 = BK.kesfet("https://uat.ornek/app/x", _ai=lambda *a: "rapor bloğu yok")
 chk("blok yok → ok=False, neden + ham yanıt dosyası", not r5["ok"] and "üretilemedi" in r5["neden"]
     and (BK.BFF_DIR / f"{r5['anahtar']}.ham.txt").read_text(encoding="utf-8") == "rapor bloğu yok", r5)
-r6 = BK.kesfet("https://uat.ornek/app/y", _ai=sahte_ai("## Ekran\n- /y\n\n## CREATE\n- İstek: `POST /bff/y` · 201"))
+r6 = BK.kesfet("https://uat.ornek/app/y", _ai=sahte_ai("## Ekran\n- /y\n\n## CREATE\n- İstek: `POST /bff/y` · 201 `[K: Network:POST /bff/y → 201]`"))
 chk("etiketsiz ama rapor gövdeli yanıt KAYBEDİLMEZ (ok=True)", r6["ok"] and "POST /bff/y" in r6["md"] and Path(r6["yol"]).exists(), r6)
+r7 = BK.kesfet("https://uat.ornek/app/z", _ai=sahte_ai("<bff_rapor>\n## Ekran\n- /z\n\n## CREATE\n- POST denendi ama yanıt görülemedi\n</bff_rapor>"))
+chk("CREATE bölümü var ama `[K: Network:` kanıtı YOK → ok=False (eski 'POST' sezgiseli her zaman doğruydu)", not r7["ok"]
+    and not BK.taze_mi(BK.rapor_oku("https://uat.ornek/app/z")))
+chk("rapor_tam_mi: servis bölümü + ağ kanıtı ikisi birden", BK.rapor_tam_mi("## CREATE\n`[K: Network:POST /a → 201]`")
+    and not BK.rapor_tam_mi("## CREATE\nPOST /a") and not BK.rapor_tam_mi("## Gezilemeyen\n`[K: Network:GET /a → 200]`"))
 
 print("3) ayar + blok")
 BK.load_context_filter = lambda: {"live_app_gorev": {"bff_otomatik": False}}
@@ -92,6 +97,11 @@ BK.load_context_filter = lambda: {"live_app_gorev": {}}
 chk("varsayılan açık", BK.otomatik_acik() is True)
 blok = BK.rapor_blogu(r)
 chk("rapor bloğu: başlık + UYDURMA kuralı + md", blok.startswith("### BFF SÖZLEŞME RAPORU") and "UYDURMA" in blok and "POST /bff/sports" in blok)
+b7 = BK.rapor_blogu(r7)
+chk("eksik rapor bloğu: ⚠ UYARI + 'kesin sözleşme sayma' + yeni endpoint önerilebilir (UYDURMA yasağı değil)", "⚠ UYARI" in b7
+    and "EKSİK" in b7 and "yeni endpoint önerilebilir" in b7 and "Burada olmayan endpoint UYDURMA" not in b7)
+b_eski = BK.rapor_blogu({**r, "ts": time.time() - 9 * 86400, "yas_gun": 9.0})
+chk("eski (taze olmayan) rapor bloğu: ⚠ UYARI + 'ESKİ'", "⚠ UYARI" in b_eski and "ESKİ" in b_eski)
 
 print("4) analiz motoru")
 from skills import jira_gorevleri as JG  # noqa: E402

@@ -44,6 +44,8 @@ _tel.ANALIST_DOSYA = _tmp / "analist.json"
 _tel.USAGE_DIR = _tmp / "usage"                     # test olayları GERÇEK events.jsonl'e/ekip Sheet'ine GİTMESİN
 _tel.EVENTS_DOSYA = _tmp / "usage" / "events.jsonl"
 _tel._sink_gonder = lambda kayit: None              # (2026-10-19: 'Smoke Analist' ekip roster'ında göründü)
+from skills import ornek_havuzu as _oh              # noqa: E402
+_oh._sink_push = lambda kayit: None                 # ornekler/paylas ucu 50 örneği GERÇEK sink'e POST ediyordu (114 sn + ağ)
 _tel.analist_yaz("Smoke Analist", "smoke@example.com")
 
 basari = 0
@@ -351,6 +353,32 @@ r = istemci.post("/api/revizyon/surec-analizi.md/onayla", json={"revizyon_id": r
 kontrol("revizyon onayla → çıktı yazıldı", json_al(r).get("ok") and "DEĞİŞTİ" in (_tmp / "surec-analizi.md").read_text(encoding="utf-8"))
 r = istemci.post("/api/revizyon/surec-analizi.md/geri-al", json={"versiyon_id": "v1"}, headers=ORIGIN)
 kontrol("revizyon geri-al", json_al(r).get("ok") and "DEĞİŞTİ" not in (_tmp / "surec-analizi.md").read_text(encoding="utf-8"))
+
+# ── Denetim 2026-10-20: güvenlik + dayanıklılık (0 token) ────────────────────
+kontrol("_env_sanit CR/LF/NUL temizler (.env satır enjeksiyonu)", uygulama._env_sanit("x\nUSAGE_SINK_URL=evil\r\x00") == "xUSAGE_SINK_URL=evil")
+kontrol("Host allowlist: localhost/127.0.0.1 geçer, yabancı host (DNS rebinding) reddedilir",
+        uygulama._host_izinli("localhost:5003") and uygulama._host_izinli("127.0.0.1:5003") and uygulama._host_izinli("[::1]:5003")
+        and not uygulama._host_izinli("evil.example.com:5003"))
+_r = istemci.post("/api/heartbeat", headers={"Host": "evil.example.com:5003", **ORIGIN})
+kontrol("yabancı Host ile istek 403", _r.status_code == 403)
+_r = istemci.get("/api/jira/callback?error=%3Cscript%3Ealert(1)%3C/script%3E")
+kontrol("OAuth callback hata metni HTML-kaçışlı (XSS yok)", _r.status_code == 200 and b"<script>" not in _r.data and b"&lt;script&gt;" in _r.data)
+_r = istemci.post("/api/bye", headers={"Origin": "http://evil.example.com"})
+kontrol("/api/bye başka origin'den kapanış sinyali reddedilir", _r.status_code == 403)
+# Arka plan thread'inden telemetri (request bağlamı yok) olay DÜŞMEMELİ
+_yak = []
+_tel_oy = _tel.olay_yaz
+_tel.olay_yaz = lambda **kw: _yak.append(kw)
+_t = __import__("threading").Thread(target=lambda: uygulama._telemetri_olay(
+    "gorev_analiz", "ok", 5, baglam={"islem": "analiz"}, kalite={"acik_soru": 1, "zorunlu_soru": 0}))
+_t.start()
+_t.join(5)
+_tel.olay_yaz = _tel_oy
+kontrol("arka plan thread'inden telemetri olayı yazılır (session dışı)", len(_yak) == 1 and _yak[0]["kalite"] == {"acik_soru": 1, "zorunlu_soru": 0})
+kontrol("rerun-status calisiyor/hata alanları", "calisiyor" in (istemci.get("/api/rerun-status/surec-analizi.md").get_json() or {}))
+kontrol("/api/update iş yokken kontrol yapar (yetkisiz değil, 500 değil)", istemci.post("/api/update", headers=ORIGIN).status_code in (200, 409))
+kontrol("GIZLENEBILIR_KATALOG brd uçları gerçek (pipeline deseni)", any(e.startswith("/api/run?pipeline=brd") for k in uygulama.GIZLENEBILIR_KATALOG if k["id"] == "brd" for e in k["endpoints"]))
+
 
 # ── Güvenlik kapıları ─────────────────────────────────────────────────────────
 kontrol("CSRF: Origin'siz POST 403", istemci.post("/api/revizyon/surec-analizi.md/baslat").status_code == 403)

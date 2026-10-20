@@ -66,4 +66,25 @@ kontrol("Story A'nın yalnız başarılı subtask'ı kaldı (Sub A1)",
         any(s["summary"] == "Story A" and len(s["subtasks"]) == 1 for s in r["stories"]))
 kontrol("toplam plan sayısı korunur (6)", r["toplam"] == 6)
 
+# ── Bozuk AI yanıtı 7 gün önbellekte kalmasın: parse hatasında BİR KEZ önbelleksiz tekrar ──
+cagrilar: list = []
+yanitlar = ["<jira_hierarchy>{bozuk json</jira_hierarchy>", '<jira_hierarchy>{"epic": {"summary": "E"}, "stories": []}</jira_hierarchy>']
+jt._api_cagri = lambda s, m, **k: cagrilar.append(k.get("onbellek", True)) or yanitlar.pop(0)
+jt.prompt_yukle = lambda sid: "P"
+h = jt._hierarchy_uret("analiz")
+kontrol("_hierarchy_uret: ilk yanıt bozuk → ikinci çağrı onbellek=False, sonuç ikinci yanıttan", cagrilar == [True, False] and h["epic"]["summary"] == "E")
+cagrilar.clear()
+yanitlar[:] = ["bozuk", "yine bozuk"]
+try:
+    jt._hierarchy_uret("analiz")
+    kontrol("iki kez bozuk → ValueError", False)
+except ValueError:
+    kontrol("_hierarchy_uret: iki kez bozuk → ValueError (en fazla 1 tekrar)", cagrilar == [True, False])
+import skills.jira_fe_be as jf  # noqa: E402
+cagrilar.clear()
+yanitlar[:] = ["<fe_be_gorevler>bozuk</fe_be_gorevler>", '<fe_be_gorevler>{"gorevler": [{"id": "BE-1", "katman": "BE", "summary": "s", "description": "d"}]}</fe_be_gorevler>']
+jf._api_cagri = lambda s, m, **k: cagrilar.append(k.get("onbellek", True)) or yanitlar.pop(0)
+g = jf._gorevler_uret("analiz")
+kontrol("jira_fe_be._gorevler_uret: parse hatasında önbelleksiz tekrar, sonuç normalize", cagrilar == [True, False] and len(g) == 1 and g[0]["katman"] == "BE")
+
 print(f"\nJIRA HİYERARŞİ TESTLERİ GEÇTİ ({basari} kontrol)")

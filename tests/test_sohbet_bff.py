@@ -38,7 +38,7 @@ SA.live_app_urls = lambda: ["https://dev-ornek.local/app/x"]
 BK.live_app_urls = lambda: ["https://dev-ornek.local/app/x"]
 yakala: dict = {}
 BK.canli_uygulama_baglami_hazirla = lambda **kw: (yakala.update(kw) or f"CANLI base={kw.get('base_url_override')}")
-RAPOR = "<bff_rapor>\n## Ekran\n- /sports\n\n## CREATE\n- İstek: `POST /bff/sports` · 201\n\n## DELETE (ayrı kayıt)\n- `DELETE /bff/sports/9`\n</bff_rapor>"
+RAPOR = "<bff_rapor>\n## Ekran\n- /sports\n\n## CREATE\n- İstek: `POST /bff/sports` · 201 `[K: Network:POST /bff/sports → 201]`\n\n## DELETE (ayrı kayıt)\n- `DELETE /bff/sports/9` `[K: Network:DELETE /bff/sports/9 → 204]`\n</bff_rapor>"
 BK._api_cagri = lambda s, m, **k: RAPOR
 SA.oturum_sifirla()
 

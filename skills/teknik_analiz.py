@@ -116,16 +116,21 @@ def _teknik_uret_tam(sistem: str, mesajlar: list, max_deneme: int = 2,
     return en_dolu
 
 
-def _acik_sorular_uret(teknik_metni: str, surec_metni: str, eksik_idler: list[str] | None = None) -> str:
+def _acik_sorular_uret(teknik_metni: str, surec_metni: str, eksik_idler: list[str] | None = None,
+                       gozlem_rapor: dict | None = None) -> str:
     """Aşama 2 — teknik analizi girdi alıp açık soruları AYRI çağrıyla üretir.
     eksik_idler verilirse (kapsam denetiminden), teknik analizde referans
-    bulunamayan süreç ID'leri açık soru olarak garantili eklenir."""
+    bulunamayan süreç ID'leri açık soru olarak garantili eklenir. `gozlem_rapor` (ok) verilirse kısa özeti de girer →
+    gözlem↔referans çelişkileri (analizde `[K: ❓ Belirsiz]`) soruya dönüşebilir."""
     print("  Açık sorular ayrı adımda üretiliyor...")
     sistem = _acik_sorular_prompt_olustur()
     icerik = [
         {"type": "text", "text": f"### Üretilen Teknik Analiz\n\n{teknik_metni}"},
         {"type": "text", "text": f"### Kaynak Süreç Analizi\n\n{surec_metni}"},
     ]
+    if gozlem_rapor and gozlem_rapor.get("ok") and gozlem_rapor.get("md"):
+        from .gozlem import rapor_soru_blogu
+        icerik.append({"type": "text", "text": rapor_soru_blogu(gozlem_rapor)})
     if eksik_idler:
         icerik.append({"type": "text", "text": (
             "### Otomatik Kapsam Denetimi — Karşılanmayan Süreç ID'leri\n"
@@ -202,13 +207,16 @@ def teknik_analiz_yap(ozel_atla: bool = False) -> tuple[Path, Path]:
         stable_bloklar.extend(ref_bloklari)
 
     canli_baglam = canli_uygulama_baglami_hazirla()
+    gozlem_rapor: dict | None = None
     if canli_baglam:
         # Faz 1 (kota): gözlem ayrı küçük-promptlu fazda → rapor; analiz çağrısı tarayıcı kullanmaz.
         from . import gozlem as _gz
         _gr = _gz.rapor_al(canli_baglam, "surec", gorev_ozet=surec_metni, yeniden=True)
-        if _gr.get("md"):
+        # Yalnız MAKİNE-DOĞRULANMIŞ (ok) rapor gerçek veri olarak girer; ok=False rapor uydurma ekranı gerçek gösterirdi.
+        if _gr.get("ok") and _gr.get("md"):
             print("  🌐 Canlı gözlem raporu (ayrı faz) analize dahil ediliyor...")
             stable_bloklar.append({"type": "text", "text": _gz.rapor_blogu(_gr)})
+            gozlem_rapor = _gr
         else:
             print("  ⚠ Canlı gözlem yapılamadı — teknik analiz gözlemsiz üretiliyor.")
             stable_bloklar.append({"type": "text", "text": _gz.gozlem_yok_blogu(_gr.get("neden", ""))})
@@ -317,7 +325,7 @@ def teknik_analiz_yap(ozel_atla: bool = False) -> tuple[Path, Path]:
 
     # ── AŞAMA 2: Açık sorular (ayrı çağrı; karşılanmayan ID'ler garantili eklenir) ──
     try:
-        sorular = _acik_sorular_uret(teknik_ham, surec_metni, kapsam["eksik"])
+        sorular = _acik_sorular_uret(teknik_ham, surec_metni, kapsam["eksik"], gozlem_rapor=gozlem_rapor)
     except Exception as e:
         # Açık sorular üretimi başarısız olursa teknik analizi kaybetme;
         # açık sorular dosyasına hata notu yaz, akış devam etsin.
@@ -360,11 +368,28 @@ def teknik_analiz_yap(ozel_atla: bool = False) -> tuple[Path, Path]:
     if not ozel_teknik:
         try:
             from .akis_kapatma import dosya_akis_kapat
-            dosya_akis_kapat("teknik-analiz.md", kaynak=surec_metni, tip="teknik", soru_dosya="acik-sorular.md")
+            if dosya_akis_kapat("teknik-analiz.md", kaynak=surec_metni, tip="teknik", soru_dosya="acik-sorular.md"):
+                # Akış kapatma gövdeyi/soruları değiştirdi → Yönetici Özeti sayaçları (bölüm/endpoint/açık soru) yeniden kurulur
+                _ozet_yenile("teknik-analiz.md", kapsam=kapsam, acik_sorular_dosya="acik-sorular.md")
         except Exception as _e:
             print(f"  ⚠ Akış kapatma atlandı: {_e}")
 
     return teknik_yol, sorular_yol
+
+
+def _ozet_yenile(dosya: str, kapsam: dict | None = None, acik_sorular_dosya: str | None = None) -> None:
+    """output/<dosya> başındaki Yönetici Özeti'ni GÜNCEL gövdeden yeniden kurar (0 token, deterministik). Akış kapatma
+    sonrası eski sayaçlar kalmasın."""
+    try:
+        yol = OUTPUT_DIR / dosya
+        md = yol.read_text(encoding="utf-8")
+        acik = ""
+        if acik_sorular_dosya and (OUTPUT_DIR / acik_sorular_dosya).exists():
+            acik = (OUTPUT_DIR / acik_sorular_dosya).read_text(encoding="utf-8")
+        govde = yonetici_ozetini_cikar(md)
+        yol.write_text(yonetici_ozeti_olustur(govde, kapsam=kapsam, acik_sorular=acik) + govde, encoding="utf-8")
+    except Exception as e:
+        print(f"  ⚠ Yönetici özeti yenilenemedi: {e}")
 
 
 def _test_senaryolari_uret(teknik_metni: str) -> str:

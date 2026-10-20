@@ -24,7 +24,7 @@ from .base import (
     canli_uygulama_baglami_hazirla,
     yonetici_ozeti_olustur, yonetici_ozetini_cikar, jira_icin_temizle,
     ai_ara_sozleri_temizle,
-    MAX_TOKENS_KISA, MAX_TOKENS_COMBINED,
+    MAX_TOKENS_KISA, MAX_TOKENS_COMBINED, MAX_TOKENS_UZUN,
 )
 
 # Hafif modelin tam kimliği — Standart Formatla için sonnet yerine kullanılır.
@@ -105,12 +105,24 @@ def _adf_to_text(node) -> str:
         return "\n"
     icerik = "".join(_adf_to_text(c) for c in node.get("content", []) or [])
     if tip == "heading":
-        return "\n" + icerik.strip() + "\n"        # başlık öncesi boş satır
+        # Başlık seviyesi korunur ('#' × level) → köprü düzelt/cevap gövdedeki analizi yeniden yazarken
+        # bölüm yapısı (ve `_orijinal_talep_ayikla` marker'ları) bozulmaz.
+        try:
+            seviye = max(1, min(6, int((node.get("attrs") or {}).get("level") or 2)))
+        except (TypeError, ValueError):
+            seviye = 2
+        return "\n" + "#" * seviye + " " + icerik.strip() + "\n"        # başlık öncesi boş satır
     if tip == "paragraph":
         return icerik + "\n"
     if tip == "listItem":
         return "• " + icerik.strip() + "\n"
-    if tip in ("bulletList", "orderedList", "tableRow"):
+    if tip in ("tableCell", "tableHeader"):
+        return "| " + " ".join(icerik.split()) + " "
+    if tip == "tableRow":
+        return icerik.rstrip() + " |\n"
+    if tip in ("bulletList", "orderedList"):
+        return icerik + "\n"
+    if tip == "table":
         return icerik + "\n"
     return icerik
 
@@ -149,16 +161,21 @@ def _katman_tahmin(metin: str) -> str:
 
 # Hata/bug + basit-iş sinyalleri → çıktı KISA-NET tutulur (gereksiz servis/DB/öneri dökümü YOK).
 _HATA_TIP_DESEN = re.compile(r"(bug|hata|sorun|defect|problem|ar[ıi]za)", re.IGNORECASE)
+# Yalnız BUG İFADESİ sayılır ('çalışmıyor', 'hata alıyor', 'fix:'); çıplak 'hata'/'eksik'/'çalışm' DEĞİL —
+# 'Hata mesajlarının gösterilmesi', 'Çalışma saatleri', 'Eksik alanların eklenmesi' özellik işidir (kısa moda düşmemeli).
 _HATA_KELIME_DESEN = re.compile(
-    r"(hata|bug|fix|d[üu]zelt|\bçal[ıi]şm|calism|patl[ıi]yor|k[ıi]r[ıi]k|bozuk|yanl[ıi]ş|"
-    r"g[öo]r[üu]nm[üu]yor|a[çc][ıi]lm[ıi]yor|\beksik\b|takl[ıi]yor|donuyor|\bçöküyor|cokuyor)",
+    r"(^\s*(?:hata|bug|fix|hotfix)\s*[:\-]|"                      # 'Hata: kayıt silinemiyor' / 'fix: …' başlık öneki
+    r"çal[ıi][şs]m[ıi]yor|calismiyor|hata\s+(?:al[ıi]yor|al[ıi]n[ıi]yor|veriyor|d[öo]n[üu]yor|f[ıi]rlat[ıi]yor)|"
+    r"\w{3,}[ae]m[ıi]yor\b|"                                        # silinemiyor / kaydedilemiyor / yapılamıyor
+    r"a[çc][ıi]lm[ıi]yor|g[öo]r[üu]nm[üu]yor|patl[ıi]yor|k[ıi]r[ıi]k|bozuk|crash|broken|not\s+working|"
+    r"\bbug\b|\bhotfix\b|takl[ıi]yor|donuyor|\bçöküyor|cokuyor|yanl[ıi]ş\s+(?:hesapl|g[öo]ster|çal[ıi][şs]))",
     re.IGNORECASE)
 
 
 def _hata_gorev_mi(gorev: dict) -> bool:
     """Görev bir HATA/BUG ya da küçük düzeltme mi? issuetype veya başlık sinyaliyle.
     True → analiz çıktısı KISA-NET tutulur (bug modu). Yalnızca ipucu; içeriği AI değerlendirir."""
-    tip = (gorev.get("type") or "")
+    tip = str(gorev.get("type") or gorev.get("issuetype") or "")
     baslik = (gorev.get("summary") or "")
     if _HATA_TIP_DESEN.search(tip):
         return True
@@ -282,20 +299,34 @@ def gorev_getir(key: str) -> dict | None:
     return _issue_ayrıstir(ham) if ham else None
 
 
+def _http_durum(e: BaseException) -> int | None:
+    """Hatadan HTTP durum kodunu çıkarır (requests.HTTPError.response ya da mesajdaki 'API 401'/'400 Client Error')."""
+    r = getattr(e, "response", None)
+    kod = getattr(r, "status_code", None)
+    if isinstance(kod, int):
+        return kod
+    m = re.search(r"\b([45]\d\d)\b", str(e))
+    return int(m.group(1)) if m else None
+
+
 def _tek_issue_ham(key: str, cloud_id: str) -> dict | None:
     """Tek issue'yu HAM olarak doğrudan okur (tip kontrolü + ayrıştırma için).
-    Bulunamazsa/hata olursa None."""
+    Bulunamazsa (404 / 400 geçersiz anahtar) None. Yetki (401/403) ve ağ hataları YÜKSELTİLİR —
+    eskiden yutulup 'bulunamadı' sanılıyordu (analist yetki sorununu göremiyordu)."""
     try:
         data = atlassian_post(
             "/rest/api/3/issue/bulkfetch",
             body={"issueIdsOrKeys": [key], "fields": _ISSUE_ALANLARI},
             cloud_id=cloud_id,
         )
-        for issue in data.get("issues", []) or []:
-            if issue.get("key") == key:
-                return issue
     except Exception as e:
-        print(f"  ⚠ '{key}' okunamadı: {e}")
+        if _http_durum(e) in (400, 404):
+            print(f"  ⚠ '{key}' bulunamadı: {e}")
+            return None
+        raise RuntimeError(f"'{key}' okunamadı (yetki/ağ): {str(e)[:200]}") from e
+    for issue in data.get("issues", []) or []:
+        if issue.get("key") == key:
+            return issue
     return None
 
 
@@ -437,14 +468,23 @@ def alt_gorevleri_cek(parent_key: str) -> list[dict]:
     # AŞAMA 1 — KEŞİF: hangi issue'lar bu üst göreve bağlı? (arama indeksi)
     birlesik: dict[str, dict] = {}   # key → arama sonucu (bulkfetch başarısız olursa yedek)
     sirali_keys: list[str] = []      # keşif sırasını koru (ORDER BY created ASC)
+    basarili, son_hata = 0, None
     for jql in jql_adaylari:
         try:
             for g in _ara(f"{jql} ORDER BY created ASC"):
                 if g["key"] != parent_key and g["key"] not in birlesik:
                     birlesik[g["key"]] = g   # ilk gelen kazanır, tekrarı önle
                     sirali_keys.append(g["key"])
-        except Exception:
-            continue  # alan/JQL projede yoksa sessizce geç
+            basarili += 1
+        except Exception as e:
+            # YALNIZ 400 (alan/JQL projede yok) sessizce geçilir. 401/403/ağ hatası '0 alt görev' DEĞİLDİR:
+            # tüm sorgular düşerse net hata yükselir (eskiden analist boş liste görüp yetki sorununu anlamıyordu).
+            if _http_durum(e) == 400:
+                continue
+            son_hata = e
+            print(f"  ⚠ Alt görev sorgusu başarısız ({jql}): {str(e)[:160]}")
+    if basarili == 0 and son_hata is not None:
+        raise RuntimeError(f"Alt görevler okunamadı (yetki/ağ): {str(son_hata)[:200]}") from son_hata
 
     # AŞAMA 2 — TAZE İÇERİK: başlık/açıklama/yorum/bağlantıları doğrudan issue'dan
     # oku. Arama indeksi gecikmeli olduğu için Jira'daki güncellemeler aksi hâlde
@@ -465,11 +505,13 @@ def alt_gorevleri_cek(parent_key: str) -> list[dict]:
 
 # ─── Sınıflandırma: Yapısal + AI ─────────────────────────────────────────────
 
+# Her alternatif BAŞLIK olarak çapalı (satır başı + opsiyonel #/bold) — eskiden `|değişiklik`, `|amaç\s*:`,
+# `|acceptance` çapasızdı → gövdede geçen tek kelime 'bölüm var' sayılıyordu (yapısal skor şişiyordu).
 _BOLUM_DESENLERI = {
-    "amac": re.compile(r"(?im)^\s*#{0,4}\s*ama[cç]\b|amaç\s*:"),
-    "degisiklik": re.compile(r"(?im)^\s*#{0,4}\s*de[gğ]i[sş]iklik|değişiklik"),
-    "referans": re.compile(r"(?im)^\s*#{0,4}\s*(referans|yakla[sş][iı]m)\b"),
-    "kabul": re.compile(r"(?im)^\s*#{0,4}\s*kabul\s*kriter|acceptance"),
+    "amac": re.compile(r"(?im)^\s*(?:#{0,4}|\*\*)\s*ama[cç]\b"),
+    "degisiklik": re.compile(r"(?im)^\s*(?:#{0,4}|\*\*)\s*de[gğ]i[sş]iklik"),
+    "referans": re.compile(r"(?im)^\s*(?:#{0,4}|\*\*)\s*(?:referans|yakla[sş][iı]m)\b"),
+    "kabul": re.compile(r"(?im)^\s*(?:#{0,4}|\*\*)\s*(?:kabul\s*kriter|acceptance\s*criteria)"),
 }
 _DOSYA_DESENI = re.compile(r"\b[\w./-]+\.(?:tsx|ts|jsx|js|py|java|cs|vue|json|ya?ml|sql|md)\b")
 
@@ -573,7 +615,7 @@ def _yapisal_gerekce(ys: dict) -> str:
     return f"Yapısal ön-tarama (format): {bulgu}"
 
 
-def _ai_siniflandir(gorevler: list[dict], parca_boyu: int = 30) -> dict:
+def _ai_siniflandir(gorevler: list[dict], parca_boyu: int = 12) -> dict:
     """Görevleri AI ile İÇERİKTEN sınıflandırır. Büyük listeyi parçalara böler
     (CLI'de tek dev çağrı yavaş + çıktı limiti riski). key→{durum,gerekce,eksikler}."""
     ai_map: dict[str, dict] = {}
@@ -592,7 +634,12 @@ def _ai_siniflandir(gorevler: list[dict], parca_boyu: int = 30) -> dict:
         ]}]
         try:
             yanit = _api_cagri(sistem, mesajlar, max_tokens=MAX_TOKENS_KISA, thinking=False)
-            for s in _json_ayikla(_metin_sikistir(yanit)).get("sonuclar", []):
+            sonuclar = _json_ayikla(_metin_sikistir(yanit)).get("sonuclar", [])
+            if not sonuclar:
+                # Bozuk/boş yanıt 7 gün önbellekte kalmasın → BİR KEZ önbelleksiz tekrar
+                yanit = _api_cagri(sistem, mesajlar, max_tokens=MAX_TOKENS_KISA, thinking=False, onbellek=False)
+                sonuclar = _json_ayikla(_metin_sikistir(yanit)).get("sonuclar", [])
+            for s in sonuclar:
                 ai_map[s.get("key", "")] = s
         except Exception as e:
             print(f"  ⚠ AI sınıflandırma parçası başarısız ({i}-{i+len(parca)}), yapısala düşülüyor: {e}")
@@ -793,8 +840,10 @@ def gorev_standart_formatla(gorev: dict) -> str:
         {"type": "text", "text": f"### Mevcut Açıklama\n\n{gorev.get('description','') or '(açıklama yok)'}"},
         {"type": "text", "text": "Yukarıdaki görevi standart 4-başlık formata çevir."},
     ]
+    # Çıktı bütçesi GİRDİDEN ölçeklenir: tam açıklama yeniden yazılır → sabit 3000 token uzun açıklamayı kesiyordu.
+    butce = min(MAX_TOKENS_UZUN, max(MAX_TOKENS_KISA, len(gorev.get("description", "") or "") // 3 + 800))
     yanit = _api_cagri(sistem, [{"role": "user", "content": icerik}],
-                       model=MODEL_HAFIF, max_tokens=MAX_TOKENS_KISA, thinking=False)
+                       model=MODEL_HAFIF, max_tokens=butce, thinking=False)
     return _meta_notlari_temizle(_xml_ayir(_metin_sikistir(yanit), "gorev"))
 
 
@@ -806,13 +855,17 @@ _KATMAN_ETIKET = {"fe": "Frontend (FE)", "be": "Backend (BE)", "belirsiz": ""}
 def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = None,
                     katman: str = "", onceki_sorular: str = "", ekran_baglami: bool = True,
                     rag_ctx: dict | None = None, canli_baglam_override: str | None = None,
-                    bff_rapor: str | None = None, gozlem_rapor: dict | None = None) -> dict:
+                    bff_rapor: str | None = None, gozlem_rapor: dict | None = None,
+                    canli_kapsam: str | None = None, soru_asamasi: bool = True) -> dict:
     """Görevi YALIN teknik analize çevirir (gorev_teknik_analiz promptu — tek
     görev için, yalnızca ilgili bölümler, tüm şablonu doldurmaz → token/süre
     tasarrufu, kaliteden ödün yok). İki aşama: (1) Sonnet ile analiz (RAG dahil),
     (2) Haiku ile kısa açık-sorular pass'i. Çıktı:
         {"markdown": "<teknik analiz markdown>", "acik_sorular": "<varsa>"}.
     Açık sorular Jira'ya YAZILMAZ — UI'da ayrı sekmede gösterilir.
+    `canli_kapsam`: gözlem profili/URL seti ('gorev' | 'surec'); None → eski davranış (override varsa 'surec', yoksa
+    'gorev'). Köprü, kullandığı URL kaynağına göre geçirir. `soru_asamasi=False` → açık soru + öz-çözümleme + otomatik
+    işleme ATLANIR (FE+BE ayrımında bu aşama iki katman için TEK kez `gorev_fe_be_analiz` içinde koşar).
 
     NOT: Ağır 11-bölümlük şablon (teknik_analiz_bolumler) yerine görev-bazlı yalın
     prompt kullanılır. Basit görevler artık koca bir 'kapsam dışı' başlık dizisiyle
@@ -873,14 +926,17 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
     # Faz 1 (kota): canlı gözlem ANALİZDEN AYRI küçük promptlu bir fazda yapılır (skills/gozlem.py) → analiz çağrısı
     # gözlem RAPORUNU alır, tarayıcı aracı kullanmaz. Cevap turu / düzelt (cevaplar|onceki_sorular) taze raporu yeniden
     # kullanır (6 sa); yeni analiz taze gözler. FE+BE ayrımında rapor dışarıdan (gozlem_rapor) paylaşılır.
+    kapsam = canli_kapsam or ("surec" if canli_baglam_override is not None else "gorev")
     if canli_baglam and gozlem_rapor is None:
         from . import gozlem as _gz
-        gozlem_rapor = _gz.rapor_al(canli_baglam, "surec" if canli_baglam_override is not None else "gorev",
+        gozlem_rapor = _gz.rapor_al(canli_baglam, kapsam,
                                    gorev_ozet=f"{gorev.get('summary', '')}\n\n{gorev.get('description', '') or ''}",
                                    yeniden=not bool((cevaplar or "").strip() or (onceki_sorular or "").strip()))
     if canli_baglam:
         from . import gozlem as _gz
-        if gozlem_rapor and gozlem_rapor.get("md"):
+        # Yalnız MAKİNE-DOĞRULANMIŞ (ok) rapor gerçek veri olarak girer; ok=False rapor (araç çalışmamış, kanıt yok)
+        # 'gözlem yapıldı' diye enjekte edilirse analiz uydurma ekranı gerçek sanır.
+        if gozlem_rapor and gozlem_rapor.get("ok") and gozlem_rapor.get("md"):
             print("  🌐 Canlı gözlem raporu (ayrı faz) analize dahil ediliyor...")
             stable_bloklar.append({"type": "text", "text": _gz.rapor_blogu(gozlem_rapor)})
         else:
@@ -994,7 +1050,9 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
     try:
         from .ornek_havuzu import ornek_bloklari
         _os = (str(gorev.get("summary", "")) + "\n" + str(gorev.get("description", "") or ""))[:4000]
-        for _blok in ornek_bloklari(_os, tip="teknik", n=2):
+        # Kendi taslağı (aynı task'ın önceki analizi — key ya da key::FE) örnek olarak GİRMEZ (öz-kirlenme).
+        _kendi = [b for b in ornek_bloklari(_os, tip="teknik", n=4) if not _ornek_kendisi_mi(b, gorev.get("key", ""))]
+        for _blok in _kendi[:2]:
             icerik.append(_blok)
     except Exception:
         pass
@@ -1016,38 +1074,13 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
         + teknik
     )
 
-    # Aşama 2 — Açık Sorular (haiku, kısa). Hata olursa teknik analizi kaybetme.
+    # Aşama 2/2b/2c — açık sorular + öz-çözümleme + otomatik işleme (tek helper; FE+BE ayrımında dışarıda TEK kez koşar)
     acik = ""
-    try:
-        acik = _gorev_acik_sorular_uret(teknik, gorev, cevaplar=cevaplar, onceki_sorular=onceki_sorular)
-    except Exception as e:
-        print(f"  ⚠ Görev açık soruları üretilemedi: {e}")
-    # Aşama 2b — Açık Soru ÖZ-ÇÖZÜMLEME: analist görmeden önce agent her soruyu referans/kod/tüketici taramasıyla
-    # ve gerekirse tek canlı gözlem turuyla araştırır; cevaplananlar UI'da önceden dolu gelir (analiz yeniden yazılmaz).
-    if acik and acik.strip():
-        try:
-            from . import soru_cozumleme as _sc
-            if _sc.acik_mi():
-                acik = _sc.cozumle(acik, gorev, canli=bool(canli_baglam))
-                # Aşama 2c — kanıtla CEVAPLANAN sorular analize OTOMATİK işlenir (tek ucuz hedefli düzeltme; referans/
-                # gözlem yok) ve listeden düşer; yalnız 'kısmen' + 'karar gerekli' analiste kalır. (Eskiden kutular ön-dolu
-                # kalıyor, analist 'Cevapları İşle' ile TAM yeniden üretim yapıyordu → gereksiz süre/token.)
-                if _sc.uygula_acik_mi():
-                    kalan, cozulen = _sc.cozulenleri_ayir(acik)
-                    if cozulen:
-                        try:
-                            print(f"  ✍️  {len(cozulen)} çözülen soru analize işleniyor (hedefli düzeltme)...")
-                            _rag, _govde = _rag_yorum_ayir(teknik)
-                            _yeni = gorev_analiz_duzelt(gorev, _govde, _sc.uygulama_talimati(cozulen))
-                            if _yeni and len(_yeni) > 0.5 * len(_govde):
-                                teknik = _rag + _yeni
-                                acik = (kalan + ("\n\n" if kalan else "") + _sc.cozulen_bolumu(cozulen)).strip()
-                            else:
-                                print("  ⚠ Düzeltme çıktısı güvenilmez (çok kısa) — sorular ön-dolu bırakıldı.")
-                        except Exception as e:
-                            print(f"  ⚠ Çözülen sorular analize işlenemedi (ön-dolu bırakıldı): {str(e)[:160]}")
-        except Exception as e:
-            print(f"  ⚠ Açık soru öz-çözümleme atlandı: {e}")
+    if soru_asamasi:
+        [teknik], acik = _soru_asamasi([teknik], gorev, cevaplar=cevaplar, onceki_sorular=onceki_sorular,
+                                       canli=bool(canli_baglam), gozlem_rapor=gozlem_rapor,
+                                       rag_ctx=(rag_ctx if not ekran_baglami else None),
+                                       canli_kapsam=(kapsam if canli_baglam else None))
 
     # Yönetici Özeti (TL;DR) — modalda görünür, Jira'ya YAZILMAZ (gorev_jiraya_yaz keser).
     ozet = yonetici_ozeti_olustur(teknik, acik_sorular=acik)
@@ -1055,9 +1088,95 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
     return {"markdown": ozet + teknik, "acik_sorular": acik}
 
 
+def _ornek_kendisi_mi(blok: dict, key: str) -> bool:
+    """Few-shot bloğu bu task'ın kendi (key ya da key::FE) örneği mi? Etiket satırı '· <jira_key>' ile biter."""
+    key = (key or "").strip().upper()
+    if not key:
+        return False
+    ilk = str((blok or {}).get("text", "")).split("\n", 1)[0].upper()
+    return re.search(r"·\s*" + re.escape(key) + r"(?:::FE)?\s*$", ilk) is not None
+
+
+def _soru_asamasi(teknikler: list[str], gorev: dict, *, cevaplar: str = "", onceki_sorular: str = "",
+                  canli: bool = False, gozlem_rapor: dict | None = None, rag_ctx: dict | None = None,
+                  canli_kapsam: str | None = None) -> tuple[list[str], str]:
+    """Açık sorular (haiku) → öz-çözümleme (kanıt + tek canlı tur) → kanıtla cevaplananları analize işle.
+    `teknikler` birden çoksa (FE+BE) sorular TÜM katmanlar üzerinden TEK kez üretilir/çözülür; otomatik işleme her
+    katmana ayrı ucuz hedefli düzeltme olarak uygulanır (canlı çözüm turu tek). Dönen: (güncel teknikler, acik)."""
+    acik = ""
+    soru_metni = teknikler[0] if len(teknikler) == 1 else "\n\n---\n\n".join(
+        f"### Katman analizi {i + 1}\n\n{t}" for i, t in enumerate(teknikler))
+    try:
+        acik = _gorev_acik_sorular_uret(soru_metni, gorev, cevaplar=cevaplar, onceki_sorular=onceki_sorular,
+                                        gozlem_rapor=gozlem_rapor)
+    except Exception as e:
+        print(f"  ⚠ Görev açık soruları üretilemedi: {e}")
+    if not (acik and acik.strip()):
+        return teknikler, acik
+    # Aşama 2b — ÖZ-ÇÖZÜMLEME: analist görmeden önce agent her soruyu referans/kod/tüketici taramasıyla ve gerekirse
+    # tek canlı gözlem turuyla araştırır; cevaplananlar UI'da önceden dolu gelir (analiz yeniden yazılmaz).
+    try:
+        from . import soru_cozumleme as _sc
+        if not _sc.acik_mi():
+            return teknikler, acik
+        acik = _sc.cozumle(acik, gorev, canli=canli, rag_ctx=rag_ctx, canli_kapsam=canli_kapsam)
+        # Aşama 2c — kanıtla CEVAPLANAN sorular analize OTOMATİK işlenir (tek ucuz hedefli düzeltme; referans/gözlem yok)
+        # ve listeden düşer; yalnız 'kısmen' + 'karar gerekli' analiste kalır.
+        if _sc.uygula_acik_mi():
+            kalan, cozulen = _sc.cozulenleri_ayir(acik)
+            if cozulen:
+                guncel = list(teknikler)
+                basarili = 0
+                for i, teknik in enumerate(teknikler):
+                    try:
+                        print(f"  ✍️  {len(cozulen)} çözülen soru analize işleniyor (hedefli düzeltme)...")
+                        _rag, _govde = _rag_yorum_ayir(teknik)
+                        _yeni = gorev_analiz_duzelt(gorev, _govde, _sc.uygulama_talimati(cozulen))
+                        if _yeni and len(_yeni) > 0.5 * len(_govde):
+                            guncel[i] = _rag + _yeni
+                            basarili += 1
+                        else:
+                            print("  ⚠ Düzeltme çıktısı güvenilmez (çok kısa) — sorular ön-dolu bırakıldı.")
+                    except Exception as e:
+                        print(f"  ⚠ Çözülen sorular analize işlenemedi (ön-dolu bırakıldı): {str(e)[:160]}")
+                if basarili == len(teknikler):
+                    teknikler = guncel
+                    acik = (kalan + ("\n\n" if kalan else "") + _sc.cozulen_bolumu(cozulen)).strip()
+    except Exception as e:
+        print(f"  ⚠ Açık soru öz-çözümleme atlandı: {e}")
+    return teknikler, acik
+
+
+_SOZLESME_BASLIK = re.compile(r"(?im)^#{1,4}\s+[^\n]*(ba[ğg][ıi]ml[ıi]l[ıi]k|aray[üu]z|\bapi\b|endpoint|s[öo]zle[şs]me)[^\n]*$")
+_FE_GIRDI_TAVAN = 6_000
+
+
+def _fe_icin_be_sozlesme(be_markdown: str) -> str:
+    """FE analizine 'karşı katman' bağlamı olarak giren BE metni. `gorev_analiz_et` ilişkili açıklamayı BAŞTAN 4000
+    karaktere kırpar → sonda duran `## Bağımlılık ve Arayüz (FE↔BE)` sözleşmesi kaybolurdu. Burada: özet + RAG yorumu
+    atılır, sözleşme/arayüz/API bölümleri ÖNE alınır, kalan yer gövdeden doldurulur (toplam ≤ ~6k)."""
+    govde = _rag_yorum_ayir(yonetici_ozetini_cikar(be_markdown or ""))[1].strip()
+    if not govde:
+        return ""
+    from .revizyon_ai import bolumlere_ayir
+    try:
+        bolumler = [b for b in bolumlere_ayir(govde) if b["seviye"] > 0]
+    except Exception:
+        bolumler = []
+    sozlesme = [b["icerik"].strip() for b in bolumler if _SOZLESME_BASLIK.search(b["icerik"].split("\n", 1)[0])]
+    if not sozlesme:
+        return govde if len(govde) <= _FE_GIRDI_TAVAN else "…(baş kırpıldı)\n" + govde[-_FE_GIRDI_TAVAN:]
+    on = ("### BE SÖZLEŞMESİ (FE'nin tükettiği arayüz — önce bunu kullan)\n\n" + "\n\n".join(sozlesme))[:_FE_GIRDI_TAVAN]
+    kalan = _FE_GIRDI_TAVAN - len(on)
+    if kalan > 400:
+        on += "\n\n### BE analizi (özet)\n\n" + govde[:kalan]
+    return on
+
+
 def gorev_fe_be_analiz(gorev: dict, cevaplar: str = "", onceki_sorular: str = "",
                        ekran_baglami: bool = True, rag_ctx: dict | None = None,
-                       canli_baglam_override: str | None = None, bff_rapor: str | None = None) -> dict:
+                       canli_baglam_override: str | None = None, bff_rapor: str | None = None,
+                       canli_kapsam: str | None = None) -> dict:
     """Tek bir görevi HEM BE HEM FE olarak İKİ AYRI katman-özel analize böler (görev hem
     sunucu hem istemci işi içeriyorsa). Önce **BE** analizi (veri modeli/endpoint/iş kuralı +
     'Bağımlılık ve Arayüz' başlığında BE'nin SUNDUĞU sözleşme), sonra **FE** analizi — BE
@@ -1066,29 +1185,35 @@ def gorev_fe_be_analiz(gorev: dict, cevaplar: str = "", onceki_sorular: str = ""
     Dönen: {"be": {markdown, acik_sorular}, "fe": {markdown, acik_sorular}}."""
     # Faz 1 (kota): TEK gözlem raporu, iki analiz (eskiden BE ve FE ayrı ayrı gözlüyordu → iki döngü).
     gozlem_rapor = None
+    kapsam = canli_kapsam or ("surec" if canli_baglam_override is not None else "gorev")
     _canli = canli_baglam_override if canli_baglam_override is not None else canli_uygulama_baglami_hazirla(gorev=True)
     if _canli:
         from . import gozlem as _gz
-        gozlem_rapor = _gz.rapor_al(_canli, "surec" if canli_baglam_override is not None else "gorev",
+        gozlem_rapor = _gz.rapor_al(_canli, kapsam,
                                    gorev_ozet=f"{gorev.get('summary', '')}\n\n{gorev.get('description', '') or ''}",
                                    yeniden=not bool((cevaplar or "").strip() or (onceki_sorular or "").strip()))
-        if not (gozlem_rapor or {}).get("md"):
-            gozlem_rapor = {"md": "", "neden": (gozlem_rapor or {}).get("neden", "")}
-    be = gorev_analiz_et(gorev, cevaplar=cevaplar, katman="be", onceki_sorular=onceki_sorular,
-                         ekran_baglami=ekran_baglami, rag_ctx=rag_ctx,
-                         canli_baglam_override=canli_baglam_override, bff_rapor=bff_rapor, gozlem_rapor=gozlem_rapor)
-    # FE, BE'nin ürettiği FE↔BE sözleşmesini bağlam alsın (aynı görevin karşı katmanı).
+        if not ((gozlem_rapor or {}).get("md") and (gozlem_rapor or {}).get("ok")):
+            gozlem_rapor = {"ok": False, "md": "", "neden": (gozlem_rapor or {}).get("neden", "")}
+    ortak = dict(cevaplar=cevaplar, onceki_sorular=onceki_sorular, ekran_baglami=ekran_baglami, rag_ctx=rag_ctx,
+                 canli_baglam_override=canli_baglam_override, bff_rapor=bff_rapor, gozlem_rapor=gozlem_rapor,
+                 canli_kapsam=kapsam, soru_asamasi=False)   # soru aşaması aşağıda İKİ katman için TEK kez
+    be = gorev_analiz_et(gorev, katman="be", **ortak)
+    # FE, BE'nin ürettiği FE↔BE sözleşmesini bağlam alsın (aynı görevin karşı katmanı) — sözleşme bölümü ÖNE alınır,
+    # yoksa 4000 karakterlik baş-kırpmada (Yönetici Özeti önce) sondaki sözleşme kaybolurdu.
     be_baglam = {"key": gorev.get("key", ""),
                  "summary": (gorev.get("summary", "") + " — BE tarafı (sözleşme)"),
-                 "description": be.get("markdown", ""), "katman": "be"}
-    fe = gorev_analiz_et(gorev, cevaplar=cevaplar, katman="fe", iliskili=[be_baglam],
-                         onceki_sorular=onceki_sorular, ekran_baglami=ekran_baglami,
-                         rag_ctx=rag_ctx, canli_baglam_override=canli_baglam_override, bff_rapor=bff_rapor,
-                         gozlem_rapor=gozlem_rapor)
-    return {"be": {"markdown": be.get("markdown", ""), "acik_sorular": be.get("acik_sorular", ""),
-                   "is_var": katman_is_var_mi(be.get("markdown", ""))},
-            "fe": {"markdown": fe.get("markdown", ""), "acik_sorular": fe.get("acik_sorular", ""),
-                   "is_var": katman_is_var_mi(fe.get("markdown", ""))}}
+                 "description": _fe_icin_be_sozlesme(be.get("markdown", "")), "katman": "be"}
+    fe = gorev_analiz_et(gorev, katman="fe", iliskili=[be_baglam], **ortak)
+    # Açık sorular + öz-çözümleme + otomatik işleme: iki katman üzerinden TEK kez (canlı çözüm turu bir kez koşar).
+    be_md, fe_md = yonetici_ozetini_cikar(be.get("markdown", "")), yonetici_ozetini_cikar(fe.get("markdown", ""))
+    (be_md, fe_md), acik = _soru_asamasi([be_md, fe_md], gorev, cevaplar=cevaplar, onceki_sorular=onceki_sorular,
+                                         canli=bool(_canli), gozlem_rapor=gozlem_rapor,
+                                         rag_ctx=(rag_ctx if not ekran_baglami else None),
+                                         canli_kapsam=(kapsam if _canli else None))
+    be_md = yonetici_ozeti_olustur(be_md, acik_sorular=acik) + be_md
+    fe_md = yonetici_ozeti_olustur(fe_md, acik_sorular=acik) + fe_md
+    return {"be": {"markdown": be_md, "acik_sorular": acik, "is_var": katman_is_var_mi(be_md)},
+            "fe": {"markdown": fe_md, "acik_sorular": acik, "is_var": katman_is_var_mi(fe_md)}}
 
 
 _KATMAN_IS = re.compile(r"\*\*\s*Bu katmanda iş\s*:?\s*\*\*\s*:?\s*(VAR|YOK)\b", re.I)
@@ -1129,9 +1254,11 @@ def gorev_fe_be_task_olustur(key: str, be_markdown: str, fe_markdown: str,
     be_key = fe_key = None
     link_ok, link_uyari = False, ""
 
-    # 1) BE → orijinal task (başlık 'BE - ' önekli, idempotent)
+    # 1) BE → orijinal task (başlık 'BE - ' önekli, idempotent). ORİJİNAL TALEP KORUNUR: gövde =
+    #    '## 📌 Orijinal Talep' + mevcut açıklama + '## 🤖 Teknik Analiz' (köprü ile aynı biçim) — eskiden analiz
+    #    açıklamanın üzerine yazılıp isteri siliniyordu.
     if "be" in kat:
-        gorev_jiraya_yaz(key, be_markdown, summary=_katman_prefix("be", ozet))
+        gorev_jiraya_yaz(key, govde_birlestir(be_markdown, orig.get("description", "")), summary=_katman_prefix("be", ozet))
         be_key = key
 
     # 2) FE → yeni Task (aynı temizlik: TL;DR + canlı gözlem + [K:] etiketleri çıkarılır)
@@ -1230,7 +1357,7 @@ def gorev_yeni_task_olustur(proje: str, mode: str = "tek", markdown: str = "",
 
     ust_key = (ust_key or "").strip().upper()
     kaynak_key = (kaynak_key or "").strip().upper()
-    if kaynak_key and not _ID_DESENI.match(kaynak_key):
+    if kaynak_key and (kaynak_key.startswith("EKRAN-") or not _ID_DESENI.match(kaynak_key)):
         kaynak_key = ""   # sentetik kaynak (İnteraktif Analiz ekran kaydı EKRAN-n) → Jira'da yok, bağ kurulmaz
     if ust_key and not _ID_DESENI.match(ust_key):
         raise ValueError(f"Geçersiz üst öğe anahtarı: '{ust_key}'")
@@ -1304,19 +1431,43 @@ _GOREV_DUZELT_SISTEM = (
 )
 
 
+_RAG_YORUM = re.compile(r"<!--\s*RAG:[^>]*-->[ \t]*\n?")
+
+
 def _rag_yorum_ayir(teknik: str) -> tuple[str, str]:
-    """Analizin başındaki `<!-- RAG: … -->` satırını gövdeden ayırır (düzeltme çağrısına gitmesin, sonra geri konsun)."""
-    m = re.match(r"\s*(<!--\s*RAG:[^>]*-->\s*)", teknik or "")
-    return (m.group(1), (teknik or "")[m.end():]) if m else ("", teknik or "")
+    """`<!-- RAG: … -->` yorumunu gövdeden ayırır (düzeltme çağrısına gitmesin, sonra geri konsun). Yorum metnin
+    başında olmayabilir (önünde Yönetici Özeti varsa) → İLK 3 SATIR içinde aranır; dönen gövde yorumdan arındırılmıştır."""
+    t = teknik or ""
+    parcalar = t.split("\n", 3)
+    on = "\n".join(parcalar[:3])
+    m = _RAG_YORUM.search(on)
+    if not m:
+        return "", t
+    yorum = m.group(0).rstrip("\n") + "\n\n"
+    return yorum, (t[:m.start()] + t[m.end():]).lstrip("\n")
 
 
-def gorev_analiz_duzelt(gorev: dict, mevcut_markdown: str, talimat: str) -> str:
+def _govde_ayir(markdown: str) -> tuple[str, bool, str]:
+    """(rag_yorum, ozet_vardi, saf_govde) — Yönetici Özeti + RAG yorumu düzeltme çağrısına GİTMEZ (özet eskiden
+    analizle birlikte modele gidip 'eski özet' olarak geri geliyor, sayaçlar yenilenmiyordu)."""
+    md = markdown or ""
+    ozetsiz = yonetici_ozetini_cikar(md)
+    ozet_vardi = ozetsiz.strip() != md.strip()
+    rag, govde = _rag_yorum_ayir(ozetsiz)
+    return rag, ozet_vardi, govde
+
+
+def gorev_analiz_duzelt(gorev: dict, mevcut_markdown: str, talimat: str, asama: str = "gorev:duzelt",
+                        acik_sorular: str = "") -> str:
     """İteratif düzeltme: mevcut teknik analiz + talimat → yalnız ilgili kısmı düzeltilmiş tam analiz.
-    HTML prototip 'sohbetle düzelt' deseninin görev-analizi karşılığı. Jira'ya YAZMAZ (önizleme)."""
+    HTML prototip 'sohbetle düzelt' deseninin görev-analizi karşılığı. Jira'ya YAZMAZ (önizleme).
+    Girdideki Yönetici Özeti + `<!-- RAG -->` yorumu modele GİTMEZ; özet vardıysa çıktıda deterministik olarak
+    YENİDEN üretilir, RAG yorumu geri konur. `asama`: telemetri etiketi (cevap turu 'gorev:cevap' geçer)."""
     talimat = (talimat or "").strip()
     if not talimat:
         raise ValueError("Düzeltme talimatı boş.")
-    mevcut = (mevcut_markdown or "").strip()
+    rag, ozet_vardi, mevcut = _govde_ayir(mevcut_markdown)
+    mevcut = mevcut.strip()
     if not mevcut:
         raise ValueError("Düzeltilecek analiz yok.")
     icerik = [
@@ -1324,10 +1475,16 @@ def gorev_analiz_duzelt(gorev: dict, mevcut_markdown: str, talimat: str) -> str:
         {"type": "text", "text": f"### Kaynak Görev: {gorev.get('key','')} — {gorev.get('summary','')}"},
         {"type": "text", "text": f"### Düzeltme Talimatı (yalnız bunu uygula)\n{talimat}"},
     ]
-    asama_ayarla("gorev:duzelt")
+    asama_ayarla(asama or "gorev:duzelt")
     yanit = _api_cagri(_GOREV_DUZELT_SISTEM, [{"role": "user", "content": icerik}],
                        max_tokens=MAX_TOKENS_COMBINED, thinking=extended_thinking_acik(), katman="yardimci")
-    return _meta_notlari_temizle(_xml_ayir(_metin_sikistir(yanit), "teknik_analiz"))
+    yeni = _meta_notlari_temizle(_xml_ayir(_metin_sikistir(yanit), "teknik_analiz"))
+    if not yeni.strip():
+        return yeni
+    yeni = yonetici_ozetini_cikar(yeni)
+    if ozet_vardi:
+        yeni = yonetici_ozeti_olustur(yeni, acik_sorular=acik_sorular or "") + yeni
+    return rag + yeni
 
 
 def cevap_hedefli_acik() -> bool:
@@ -1356,21 +1513,24 @@ def gorev_cevap_uygula(gorev: dict, mevcut_markdown: str, cevaplar: str, onceki_
         raise ValueError("Cevap metni boş.")
     if not (mevcut_markdown or "").strip():
         raise ValueError("Cevap uygulanacak mevcut analiz yok.")
-    rag, govde = _rag_yorum_ayir(mevcut_markdown)
-    asama_ayarla("gorev:cevap")
-    yeni = gorev_analiz_duzelt(gorev, govde, _CEVAP_TALIMAT + cevaplar)
+    rag, ozet_vardi, govde = _govde_ayir(mevcut_markdown)
+    yeni = gorev_analiz_duzelt(gorev, govde, _CEVAP_TALIMAT + cevaplar, asama="gorev:cevap")
     if not yeni.strip():
         raise ValueError("Cevap uygulama boş sonuç döndü.")
+    yeni = yonetici_ozetini_cikar(yeni)
     acik = ""
     try:
         acik = _gorev_acik_sorular_uret(yeni, gorev, cevaplar=cevaplar, onceki_sorular=onceki_sorular or "")
     except Exception as e:
         print(f"  ⚠ Kalan açık sorular üretilemedi (cevaplar yine de işlendi): {str(e)[:120]}")
-    return {"markdown": (rag + yeni) if rag else yeni, "acik_sorular": acik, "hedefli": True}
+    # Özet (açık soru sayacı dahil) GÜNCEL gövde + KALAN sorulardan yeniden kurulur; RAG yorumu geri konur.
+    ozet = yonetici_ozeti_olustur(yeni, acik_sorular=acik) if ozet_vardi else ""
+    return {"markdown": rag + ozet + yeni, "acik_sorular": acik, "hedefli": True}
 
 
 def _gorev_acik_sorular_uret(teknik_metni: str, gorev: dict,
-                             cevaplar: str = "", onceki_sorular: str = "") -> str:
+                             cevaplar: str = "", onceki_sorular: str = "",
+                             gozlem_rapor: dict | None = None) -> str:
     """Aşama-2 açık sorular: üretilen teknik analiz + görev + (varsa) ÖNCEKİ tur soruları/cevapları.
     Amaç: geliştirmeyi GERÇEKTEN bloklayan soruları toplamak ve TURLAR İÇİNDE YAKINSAMAK — her turda
     AZALMALI, birkaç turda bitmeli (drift/tekrar yok). Haiku — ucuz. Boşsa UI'da panel gizlenir."""
@@ -1412,6 +1572,11 @@ def _gorev_acik_sorular_uret(teknik_metni: str, gorev: dict,
                                  f"**Başlık:** {gorev.get('summary','')}\n\n"
                                  f"**Açıklama:**\n{gorev.get('description','') or '(açıklama yok)'}"},
     ]
+    if gozlem_rapor and gozlem_rapor.get("ok") and gozlem_rapor.get("md"):
+        # Gözlem↔referans çelişkileri (analizde `[K: ❓ Belirsiz]`) bloklayıcıysa soruya dönüşsün — analiz çağrısı
+        # Açık Sorular üretmediğinden çelişki yalnız burada soruya çevrilebilir.
+        from .gozlem import rapor_soru_blogu
+        icerik.append({"type": "text", "text": rapor_soru_blogu(gozlem_rapor)})
     if onceki_sorular.strip():
         icerik.append({"type": "text", "text": (
             "### ÖNCEKİ TUR AÇIK SORULAR (yakınsama için — cevaplanan/çözülenleri ÇIKAR; kalan gerçekten "
@@ -1431,17 +1596,48 @@ def _gorev_acik_sorular_uret(teknik_metni: str, gorev: dict,
 
 # ─── Jira'ya Yaz (onaydan sonra) ─────────────────────────────────────────────
 
-def gorev_jiraya_yaz(task_key: str, markdown: str, summary: str | None = None) -> bool:
-    """Görevin description'ını markdown→ADF olarak günceller (üzerine yazar).
-    İsteğe bağlı summary de güncellenir. Canonical atlassian_put kullanır.
+# Analiz bölümü işareti — Jira'dan geri okurken `##` düşebilir → '#'li ve '#'siz eşleşir (köprüyle aynı sözleşme).
+_ANALIZ_ISARET = re.compile(r"(?:#{1,6}\s*)?🤖\s*Teknik Analiz")
+_ORIJINAL_ISARET = re.compile(r"^(?:\s*(?:#{1,6}\s*)?📌\s*Orijinal Talep\s*\n+)+")
 
-    SAĞLAMLIK: Jira issue update PUT 204 No Content döndürür. Eski wrapper sürümleri
-    veya beklenmedik response biçimlerinde r.json() ValueError fırlatabiliyor — bu
-    durumda yazma BAŞARILI olmuş ama UI'a hata gidiyor (kullanıcı: 'görev güncellendi
-    ama hata aldım'). Çift güvenceli: ValueError yutulur, yazma başarılı sayılır."""
+
+def orijinal_talep_ayikla(desc: str) -> str:
+    """Task açıklamasından ORİJİNAL talebi çıkarır — daha önce agent analizi yazıldıysa (`🤖 Teknik Analiz` bölümü)
+    onun ÜSTÜNDEKİ metni döndürür; yoksa açıklamanın tamamı orijinaldir. Baştaki '📌 Orijinal Talep' başlıkları
+    (bir ya da daha çok) temizlenir → tekrar yazımda kaz-boynu birikmez (idempotent)."""
+    d = (desc or "").strip()
+    if not d:
+        return ""
+    ust = re.split(r"\n*" + _ANALIZ_ISARET.pattern, d, maxsplit=1)[0]
+    ust = _ORIJINAL_ISARET.sub("", ust)
+    ust = re.sub(r"\n*-{3,}\s*$", "", ust).strip()
+    return ust
+
+
+def govde_birlestir(analiz_md: str, mevcut_desc: str) -> str:
+    """Jira açıklaması = '## 📌 Orijinal Talep' + orijinal + '---' + '## 🤖 Teknik Analiz (Analyst Agent)' + analiz.
+    Köprü (`jira_kopru._govdeye_yaz`) ve 'BE'yi yaz' / 'Onayla ve Jira'da Güncelle' aynı biçimi kullanır →
+    analiz hiçbir yolda isteri SİLMEZ. Analiz Jira kopyası olarak temizlenir (`jira_icin_temizle`)."""
+    temiz = jira_icin_temizle(analiz_md or "").strip()
+    orijinal = orijinal_talep_ayikla(mevcut_desc)
+    return (f"## 📌 Orijinal Talep\n\n{orijinal or '(açıklama yok)'}\n\n"
+            f"---\n\n## 🤖 Teknik Analiz (Analyst Agent)\n\n{temiz}")
+
+
+def gorev_jiraya_yaz(task_key: str, markdown: str, summary: str | None = None, orijinal_koru: bool = True) -> bool:
+    """Görevin description'ını markdown→ADF olarak günceller. İsteğe bağlı summary de güncellenir.
+    `orijinal_koru=True` (varsayılan): yazılacak metin zaten `🤖 Teknik Analiz` işaretini TAŞIMIYORSA mevcut açıklama
+    okunur ve `govde_birlestir` ile '📌 Orijinal Talep + analiz' olarak yazılır → isteri ezilmez; işaret varsa (köprü /
+    BE'yi yaz zaten birleştirdi) olduğu gibi yazılır (idempotent, ikinci okuma yok). Mevcut açıklama okunamazsa
+    (yetki/ağ) yazma YAPILMAZ — orijinal korunamayacağı için (sessiz veri kaybı yerine net hata)."""
     task_key = (task_key or "").strip().upper()
     if not _ID_DESENI.match(task_key):
         raise ValueError(f"Geçersiz Jira anahtarı: '{task_key}'")
+    if orijinal_koru and not _ANALIZ_ISARET.search(markdown or ""):
+        mevcut = gorev_getir(task_key)
+        if mevcut is None:
+            raise RuntimeError(f"'{task_key}' okunamadı — orijinal talep korunamayacağı için analiz yazılmadı.")
+        markdown = govde_birlestir(markdown, mevcut.get("description", ""))
     # Jira'ya giden kopya TEK kapıdan temizlenir (`base.jira_icin_temizle`): Yönetici Özeti +
     # Canlı Gözlem Kapsamı + `<!-- RAG -->` yorumu + kaynak alıntı cümleleri + meta-gerekçe +
     # `[K:]` etiketleri + ardışık bölüm numaraları. Analiz çıktısındaki hâl korunur.
@@ -1453,10 +1649,7 @@ def gorev_jiraya_yaz(task_key: str, markdown: str, summary: str | None = None) -
     fields = {"description": {"type": "doc", "version": 1, "content": adf_content}}
     if summary:
         fields["summary"] = summary
-    try:
-        atlassian_put(f"/rest/api/3/issue/{task_key}", body={"fields": fields}, cloud_id=_cloud_id())
-    except ValueError as parse_err:
-        # Response body parse hatası — HTTP isteği başarılı olduğu için yazma TAMAM.
-        # Bu, eski atlassian_put sürümünde 204'te r.json() patlaması durumunu kapsar.
-        print(f"  ⚠ Yanıt parse uyarısı (yazma başarılı sayılıyor): {parse_err}")
+    # Not: eski geniş ValueError yakalaması kaldırıldı — canonical atlassian_put 204'ü kendisi ele alır; geniş yakalama
+    # gerçek yazma hatalarını (ör. doğrulama mesajı ValueError olarak yükselirse) maskeliyordu.
+    atlassian_put(f"/rest/api/3/issue/{task_key}", body={"fields": fields}, cloud_id=_cloud_id())
     return True

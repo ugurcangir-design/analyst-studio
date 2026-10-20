@@ -171,3 +171,42 @@ token özetini `dokuman` sütununa `⟨tok g=…,c=…,cy=…,co=…,n=…,usd=�
 dokümandan siler. Sheet'te `dokuman` hücresinde bu işaret görünür (zararsız). İsteğe bağlı temiz yol: `_basliklar`'a
 `'girdi','cikti','cache_yaz','cache_oku','cagri','maliyet_usd'` sütunlarını ekleyip `doPost`'ta `o.token||{}` alanlarını
 yazmak ve `doGet`'te `token:{…}` döndürmek — o zaman uygulama `token` alanını doğrudan kullanır (gömme yine zararsız kalır).
+
+## Güvenlik sertleştirme (2026-10-20 denetimi) — script tarafı değişiklikleri
+Mevcut kod iki zayıflık taşır: (a) `doPost` tokensiz çalışırken Web App URL'ini bilen HERKES Sheet'e satır/örnek
+yazabilir; (b) `doGet` örnek çekmede `_domainMi` kapısı yalnız `?email=…@sans-technology.com` dizesine bakar —
+e-posta DOĞRULANMAZ, domain tahmin edilebilir → örnek içeriği (analiz metni) dışarı sızabilir. Önerilen değişiklikler
+(client tarafı **geri uyumlu**: token boşken eski davranış):
+
+1. **Paylaşılan sır HEM `doGet` HEM `doPost` için zorunlu** (Apps Script header okuyamaz → header'sız taşınır:
+   GET'te `?t=<sır>` parametresi, POST'ta gövde alanı `t`). Client `.env` `USAGE_SINK_TOKEN=<sır>` ile aynı değeri
+   POST gövdesine (`t`) ve GET isteklerine (`?t=`) otomatik ekler (`telemetri._yazma_token`).
+   ```javascript
+   const PAYLASILAN_SIR = 'BURAYA-UZUN-RASTGELE-SIR';     // owner .env USAGE_SINK_TOKEN ile aynı
+   function _sirOk(p, o) { return PAYLASILAN_SIR && ((p && p.t === PAYLASILAN_SIR) || (o && o.t === PAYLASILAN_SIR)); }
+   // doPost başı:  const o = JSON.parse(e.postData.contents || '{}');
+   //               if (!_sirOk(e.parameter, o)) return ContentService.createTextOutput('forbidden');
+   //               delete o.t;   // sır Sheet'e yazılmasın
+   // doGet başı:   if (!_sirOk(p, null)) return ContentService.createTextOutput(JSON.stringify({error:'Yetkisiz'})).setMimeType(ContentService.MimeType.JSON);
+   ```
+2. **`_domainMi` okuma kapısını KALDIR** — domain soneki tahmin edilebilir. Örnek çekme (`?ornekler=1`) ve kullanım
+   raporu YALNIZ `Owners` listesindeki e-posta **VE** paylaşılan sır ile açılır:
+   ```javascript
+   // doGet — ornekler: if (!(_ownerMi(p.email) || p.read === OKUMA_ANAHTARI)) → Yetkisiz   (artık _domainMi YOK)
+   ```
+   Ekip few-shot dağıtımı için (owner olmayan analistlerin örnek çekmesi) `Owners` yerine ayrı bir **`Analistler`**
+   sekmesi (A sütunu e-posta) tutulup `_listedeMi('Analistler', p.email)` ile kontrol edilebilir — ama bu da yalnız
+   sırla birlikte (madde 1) anlamlıdır; e-posta tek başına kimlik DEĞİLDİR.
+3. **Token sütunları opsiyonel:** `_basliklar`'a `'girdi','cikti','cache_yaz','cache_oku','cagri','maliyet_usd'` eklenip
+   `doPost`'ta `(o.token||{}).girdi …` yazılabilir; eklenmezse uygulama `dokuman` sütunundaki `⟨tok …⟩` gömmesiyle
+   çalışmaya devam eder (yukarıdaki bölüm). Sır alanı `t` ASLA sütun olarak saklanmaz.
+
+**Okuma anahtarı (`?read=`) hakkında:** client şimdilik GET sorgu dizesinde gönderir (Apps Script header
+okuyamadığı için). Sorgu dizesi proxy/erişim loglarına düşebilir → script `op:"read"` POST'u destekleyince anahtar
+gövdeye taşınacak (client değişikliği: `uzaktan_cek`/`ornekleri_cek`/`tani` tek yerde). Bu geçişe kadar client hata
+mesajlarına URL/sorgu dizesini KOYMAZ (yalnız istisna türü + ipucu).
+
+**Dağıtım sırası:** (1) script'e `PAYLASILAN_SIR` + kapıları ekle ve yeni sürüm dağıt (URL aynı), (2) owner `.env`
+`USAGE_SINK_TOKEN=<sır>` girip yeniden başlat, (3) analist makinelerine aynı değeri `.env` ile ver (sır git'e GİRMEZ).
+Token dağıtılana kadar script'te `PAYLASILAN_SIR=''` bırakılırsa `_sirOk` false döner → **yazma durur**; bu yüzden
+sırrı önce dağıt, sonra script'e koy (ya da `_sirOk`'u `!PAYLASILAN_SIR || …` ile geçici gevşet).

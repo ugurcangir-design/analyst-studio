@@ -49,10 +49,24 @@ print("1) gözlemli tur")
 SA.live_app_urls = lambda: ["https://dev-ornek.local/app"]
 SA.canli_uygulama_baglami_hazirla = lambda **kw: f"### CANLI GÖREV base={kw.get('base_url_override')} hedef={kw.get('hedef_tarif')}"
 SA._api_cagri = sahte_ai("Sports ekranında Export butonu YOK; kolonlar: Name, Code.")
+from skills import gozlem as GZ  # noqa: E402
+gz_cag: list = []
+GZ.rapor_al = (lambda canli, kapsam, gorev_ozet="", yeniden=True, **k:
+               (gz_cag.append({"canli": canli, "kapsam": kapsam, "ozet": gorev_ozet, "yeniden": yeniden})
+                or {"ok": True, "md": "## Ekran\n- Sports: Name, Code `[K: Canlı UI:/sports]`", "ts": time.time()}))
 SA.oturum_sifirla()
 o = SA.sohbet_mesaj("Sports ekranını gözlemle", gozlem=True)
-chk("canlı görev bloğu + base URL + hedef", "base=https://dev-ornek.local" in yakala["metin"] and "hedef=Sports ekranını gözlemle" in yakala["metin"])
-chk("kapsam 'surec' + önbellek kapalı", yakala["kw"].get("canli_uygulama_kapsami") == "surec" and yakala["kw"].get("onbellek") is False)
+chk("gözlem AYRI fazda (gozlem.rapor_al): canlı görev bloğu + base URL + hedef, kapsam 'surec', taze", len(gz_cag) == 1
+    and "base=https://dev-ornek.local" in gz_cag[0]["canli"] and "hedef=Sports ekranını gözlemle" in gz_cag[0]["canli"]
+    and gz_cag[0]["kapsam"] == "surec" and gz_cag[0]["yeniden"] is True, gz_cag)
+chk("sohbet yanıtı TARAYICISIZ (kapsam yok) + rapor bloğu promptta + önbellek kapalı", yakala["kw"].get("canli_uygulama_kapsami") is None
+    and "CANLI UYGULAMA GÖZLEM RAPORU" in yakala["metin"] and "Name, Code" in yakala["metin"] and yakala["kw"].get("onbellek") is False)
+GZ.rapor_al = lambda *a, **k: {"ok": False, "md": "", "neden": "tarayıcı açılmadı"}
+SA.sohbet_mesaj("tekrar gözlemle", gozlem=True)
+chk("gözlem başarısız → 'YAPILAMADI' notu, tarayıcısız", "GÖZLEMİ YAPILAMADI" in yakala["metin"] and yakala["kw"].get("canli_uygulama_kapsami") is None)
+GZ.rapor_al = (lambda canli, kapsam, gorev_ozet="", yeniden=True, **k:
+               {"ok": True, "md": "## Ekran\n- Sports `[K: Canlı UI:/sports]`", "ts": time.time()})
+o = SA.oturum_oku()
 chk("mesajlar gözlem bayraklı", o["mesajlar"][0].get("gozlem") and o["mesajlar"][1].get("gozlem"))
 SA.sohbet_mesaj("normal soru")
 chk("normal tur: canlı görev yok, kapsam None", "CANLI GÖREV" not in yakala["metin"] and yakala["kw"].get("canli_uygulama_kapsami") is None)
@@ -145,7 +159,7 @@ A._gorev_egitim_topla("EKRAN-1", "Sports", "", "analiz", {"markdown": "x" * 500}
 chk("sentetik EKRAN- eğitim/depoya girmez", cagri == [])
 from skills import jira_gorevleri as JG  # noqa: E402
 src = Path(JG.__file__).read_text(encoding="utf-8")
-chk("yeni task: sentetik kaynak anahtarı bağ kurmaz", 'if kaynak_key and not _ID_DESENI.match(kaynak_key):' in src)
+chk("yeni task: sentetik kaynak anahtarı bağ kurmaz", 'kaynak_key.startswith("EKRAN-")' in src)
 chk("oturum özeti giris + ekranlar alanları", {"giris", "ekranlar"} <= set(A._sohbet_ozet({"mesajlar": []}).keys()))
 
 print()

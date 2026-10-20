@@ -132,17 +132,22 @@ def _gorevler_uret(teknik_analiz: str, talimat: str = "") -> list[dict]:
         {"type": "text",
          "text": f"### Teknik Analiz\n\n{teknik_analiz}{steer}\n\nFE/BE görev listesini üret."}
     ]}]
-    yanit = _api_cagri(_FE_BE_SISTEM, mesajlar, max_tokens=MAX_TOKENS_FE_BE)
-    yanit = _metin_sikistir(yanit)
-    json_str = _xml_ayir(yanit, "fe_be_gorevler")
-    try:
-        veri = json.loads(json_str)
-    except json.JSONDecodeError as e:
-        cleaned = re.sub(r'^```[a-z]*\n?', '', json_str.strip()).rstrip('`').strip()
+    def _coz(yanit: str) -> dict:
+        json_str = _xml_ayir(_metin_sikistir(yanit), "fe_be_gorevler")
         try:
-            veri = json.loads(cleaned)
-        except json.JSONDecodeError:
-            raise ValueError(f"AI yanıtı JSON parse edilemedi: {e}\n---\n{json_str[:500]}")
+            return json.loads(json_str)
+        except json.JSONDecodeError as e:
+            cleaned = re.sub(r'^```[a-z]*\n?', '', json_str.strip()).rstrip('`').strip()
+            try:
+                return json.loads(cleaned)
+            except json.JSONDecodeError:
+                raise ValueError(f"AI yanıtı JSON parse edilemedi: {e}\n---\n{json_str[:500]}")
+
+    try:
+        veri = _coz(_api_cagri(_FE_BE_SISTEM, mesajlar, max_tokens=MAX_TOKENS_FE_BE))
+    except ValueError:
+        # Bozuk/kesik yanıt 7 gün önbellekte kalmasın → BİR KEZ önbelleksiz tekrar; yine bozuksa hata yükselir
+        veri = _coz(_api_cagri(_FE_BE_SISTEM, mesajlar, max_tokens=MAX_TOKENS_FE_BE, onbellek=False))
     gorevler = veri.get("gorevler", []) or []
     return _gorevleri_normalize(gorevler)
 

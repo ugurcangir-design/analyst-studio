@@ -34,7 +34,8 @@ def chk(ad, kosul, ek=""):
 olay: list = []
 JG._cloud_id = lambda: "cid"
 JG.gorev_getir = lambda key: {"key": key, "summary": "Match Status filtresi"}
-JG.gorev_jiraya_yaz = lambda key, md, summary=None: olay.append(("guncelle", key, summary)) or True
+_ORJ_YAZ = JG.gorev_jiraya_yaz   # bölüm 5 gerçek fonksiyonu test eder
+JG.gorev_jiraya_yaz = lambda key, md, summary=None, orijinal_koru=True: olay.append(("guncelle", key, summary)) or True
 JT._proje_bilgi = lambda proje, cid: {"task_id": "10001"}
 _sayac = {"n": 0}
 
@@ -114,6 +115,56 @@ chk("yeni-task: geçersiz mode → 400", c.post("/api/jira/gorev/yeni-task", jso
 ui = Path(A.__file__).parent.joinpath("templates/index.html").read_text(encoding="utf-8")
 chk("UI: katman kutuları + etiket + yeni task katman seçimi + katmanlar gövdeye", all(x in ui for x in (
     'id="jg-kat-be"', 'id="jg-kat-fe"', "_jgKatmanEtiketGuncelle", 'name="jg-yt-katman"', "summary: be.summary || '', katmanlar })", "mode: ytMode")))
+
+print("5) BE'yi yaz → orijinal talep korunur; gorev_jiraya_yaz idempotent")
+yazilan: dict = {}
+JG.gorev_jiraya_yaz = lambda key, md, summary=None, orijinal_koru=True: yazilan.__setitem__(key, md) or True
+JG.gorev_getir = lambda key: {"key": key, "summary": "Match Status filtresi", "description": "Müşteri isterisi: filtre eklensin."}
+JG.gorev_fe_be_task_olustur("MBS-365", "## 1. Amaç\nBE analizi `[K: Swagger]`", "", katmanlar=["be"])
+chk("BE yazımı '📌 Orijinal Talep' + isteri + '🤖 Teknik Analiz' + analiz (isteri silinmez)",
+    yazilan["MBS-365"].startswith("## 📌 Orijinal Talep\n\nMüşteri isterisi: filtre eklensin.") and "🤖 Teknik Analiz" in yazilan["MBS-365"]
+    and "BE analizi" in yazilan["MBS-365"], yazilan["MBS-365"][:160])
+chk("orijinal_talep_ayikla idempotent (ikinci yazımda isteri tekrar sarmalanmaz)",
+    JG.orijinal_talep_ayikla(yazilan["MBS-365"]) == "Müşteri isterisi: filtre eklensin.")
+_gercek_yaz = _ORJ_YAZ
+put: dict = {}
+JG.atlassian_put = lambda path, body, cloud_id: put.update({"path": path, "body": body}) or {}
+JG.markdown_to_adf = lambda md: [{"type": "paragraph", "md": md}]
+_gercek_yaz("MBS-365", "## 1. Amaç\nyeni analiz", summary="BE - x")
+md_put = put["body"]["fields"]["description"]["content"][0]["md"]
+chk("gorev_jiraya_yaz (Güncelle yolu): işaret yoksa mevcut açıklamayı okuyup orijinali korur", "Orijinal Talep" in md_put
+    and "Müşteri isterisi" in md_put and "yeni analiz" in md_put and put["body"]["fields"]["summary"] == "BE - x", md_put[:160])
+okuma: list = []
+JG.gorev_getir = lambda key: okuma.append(key) or {"key": key, "description": "x"}
+_gercek_yaz("MBS-365", "## 📌 Orijinal Talep\n\nisteri\n\n---\n\n## 🤖 Teknik Analiz (Analyst Agent)\n\nanaliz")
+chk("işaret zaten varsa (köprü/BE'yi yaz birleştirdi) yeniden okuma yok, olduğu gibi yazılır", okuma == [] and "isteri" in put["body"]["fields"]["description"]["content"][0]["md"])
+JG.gorev_getir = lambda key: None
+try:
+    _gercek_yaz("MBS-365", "## 1. Amaç\nx")
+    chk("okunamazsa yazılmaz", False)
+except RuntimeError as e:
+    chk("mevcut açıklama okunamazsa yazma YAPILMAZ (orijinal korunamaz → net hata)", "korunamayacağı" in str(e))
+JG.gorev_getir = lambda key: {"key": key, "summary": "Match Status filtresi"}
+chk("gorev_jiraya_yaz kaynak: eski geniş 'except ValueError' kalktı", "except ValueError" not in __import__("inspect").getsource(_gercek_yaz))
+
+print("6) sentetik anahtar + hata deseni + bölüm desenleri + few-shot öz-kirlenme")
+olay.clear()
+r = JG.gorev_yeni_task_olustur("MBS", mode="tek", markdown="## x", baslik="Ekran", kaynak_key="EKRAN-3")
+chk("gorev_yeni_task_olustur: 'EKRAN-n' sentetik kaynak açıkça yok sayılır (Relates kurulmaz)", not any(o[0] == "relates" and o[2] == "EKRAN-3" for o in olay))
+chk("_hata_gorev_mi: özellik işi ('Hata mesajlarının gösterilmesi', 'Çalışma saatleri', 'Eksik alanların eklenmesi') BUG DEĞİL",
+    not any(JG._hata_gorev_mi({"summary": s}) for s in ("Hata mesajlarının gösterilmesi", "Çalışma saatleri ekranı", "Eksik alanların eklenmesi")))
+chk("_hata_gorev_mi: bug ifadesi ('çalışmıyor', 'hata alıyor', 'açılmıyor', 'fix:', 'Hata: … silinemiyor') ya da tip Bug → kısa mod",
+    all(JG._hata_gorev_mi(g) for g in ({"summary": "Filtre çalışmıyor"}, {"summary": "Kaydet'te hata alıyor"}, {"summary": "Rapor açılmıyor"},
+                                       {"summary": "fix: login"}, {"summary": "Hata: kayıt silinemiyor"}, {"summary": "Export eklensin", "issuetype": "Bug"})))
+ys = JG._yapisal_skor({"summary": "x", "description": "Bu değişiklik için amaç: hız. acceptance test sonra.\n" + "y" * 150})
+chk("_yapisal_skor: gövde içi 'değişiklik'/'amaç:'/'acceptance' başlık sayılmaz (çapalı)", not ys["bolumler"]["degisiklik"] and not ys["bolumler"]["amac"]
+    and not ys["bolumler"]["kabul"], ys)
+ys2 = JG._yapisal_skor({"summary": "x", "description": "## Amaç\nhız\n**Değişiklik**\nx\n### Kabul Kriterleri\n- a\n" + "y" * 150})
+chk("_yapisal_skor: başlık/bold başlık olarak geçince yakalanır", ys2["bolumler"]["amac"] and ys2["bolumler"]["degisiklik"] and ys2["bolumler"]["kabul"] and ys2["hazir_yapisal"])
+chk("_ornek_kendisi_mi: '· MBS-365' / '· MBS-365::FE' etiketli örnek bu task'ın kendisi; başka key değil",
+    JG._ornek_kendisi_mi({"text": "### ONAYLI ÖRNEK · proje: MBS · MBS-365\n\nicerik"}, "MBS-365")
+    and JG._ornek_kendisi_mi({"text": "### ONAYLI ÖRNEK · MBS-365::FE\nx"}, "mbs-365")
+    and not JG._ornek_kendisi_mi({"text": "### ONAYLI ÖRNEK · MBS-3650\nx"}, "MBS-365"))
 
 print()
 if _hata:

@@ -110,4 +110,35 @@ dogru("YENI_B" in aktif and "ESKI_A" not in aktif, "#1 oturum diske (B) yeniden 
 esit(rv3["onay_durumu"], "beklemede", "#1 yeniden bazlama sonrası öneri beklemede")
 dogru("ESKI_A" not in r.versiyon_icerik(H3, "v2"), "#1 öneri eski A içeriği taşımaz")
 
+# ── Bölüm düzenleme korumaları (kesik/başlığı değişen çıktı splice edilmez) + çıktı bütçesi ──
+H4 = "kesik.md"
+(tmp / H4).write_text("### PA-001: Giriş\n" + "Uzun satır içerik. " * 40 + "\n\n### PA-002: Çıkış\nx\n", encoding="utf-8")
+for ad, cikti in (("yarıdan kısa", "### PA-001: Giriş\nkısa.\n"), ("başlık değişti", "### PA-009: Başka\n" + "Uzun satır içerik. " * 40 + "\n"), ("boş", "   ")):
+    try:
+        ra.bolum_duzenle(H4, "PA-001", "düzelt", _ai_fn=lambda t, b, c=cikti: c)
+        raise SystemExit(f"{ad} çıktı reddedilmeliydi")
+    except ValueError as e:
+        dogru("reddedildi" in str(e) or "boş" in str(e), f"koruma: {ad} → ValueError (Türkçe neden)")
+dogru(r.bekleyen_revizyon(H4) is None, "reddedilen düzenleme öneri olarak kaydedilmedi")
+esit(ra._cikti_butcesi("x" * 30000), min(ra.MAX_TOKENS_UZUN, 30000 // 3 + 1500), "çıktı bütçesi bölüm boyutundan (≈ kc/3+1500)")
+esit(ra._cikti_butcesi("kısa"), ra.MAX_TOKENS_KISA, "küçük bölümde taban MAX_TOKENS_KISA")
+dogru(ra._cikti_butcesi("x" * 200000) == ra.MAX_TOKENS_UZUN, "tavan MAX_TOKENS_UZUN")
+# Çitli kod bloğu içindeki '#' satırları başlık sayılmaz
+KOD = "## 1. Amaç\nmetin\n```bash\n# bu bir yorum\n## bu da\necho x\n```\n## 2. Kapsam\ny\n"
+bl = [b["baslik"] for b in ra.bolumlere_ayir(KOD) if b["seviye"]]
+esit(bl, ["1. Amaç", "2. Kapsam"], "bolumlere_ayir: kod bloğundaki '#' satırları başlık değil")
+dogru("echo x" in ra.bolum_bul(KOD, "1. Amaç")["icerik"], "kod bloğu ait olduğu bölümde kalır")
+# Bayat taban: iki bekleyen öneri; ilki onaylanınca ikincisi (eski aktif üzerine kurulu) reddedilir
+H5 = "bayat.md"
+r.baslat(H5, "# R\nA\n", "ilk")
+o1 = r.revizyon_oner(H5, "# R\nA1\n", tip="bolum", istek="1")
+o2 = r.revizyon_oner(H5, "# R\nA2\n", tip="bolum", istek="2")
+r.onayla(H5, o1["id"])
+try:
+    r.onayla(H5, o2["id"])
+    raise SystemExit("bayat öneri onaylanmamalıydı")
+except ValueError as e:
+    dogru("bayat" in str(e), "onayla: taban ≠ aktif versiyon → ValueError (önceki onaylı düzenleme sessizce silinmez)")
+esit(r.onayli_icerik(H5), "# R\nA1\n", "aktif içerik ilk onayda kalır")
+
 print(f"\nREVİZYON TESTLERİ GEÇTİ ({ok} assert)")

@@ -220,11 +220,14 @@ def ara(ad: str, sorgu: str, limit: int = MAX_ARAMA_SONUC) -> dict:
     rg_calisti = False   # ripgrep KURULU olsa da exception atarsa fallback yine çalışmalı
     if rg:
         try:
+            # Sorgu `-e` ile verilir ('-foo' gibi tireyle başlayan sorgu seçenek sanılmasın);
+            # `--` seçenekleri kapatır (sonrası yalnız yol olabilir — burada yol yok: cwd=kok).
             args = [rg, "--line-number", "--no-heading", "--color", "never",
                     "--max-count", "5", "--max-columns", "300", "-i",
-                    "--fixed-strings", sorgu]
+                    "--fixed-strings", "-e", sorgu]
             for d in _HARIC_DIZIN:
                 args += ["--glob", f"!{d}/"]
+            args.append("--")
             r = subprocess.run(args, cwd=str(kok), capture_output=True, text=True,
                                timeout=GIT_TIMEOUT, encoding="utf-8", errors="replace")
             for satir in r.stdout.splitlines()[:limit]:

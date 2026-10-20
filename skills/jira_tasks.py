@@ -190,19 +190,25 @@ def _hierarchy_uret(teknik_analiz: str) -> dict:
     mesajlar = [{"role": "user", "content": [
         {"type": "text", "text": f"### Teknik Analiz\n\n{teknik_analiz}\n\nJira task hiyerarşisini üret."}
     ]}]
-    yanit = _api_cagri(prompt_yukle("jira_tasks"), mesajlar, max_tokens=MAX_TOKENS_HIERARCHY)
-    yanit = _metin_sikistir(yanit)
-    json_str = _xml_ayir(yanit, "jira_hierarchy")
+    sistem = prompt_yukle("jira_tasks")
+
+    def _coz(yanit: str) -> dict:
+        json_str = _xml_ayir(_metin_sikistir(yanit), "jira_hierarchy")
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError as e:
+            # JSON başını/sonunu temizleyip tekrar dene
+            cleaned = re.sub(r'^```[a-z]*\n?', '', json_str.strip()).rstrip('`').strip()
+            try:
+                return json.loads(cleaned)
+            except json.JSONDecodeError:
+                raise ValueError(f"AI yanıtı JSON parse edilemedi: {e}\n---\n{json_str[:500]}")
 
     try:
-        return json.loads(json_str)
-    except json.JSONDecodeError as e:
-        # JSON başını/sonunu temizleyip tekrar dene
-        cleaned = re.sub(r'^```[a-z]*\n?', '', json_str.strip()).rstrip('`').strip()
-        try:
-            return json.loads(cleaned)
-        except json.JSONDecodeError:
-            raise ValueError(f"AI yanıtı JSON parse edilemedi: {e}\n---\n{json_str[:500]}")
+        return _coz(_api_cagri(sistem, mesajlar, max_tokens=MAX_TOKENS_HIERARCHY))
+    except ValueError:
+        # Bozuk/kesik yanıt 7 gün önbellekte kalmasın → BİR KEZ önbelleksiz tekrar; yine bozuksa hata yükselir
+        return _coz(_api_cagri(sistem, mesajlar, max_tokens=MAX_TOKENS_HIERARCHY, onbellek=False))
 
 
 # ─── Issue Type ID Belirleme ──────────────────────────────────────────────────

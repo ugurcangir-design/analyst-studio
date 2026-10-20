@@ -125,6 +125,9 @@ print("4) analize ekleme")
 eklendi = AK.sorulari_analize_ekle(ANALIZ, bl)
 chk("Açık Sorular sonuna, denetimden ÖNCE", eklendi.index("### Q-002") > eklendi.index("### Q-001")
     and eklendi.index("### Q-002") < eklendi.index("## 🔗 Akış Bütünlük"))
+orta = AK.sorulari_analize_ekle("## 1. Amaç\nx\n\n## 9. Açık Sorular\n\n### Q-001: a\n- Soru: a?\n\n## 10. Ekler\nek metni\n", bl)
+chk("Açık Sorular bölümü ORTADAYSA sorular o bölümün ALTINA (sonraki '## 10. Ekler'den ÖNCE) eklenir — gövde sonuna değil",
+    orta.index("### Q-002") < orta.index("## 10. Ekler") and orta.index("### Q-002") > orta.index("### Q-001") and orta.rstrip().endswith("ek metni"), orta)
 yok = AK.sorulari_analize_ekle("## Analiz\nmetin\n", bl)
 chk("Açık Sorular yoksa başlıkla eklenir", "### Açık Sorular" in yok and yok.index("### Açık Sorular") < yok.index("### Q-002"))
 from skills import sorular as SQ  # noqa: E402

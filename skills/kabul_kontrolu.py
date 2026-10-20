@@ -19,7 +19,7 @@ import re
 from urllib.parse import urlparse
 
 from .base import (
-    MAX_TOKENS_KISA, MAX_TOKENS_COMBINED,
+    MAX_TOKENS_COMBINED, MAX_TOKENS_UZUN,
     _api_cagri, _xml_ayir, _metin_sikistir, load_context_filter,
     canli_uygulama_baglami_hazirla, extended_thinking_acik, asama_ayarla,
 )
@@ -59,7 +59,8 @@ def _tamamlama_adayi(m: dict) -> bool:
     return (not neden.strip()) or bool(_BUTCE_NEDENI.search(neden))
 DURUMLAR = ("dogrulandi", "eksik", "dogrulanamadi")
 _SONUC_ETIKET = {"teste_hazir": "✅ TESTE HAZIR", "geri": "❌ GELİŞTİRMEYE GERİ",
-                 "dogrulanamadi": "⚠ DOĞRULANAMADI"}
+                 "dogrulanamadi": "⚠ DOĞRULANAMADI",
+                 "teste_hazir_kismi": "⚠ KISMİ DOĞRULANDI (doğrulanamayan maddeler var — tüm kapsam doğrulandı sayılmaz)"}
 
 _LISTE_SISTEM = """# ROL
 Kıdemli iş analisti / kabul testçisisin. Geliştirmesi tamamlanmış bir Jira task'ının analizinden, uygulamada
@@ -164,14 +165,24 @@ def _ilgili_metni(gorev: dict) -> str:
 
 def kabul_listesi_cikar(gorev: dict, _ai=None, talimat: str = "") -> list[dict]:
     asama_ayarla("kabul:liste")
-    ai = _ai or (lambda s, m: _api_cagri(s, m, max_tokens=MAX_TOKENS_KISA, thinking=False, katman="yardimci"))
+    # 25 madde × (madde/ref/beklenen/ekran) JSON 3000 token'a sığmıyordu (kesik JSON → boş liste → 'DOĞRULANAMADI').
+    ai = _ai or (lambda s, m, **k: _api_cagri(s, m, max_tokens=MAX_TOKENS_UZUN, thinking=False, katman="yardimci", **k))
     icerik = [{"type": "text", "text": f"### Jira Görevi: {gorev.get('key', '')}\n\n**Başlık:** {gorev.get('summary', '')}\n"
                                        f"{_ilgili_metni(gorev)}\n"
                                        f"**Açıklama / Analiz:**\n{gorev.get('description', '') or '(açıklama yok)'}"}]
     if (talimat or "").strip():
         icerik.append({"type": "text", "text": f"### Analist talimatı (ortam/odak)\n{talimat.strip()}"})
     icerik.append({"type": "text", "text": "Bu task için denenebilir kabul maddelerini çıkar (kabul kriterleri birincil)."})
-    return _liste_normalize(_json_dizi(ai(_LISTE_SISTEM, [{"role": "user", "content": icerik}]), "kabul_listesi"))
+    mesajlar = [{"role": "user", "content": icerik}]
+    liste = _liste_normalize(_json_dizi(ai(_LISTE_SISTEM, mesajlar), "kabul_listesi"))
+    if not liste:
+        # Boş/bozuk yanıt 7 gün önbellekte kalmasın → BİR KEZ önbelleksiz tekrar (enjekte _ai kwargs almıyorsa düz çağrı)
+        try:
+            yanit = ai(_LISTE_SISTEM, mesajlar, onbellek=False)
+        except TypeError:
+            yanit = ai(_LISTE_SISTEM, mesajlar)
+        liste = _liste_normalize(_json_dizi(yanit, "kabul_listesi"))
+    return liste
 
 
 # ── 2) Canlı doğrulama ───────────────────────────────────────────────────────
@@ -192,34 +203,48 @@ def _ortam_adi(url: str) -> str:
     return f"{sinif} ({host})" if sinif and host else (host or "—")
 
 
-def _hedef_url(talimat: str = "") -> str:
-    """Analist talimatında URL varsa O ekran (doğrudan); yoksa live_app_gorev → live_app hedefi."""
-    u = _talimat_url(talimat)
-    if u:
-        return u
+_URL_KAPSAM = {"live_app_gorev": "gorev", "live_app": "surec"}
+
+
+def _hedef_url_kapsam(talimat: str = "") -> tuple[str, str]:
+    """(url, kapsam). Talimatta URL varsa O ekran; yoksa live_app_gorev → live_app. Kapsam = URL'in geldiği alan
+    ('gorev' | 'surec'); talimat URL'inde Task hedefi tanımlıysa 'gorev', yoksa 'surec' (profil/MCP o kapsamdan kurulur —
+    eskiden her zaman 'gorev' geçiliyordu → yalnız Süreç URL'i varken MCP hiç bağlanmıyor, her madde 'doğrulanamadı' çıkıyordu)."""
     ctx = load_context_filter() or {}
+    kayitli: dict[str, str] = {}
     for k in ("live_app_gorev", "live_app"):
         v = ctx.get(k) or {}
         url = str(v.get("target_url", "")).strip() if isinstance(v, dict) else ""
         if url:
             p = urlparse(url)
             if p.scheme and p.netloc:
-                return url
-    return ""
+                kayitli[k] = url
+    u = _talimat_url(talimat)
+    if u:
+        return u, ("gorev" if "live_app_gorev" in kayitli else "surec")
+    for k in ("live_app_gorev", "live_app"):
+        if k in kayitli:
+            return kayitli[k], _URL_KAPSAM[k]
+    return "", "gorev"
 
 
-def _canli_hedef(gorev: dict, talimat: str = "") -> str | None:
-    """Canlı görev bloğu: talimat URL'i varsa doğrudan o ekran, yoksa bağlam filtresi hedefinin ANA adresi (base)
-    + task'tan türetilen hedef tarifi (ilgili FE/BE task'lar ve analist talimatı dahil)."""
-    url = _hedef_url(talimat)
+def _hedef_url(talimat: str = "") -> str:
+    """Analist talimatında URL varsa O ekran (doğrudan); yoksa live_app_gorev → live_app hedefi."""
+    return _hedef_url_kapsam(talimat)[0]
+
+
+def _canli_hedef(gorev: dict, talimat: str = "") -> tuple[str | None, str]:
+    """(canlı görev bloğu | None, kapsam): talimat URL'i varsa doğrudan o ekran, yoksa bağlam filtresi hedefinin ANA
+    adresi (base) + task'tan türetilen hedef tarifi (ilgili FE/BE task'lar ve analist talimatı dahil)."""
+    url, kapsam = _hedef_url_kapsam(talimat)
     if not url:
-        return None
+        return None, kapsam
     p = urlparse(url)
     base = url if _talimat_url(talimat) else f"{p.scheme}://{p.netloc}"
     hedef = (f"{gorev.get('summary', '')}{_ilgili_metni(gorev)}"
              + (f"\nAnalist talimatı: {talimat.strip()}\n" if (talimat or '').strip() else "")
              + f"\n{(gorev.get('description') or '')[:3000]}").strip()
-    return canli_uygulama_baglami_hazirla(base_url_override=base, hedef_tarif=hedef)
+    return canli_uygulama_baglami_hazirla(base_url_override=base, hedef_tarif=hedef), kapsam
 
 
 def _kontrol_talimati(maddeler: list[dict], talimat: str = "") -> str:
@@ -326,7 +351,7 @@ def _kriterler(maddeler: list[dict]) -> list[dict]:
 
 def canli_dogrula(gorev: dict, maddeler: list[dict], _ai=None, talimat: str = "") -> dict:
     """Canlı hedef yoksa tüm denenebilir maddeler 'dogrulanamadi' (net neden) — hata fırlatmaz."""
-    canli = _canli_hedef(gorev, talimat)
+    canli, kapsam = _canli_hedef(gorev, talimat)
     if not canli:
         return _sonuc_normalize({"maddeler": [{"id": m["id"], "durum": "dogrulanamadi",
                                                "neden": "Canlı uygulama hedefi tanımlı değil (Bağlam Filtresi → Task canlı uygulama hedefi)."}
@@ -340,9 +365,9 @@ def canli_dogrula(gorev: dict, maddeler: list[dict], _ai=None, talimat: str = ""
     asama_ayarla("kabul:dogrula")
     n = sum(1 for m in maddeler if m["denenebilir"])
     butce, devam = tur_butcesi(n), _env_int("KABUL_TUR_DEVAM", 2)
-    ai = _ai or (lambda s, m: _api_cagri(s, m, max_tokens=MAX_TOKENS_COMBINED, thinking=extended_thinking_acik(),
-                                         onbellek=False, canli_uygulama_kapsami="gorev", katman="yardimci",
-                                         max_turns=butce, tur_devam=devam))
+    ai = _ai or (lambda s, m, k=kapsam: _api_cagri(s, m, max_tokens=MAX_TOKENS_COMBINED, thinking=extended_thinking_acik(),
+                                                  onbellek=False, canli_uygulama_kapsami=k, katman="yardimci",
+                                                  max_turns=butce, tur_devam=devam))
     yanit = _metin_sikistir(ai(sistem, [{"role": "user", "content": icerik}]))
     return _sonuc_normalize(_json_dizi(yanit, "kabul_sonuc"), maddeler)
 
@@ -428,6 +453,19 @@ def kabul_kontrolu(gorev: dict, talimat: str = "") -> dict:
             "yazma_islemleri": sonuc["yazma_islemleri"], "ortam": ortam, "tamamlama": sonuc.get("tamamlama")}
 
 
+def _gozlem_olmadi(sonuc: dict) -> bool:
+    """İlk turda TARAYICI HİÇ ÇALIŞMADI mı? (hedef yok / MCP bağlanmadı): hiç doğrulandı/eksik yok VE denenebilir
+    maddelerin hepsi AYNI nedenle 'doğrulanamadı'. Böyle bir sonuçta ikinci tur aynı engele çarpar → token boşa gider."""
+    s = sonuc.get("sayim") or {}
+    if s.get("dogrulandi", 0) or s.get("eksik", 0):
+        return False
+    denenebilir = [m for m in sonuc.get("maddeler", []) if m.get("durum") != "ekran_disi"]
+    if not denenebilir:
+        return False
+    nedenler = {(m.get("neden") or "").strip() for m in denenebilir}
+    return len(nedenler) == 1 and bool(next(iter(nedenler)))
+
+
 def _ham_kayit(m: dict) -> dict:
     return {"id": m["id"], "durum": m["durum"], "gozlem": m.get("gozlem", ""), "kanit": m.get("kanit", ""), "neden": m.get("neden", "")}
 
@@ -439,6 +477,9 @@ def tamamlama_turu(gorev: dict, maddeler: list[dict], sonuc: dict, talimat: str 
     tur = _env_int("KABUL_TAMAMLAMA", 1)
     adaylar = [m for m in sonuc.get("maddeler", []) if _tamamlama_adayi(m)]
     if tur <= 0 or not adaylar:
+        return sonuc
+    if _gozlem_olmadi(sonuc):
+        print("  ⏭ Kabul tamamlama turu atlandı: ilk turda hiç gözlem yapılamadı (hedef/MCP) — tekrar aynı sonucu verir.")
         return sonuc
     aday_idler = {m["id"] for m in adaylar}
     kalan_maddeler = [m for m in maddeler if m["id"] in aday_idler]

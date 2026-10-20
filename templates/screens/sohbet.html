@@ -261,14 +261,24 @@
         } catch (e) { _shDurum('⚠ Bağlantı hatası: ' + e, 'err'); shYukle(); }
       }
 
+      const _SH_POLL_OKSUZ_MAX = 8;   // art arda bu kadar hatasız !ok yanıt → sonsuz bekleme yerine dur + mesaj
       function _shPoll(etiket, hedef) {
         clearInterval(_shPollTimer);
+        let oksuz = 0;
         _shPollTimer = setInterval(async () => {
           if (!_shAktifJob) { clearInterval(_shPollTimer); return; }
           let d;
           try { d = await (await fetch('/api/sohbet/uret/durum?job=' + encodeURIComponent(_shAktifJob))).json(); }
           catch (e) { return; }
-          if (!d.ok) { if (d.error) { clearInterval(_shPollTimer); _shPollTimer = null; _shAktifJob = null; _shDurum('⚠ Üretim izi kayboldu (uygulama yeniden başlamış olabilir) — tekrar üretin.', 'err'); shYukle(); } return; }
+          if (!d.ok) {
+            if (d.error || ++oksuz >= _SH_POLL_OKSUZ_MAX) {
+              clearInterval(_shPollTimer); _shPollTimer = null; _shAktifJob = null;
+              _shDurum('⚠ ' + (d.error ? 'Üretim izi kayboldu (uygulama yeniden başlamış olabilir)' : 'İş durumu alınamıyor (' + oksuz + ' denemede yanıt yok)') + ' — ekranı yenileyin ya da tekrar üretin.', 'err');
+              shYukle();
+            }
+            return;
+          }
+          oksuz = 0;
           if (d.durum === 'calisiyor') {
             if (d.gecen_sn != null) {
               const dk = Math.floor(d.gecen_sn / 60), sn = d.gecen_sn % 60;
@@ -391,9 +401,10 @@
           if (!d.ok) { toast(d.error || 'Hazırlanamadı', 'error'); return; }
           // Sentetik görevleri Task Analizi'nin görev haritasına koy (cevap/düzelt turları açıklamayı bulsun)
           (d.adimlar || []).forEach(a => { if (a.gorev) { a.gorev.canli_hedef = a.canli_hedef || ''; _jgGorevler[a.gorev.key] = a.gorev; } });
-          await _jgIsBaslat(d.adimlar, 'Ekran analizleri (FE+BE)', d.adimlar[0].key, true);
-          switchTab('jira-gorevler');
-          toast(`${d.adimlar.length} ekran için FE+BE analiz başlatıldı — Task Analizi ekranında izleyin`, 'success');
+          switchTab('jira-gorevler');   // ÖNCE Task Analizi'ne geç (panel/giriş kapısı mesajı orada görünür)
+          const basladi = await _jgIsBaslat(d.adimlar, 'Ekran analizleri (FE+BE)', d.adimlar[0].key, true);
+          if (basladi) toast(`${d.adimlar.length} ekran için FE+BE analiz başlatıldı — Task Analizi ekranında izleyin`, 'success');
+          else toast('Ekran analizleri başlatılamadı — Task Analizi panelindeki mesaja bakın (giriş engeli / meşgul / hata)', 'error');
         } catch (e) { toast('Hata: ' + e, 'error'); }
       }
 

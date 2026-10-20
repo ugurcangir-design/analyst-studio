@@ -61,7 +61,8 @@ jk._iliskili_task_onerileri = lambda md, gorev: [
 ]
 jk._proje_bilgi = lambda proje, cloud_id: {"task_id": "10001", "story_id": "10002"}
 jk._cloud_id = lambda: "cloud-x"
-jk._canli_gorev_baglam = lambda gorev: None   # live-app config'e bağlı kalma (offline)
+_ORJ_CGB = jk._canli_gorev_baglam   # sonda gerçek fonksiyon test edilir
+jk._canli_gorev_baglam = lambda gorev: (None, None)   # live-app config'e bağlı kalma (offline) — (blok, kapsam)
 jk._kopru_config = lambda: {}                 # test: json config yok → .env yedeği (deterministik)
 
 
@@ -262,5 +263,74 @@ _jk_kaynak = inspect.getsource(jk)
 kontrol("kanıt: jira_yorum_ekle (yorum) temizleyiciyi çağırır",
         "def jira_yorum_ekle" in _jk_kaynak
         and "kanit_etiketlerini_temizle(markdown)" in _jk_kaynak)
+
+# ── Ek regresyonlar: Türkçe İ/I, ADF okuma, yetki hatası, köprü kapsamı ──
+kws = jk._task_keywords({"summary": "İNDİRİM KUPONLARI IŞIKLAR", "description": "indirim kuponu filtresi"})
+kontrol("_task_keywords: 'İNDİRİM'→'indirim' (İ→i), 'IŞIKLAR'→'ışıklar' (I→ı) — dotless/dotted karışmaz",
+        "indirim" in kws and "ışıklar" in kws and not any("i̇" in k for k in kws))
+adf = {"type": "doc", "content": [
+    {"type": "heading", "attrs": {"level": 3}, "content": [{"type": "text", "text": "Başlık"}]},
+    {"type": "table", "content": [
+        {"type": "tableRow", "content": [{"type": "tableHeader", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "A"}]}]},
+                                         {"type": "tableHeader", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "B"}]}]}]},
+        {"type": "tableRow", "content": [{"type": "tableCell", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "1"}]}]},
+                                         {"type": "tableCell", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "2"}]}]}]}]}]}
+txt = _jg._adf_to_text(adf)
+kontrol("_adf_to_text: başlık '### ' ile, tablo hücreleri '|' ile (köprü düzelt/cevap biçimi bozmaz)",
+        "### Başlık" in txt and "| A | B |" in txt and "| 1 | 2 |" in txt)
+kontrol("orijinal_talep_ayikla '### 🤖 Teknik Analiz' işaretini (ADF geri okuma) tanır",
+        _jg.orijinal_talep_ayikla("## 📌 Orijinal Talep\nisteri\n\n---\n\n### 🤖 Teknik Analiz (Analyst Agent)\nanaliz") == "isteri")
+
+
+class _Yanit:
+    def __init__(self, kod):
+        self.status_code = kod
+
+
+def _hata_ver(kod):
+    e = Exception(f"HTTP {kod}")
+    e.response = _Yanit(kod)
+    return e
+
+
+_eski_post, _eski_tek = _jg.atlassian_post, _jg._tek_issue_ham
+_jg.atlassian_post = lambda *a, **k: (_ for _ in ()).throw(_hata_ver(403))
+try:
+    _jg._tek_issue_ham("MBS-1", "cid")
+    kontrol("_tek_issue_ham 403 yükseltir", False)
+except RuntimeError as e:
+    kontrol("_tek_issue_ham: 401/403 'bulunamadı' diye YUTULMAZ → RuntimeError (yetki/ağ)", "yetki" in str(e))
+_jg.atlassian_post = lambda *a, **k: (_ for _ in ()).throw(_hata_ver(404))
+kontrol("_tek_issue_ham: 404 → None (gerçek bulunamadı)", _jg._tek_issue_ham("MBS-1", "cid") is None)
+_jg.atlassian_post = lambda *a, **k: (_ for _ in ()).throw(_hata_ver(403))
+try:
+    _jg.alt_gorevleri_cek("MBS-1")
+    kontrol("alt_gorevleri_cek hata", False)
+except RuntimeError as e:
+    kontrol("alt_gorevleri_cek: tüm sorgular 403'le düşerse '0 alt görev' değil RuntimeError", "okunamadı" in str(e))
+_jg.atlassian_post = lambda *a, **k: (_ for _ in ()).throw(_hata_ver(400))
+_jg._tek_issue_ham = lambda key, cid: None
+kontrol("alt_gorevleri_cek: 400 (JQL alanı yok) sessizce geçilir → boş liste", _jg.alt_gorevleri_cek("MBS-1") == [])
+_jg.atlassian_post, _jg._tek_issue_ham = _eski_post, _eski_tek
+# köprü: canlı bağlam hangi URL alanından geldiyse o kapsam gorev_analiz_et'e geçer
+_eski_cgb, _eski_lcf, _eski_cub = jk._canli_gorev_baglam, jk.load_context_filter, jk.canli_uygulama_baglami_hazirla
+_gercek_cgb = _ORJ_CGB
+jk.canli_uygulama_baglami_hazirla = lambda **kw: "CANLI " + kw.get("base_url_override", "")
+jk.load_context_filter = lambda: {"live_app_gorev": {"target_url": "https://g.local/app/x"}, "live_app": {"target_url": "https://s.local/app"}}
+a = _gercek_cgb({"summary": "s", "description": "d"})
+jk.load_context_filter = lambda: {"live_app": {"target_url": "https://s.local/app"}}
+b = _gercek_cgb({"summary": "s", "description": "d"})
+jk.load_context_filter = lambda: {}
+c = _gercek_cgb({"summary": "s", "description": "d"})
+kontrol("_canli_gorev_baglam: live_app_gorev → ('…','gorev'); yalnız live_app → ('…','surec'); yok → (None, None)",
+        a == ("CANLI https://g.local", "gorev") and b == ("CANLI https://s.local", "surec") and c == (None, None))
+jk._canli_gorev_baglam, jk.load_context_filter, jk.canli_uygulama_baglami_hazirla = _eski_cgb, _eski_lcf, _eski_cub
+kap: list = []
+_eski_ae = jk.gorev_analiz_et
+jk.gorev_analiz_et = lambda gorev, **kw: (kap.append(kw.get("canli_kapsam")) or {"markdown": "m", "acik_sorular": ""})
+jk._canli_gorev_baglam = lambda gorev: ("CANLI", "gorev")
+jk._bridge_uret({"key": "MBS-9", "summary": "s", "description": "d"}, "")
+jk._canli_gorev_baglam, jk.gorev_analiz_et = _eski_cgb, _eski_ae
+kontrol("köprü canli_kapsam'ı URL kaynağına göre geçirir", kap == ["gorev"])
 
 print(f"\nJIRA KÖPRÜSÜ TESTLERİ GEÇTİ ({basari} kontrol)")

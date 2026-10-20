@@ -69,7 +69,8 @@ def surec_analizi_yap(icerik_override: list | None = None,
         _ozet = " ".join(p.get("text", "") for p in icerik if isinstance(p, dict) and p.get("type") == "text") \
             if isinstance(icerik, list) else str(icerik)
         _gr = _gz.rapor_al(canli_baglam, "surec", gorev_ozet=_ozet, yeniden=True)
-        if _gr.get("md"):
+        # Yalnız MAKİNE-DOĞRULANMIŞ (ok) rapor gerçek veri olarak girer; ok=False rapor uydurma ekranı gerçek gösterirdi.
+        if _gr.get("ok") and _gr.get("md"):
             print("  🌐 Canlı gözlem raporu (ayrı faz) analize dahil ediliyor...")
             icerik_parcalari.append({"type": "text", "text": _gz.rapor_blogu(_gr)})
         else:
@@ -145,7 +146,14 @@ def surec_analizi_yap(icerik_override: list | None = None,
             from .akis_kapatma import dosya_akis_kapat
             _kaynak = (" ".join(p.get("text", "") for p in icerik if isinstance(p, dict) and p.get("type") == "text")
                        if isinstance(icerik, list) else str(icerik))
-            dosya_akis_kapat("surec-analizi.md", kaynak=_kaynak, tip="surec", ek_bulgular=butunluk)
+            if dosya_akis_kapat("surec-analizi.md", kaynak=_kaynak, tip="surec", ek_bulgular=butunluk):
+                # Akış kapatma gövdeyi/soruları değiştirdi → Yönetici Özeti sayaçları yeniden kurulur (0 token)
+                try:
+                    md = yol.read_text(encoding="utf-8")
+                    govde = yonetici_ozetini_cikar(md)
+                    yol.write_text(yonetici_ozeti_olustur(govde) + govde, encoding="utf-8")
+                except Exception as _e2:
+                    print(f"  ⚠ Yönetici özeti yenilenemedi: {_e2}")
         except Exception as _e:
             print(f"  ⚠ Akış kapatma atlandı: {_e}")
     return yol

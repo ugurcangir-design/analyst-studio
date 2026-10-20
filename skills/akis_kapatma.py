@@ -148,8 +148,11 @@ def _tespit_ai(analiz: str, kaynak: str, ek_bulgular: str, tip: str) -> list[dic
         icerik.append({"type": "text", "text": "### Deterministik akış denetimi bulguları (bunları da değerlendir)\n\n"
                                                + ek_bulgular.strip()})
     icerik.append({"type": "text", "text": "Akışı uçtan uca yürüt ve boşlukları çıkar."})
-    yanit = _api_cagri(_TESPIT_SISTEM, [{"role": "user", "content": icerik}],
-                       max_tokens=MAX_TOKENS_KISA, thinking=False)
+    mesajlar = [{"role": "user", "content": icerik}]
+    yanit = _api_cagri(_TESPIT_SISTEM, mesajlar, max_tokens=MAX_TOKENS_KISA, thinking=False)
+    if not _json_dizi(yanit) and "[]" not in (yanit or ""):
+        # Bozuk/parse edilemeyen yanıt 7 gün önbellekte kalmasın → BİR KEZ önbelleksiz tekrar ('[]' = gerçekten boşluk yok)
+        yanit = _api_cagri(_TESPIT_SISTEM, mesajlar, max_tokens=MAX_TOKENS_KISA, thinking=False, onbellek=False)
     return _normalize(_json_dizi(yanit))
 
 
@@ -281,16 +284,32 @@ def soru_bloklari(sorular: list[dict], onek: str, mevcut_metin: str) -> str:
 _DENETIM_AYRAC = re.compile(r"\n---\n\n## (?:🔎|🔗|🔍)")
 
 
+_ACIK_SORU_BASLIK = re.compile(r"^(#{1,4})\s+[^\n]*(?:Açık Sorular|Karar Bekleyen)[^\n]*$", re.MULTILINE)
+_SORU_BLOK_BASLIK = re.compile(r"(?:Q(?:-T)?|PO)-\d+\s*:?")
+
+
 def sorulari_analize_ekle(md: str, bloklar: str) -> str:
-    """Soru bloklarını analizin Açık Sorular bölümünün SONUNA ekler (otomatik denetim bölümlerinden önce).
-    Açık Sorular bölümü yoksa gövdenin sonuna başlıkla ekler."""
+    """Soru bloklarını analizin Açık Sorular bölümünün SONUNA ekler (o bölümün ALTINA — aynı ya da üst seviyedeki bir
+    sonraki başlıktan önce; otomatik denetim bölümleri hariç). Açık Sorular bölümü yoksa gövdenin sonuna başlıkla ekler.
+    Eskiden bölüm varken de gövde SONUNA ekleniyordu → sorular Açık Sorular'dan sonraki bölümlerin altında kalıyordu."""
     if not bloklar:
         return md
     m = _DENETIM_AYRAC.search(md)
     govde, kuyruk = (md[:m.start()], md[m.start():]) if m else (md, "")
-    if not re.search(r"^#{1,4}\s+[^\n]*(?:Açık Sorular|Karar Bekleyen)", govde, re.MULTILINE):
+    bas = _ACIK_SORU_BASLIK.search(govde)
+    if not bas:
         bloklar = "### Açık Sorular / Karar Bekleyen Konular\n\n" + bloklar
-    return govde.rstrip("\n") + "\n\n" + bloklar + kuyruk
+        return govde.rstrip("\n") + "\n\n" + bloklar + kuyruk
+    seviye = len(bas.group(1))
+    bitis = len(govde)
+    for sonraki in re.finditer(r"^(#{1,6})\s+(\S[^\n]*)", govde[bas.end():], re.MULTILINE):
+        if _SORU_BLOK_BASLIK.match(sonraki.group(2)):
+            continue   # `### Q-001:` soru blokları bölümün PARÇASIDIR (aynı seviyede olsalar da bölümü bitirmez)
+        if len(sonraki.group(1)) <= seviye:
+            bitis = bas.end() + sonraki.start()
+            break
+    on, son = govde[:bitis], govde[bitis:]
+    return on.rstrip("\n") + "\n\n" + bloklar.rstrip("\n") + "\n" + ("\n" + son if son.strip() else "") + kuyruk
 
 
 # ── 4) Dosya tabanlı akış (süreç / teknik) ───────────────────────────────────

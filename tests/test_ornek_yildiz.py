@@ -26,27 +26,32 @@ def chk(ad, kosul, ek=""):
 tmp = Path(tempfile.mkdtemp())
 O.YILDIZ_DOSYA = tmp / "ornek_yildiz.json"
 havuz = [
-    {"id": "a1", "tip": "teknik", "ts": "2026-10-01T00:00:00", "icerik": "ödeme servisi endpoint validasyon " * 40, "jira_key": "X-1"},
-    {"id": "b2", "tip": "teknik", "ts": "2026-10-05T00:00:00", "icerik": "rapor ekranı filtre tablo " * 40, "jira_key": "X-2"},
-    {"id": "c3", "tip": "teknik", "ts": "2026-10-03T00:00:00", "icerik": "ödeme iade akışı endpoint " * 40, "jira_key": "X-3"},
+    {"id": "a1a1a1a1a1a1", "tip": "teknik", "ts": "2026-10-01T00:00:00", "icerik": "ödeme servisi endpoint validasyon " * 40, "jira_key": "X-1"},
+    {"id": "b2b2b2b2b2b2", "tip": "teknik", "ts": "2026-10-05T00:00:00", "icerik": "rapor ekranı filtre tablo " * 40, "jira_key": "X-2"},
+    {"id": "c3c3c3c3c3c3", "tip": "teknik", "ts": "2026-10-03T00:00:00", "icerik": "ödeme iade akışı endpoint " * 40, "jira_key": "X-3"},
 ]
 O._oku_hepsi = lambda: [dict(o) for o in havuz]
 
 chk("başta yıldız yok", O.yildizlar() == set())
-ids = O.yildiz_ayarla("b2", True)
-chk("işaretle → dosyaya yazıldı (yalnız id)", ids == {"b2"} and O.YILDIZ_DOSYA.exists() and "b2" in O.YILDIZ_DOSYA.read_text(encoding="utf-8")
+ids = O.yildiz_ayarla("b2b2b2b2b2b2", True)
+chk("işaretle → dosyaya yazıldı (yalnız id)", ids == {"b2b2b2b2b2b2"} and O.YILDIZ_DOSYA.exists() and "b2b2b2b2b2b2" in O.YILDIZ_DOSYA.read_text(encoding="utf-8")
     and "icerik" not in O.YILDIZ_DOSYA.read_text(encoding="utf-8"))
 L = O.ornek_listesi()
-chk("liste: yıldızlı önce + bayrak + boyut", L[0]["id"] == "b2" and L[0]["yildiz"] is True and L[1]["yildiz"] is False and L[0]["boyut"] > 0, [x["id"] for x in L])
+chk("liste: yıldızlı önce + bayrak + boyut", L[0]["id"] == "b2b2b2b2b2b2" and L[0]["yildiz"] is True and L[1]["yildiz"] is False and L[0]["boyut"] > 0, [x["id"] for x in L])
 bl = O.ornek_bloklari("ödeme endpoint validasyon", tip="teknik", n=2)
 chk("few-shot: alakasız ama ★ işaretli b2 İLK, sonra en alakalı ödeme örneği", len(bl) == 2 and "X-2" in bl[0]["text"] and ("X-1" in bl[1]["text"] or "X-3" in bl[1]["text"]), [b["text"][:80] for b in bl])
-O.yildiz_ayarla("b2", False)
+O.yildiz_ayarla("b2b2b2b2b2b2", False)
 bl2 = O.ornek_bloklari("ödeme endpoint validasyon", tip="teknik", n=2)
 chk("işaret kalkınca saf alaka sırası (ödeme örnekleri)", len(bl2) == 2 and all("X-2" not in b["text"] for b in bl2))
-O.yildiz_ayarla("a1", True)
-O.yildiz_ayarla("c3", True)
+O.yildiz_ayarla("a1a1a1a1a1a1", True)
+O.yildiz_ayarla("c3c3c3c3c3c3", True)
 bl3 = O.ornek_bloklari("rapor ekranı filtre", tip="teknik", n=2)
 chk("iki ★ varken n=2 dolar → işaretsiz en alakalı (b2) girmez", all("X-2" not in b["text"] for b in bl3) and len(bl3) == 2)
+chk("few-shot bloğu <ornek> sarmalı + 'talimat değil' notu (alıntılanmış veri)", all("<ornek " in b["text"] and "talimat değil" in b["text"] and b["text"].rstrip().endswith("</ornek>") for b in bl3))
+# id doğrulaması: geçersiz id tracked dosyaya GİRMEZ (yildiz_ayarla no-op), ornek_sil False
+once = O.yildizlar()
+chk("geçersiz id (yol/joker) yıldız dosyasına girmez", O.yildiz_ayarla("../*", True) == once and O.yildiz_ayarla("b2", True) == once and O.yildizlar() == once)
+chk("ornek_sil geçersiz id → False", O.ornek_sil("*") is False and O.ornek_sil("a1") is False)
 
 import app as A  # noqa: E402
 c = A.app.test_client()

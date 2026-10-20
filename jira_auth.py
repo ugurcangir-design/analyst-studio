@@ -46,8 +46,33 @@ def env_guncelle(key: str, value: str) -> None:
     os.environ[key] = value
 
 
-def auth_url_olustur() -> str:
-    """Atlassian OAuth URL'ini döndür."""
+ESKI_STATE = "brd_analyst_auth"   # sabit state (geri uyum — app.py rastgele state'e geçene kadar)
+
+
+def yeni_state() -> str:
+    """OAuth CSRF koruması için her yetkilendirme başlangıcında RASTGELE `state` üretir
+    (`secrets.token_urlsafe(24)`). Çağıran (app.py `/api/jira/auth-url`) bu değeri Flask
+    `session`'a yazar ve `auth_url_olustur(state=...)`'a geçer; `/api/jira/callback`
+    `request.args["state"]`'i session'daki değerle `secrets.compare_digest` ile kıyaslar,
+    uyuşmazsa code değişimini REDDEDER ve session'daki state'i tek-kullanımlık olarak siler."""
+    import secrets
+    return secrets.token_urlsafe(24)
+
+
+def state_dogrula(beklenen: str | None, gelen: str | None) -> bool:
+    """Callback'teki `state`'i sabit-zamanlı kıyaslar (boş/None → False)."""
+    import secrets
+    if not beklenen or not gelen:
+        return False
+    return secrets.compare_digest(str(beklenen), str(gelen))
+
+
+def auth_url_olustur(state: str | None = None) -> str:
+    """Atlassian OAuth URL'ini döndür.
+
+    `state`: `yeni_state()` ile üretilen rastgele değer (önerilen; app.py session'da saklayıp
+    callback'te doğrular). None verilirse ESKİ sabit `brd_analyst_auth` kullanılır — mevcut app.py
+    davranışı aynen korunur; orchestrator app.py'yi güncelleyince rastgele state devreye girer."""
     cid = env_al("JIRA_CLIENT_ID")
     if not cid:
         raise ValueError("JIRA_CLIENT_ID .env dosyasında tanımlı değil.")
@@ -58,7 +83,7 @@ def auth_url_olustur() -> str:
         "redirect_uri": REDIRECT_URI,
         "response_type": "code",
         "prompt": "consent",
-        "state": "brd_analyst_auth",
+        "state": state or ESKI_STATE,
     }
     return "https://auth.atlassian.com/authorize?" + urlencode(params)
 

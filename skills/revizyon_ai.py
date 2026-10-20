@@ -17,10 +17,34 @@ import re
 from pathlib import Path
 
 from . import revizyon
-from .base import _api_cagri, OUTPUT_DIR, MAX_TOKENS_KISA
+from .base import _api_cagri, OUTPUT_DIR, MAX_TOKENS_KISA, MAX_TOKENS_UZUN
 
 # Markdown başlık satırı: "## Başlık", "### PA-001: ...", vb.
 _BASLIK = re.compile(r"^(#{1,6})[ \t]+(.*?)[ \t]*#*$", re.MULTILINE)
+_CIT = re.compile(r"^[ \t]{0,3}(```|~~~)", re.MULTILINE)
+
+
+def _kod_bloklari(md: str) -> list[tuple[int, int]]:
+    """Çitli kod bloklarının (``` / ~~~) karakter aralıkları — içindeki '#' satırları (yorum, shell) başlık DEĞİL."""
+    araliklar: list[tuple[int, int]] = []
+    acik: str | None = None
+    bas = 0
+    for m in _CIT.finditer(md):
+        if acik is None:
+            acik, bas = m.group(1), m.start()
+        elif m.group(1) == acik:
+            araliklar.append((bas, m.end()))
+            acik = None
+    if acik is not None:
+        araliklar.append((bas, len(md)))   # kapanmamış çit → dosya sonuna kadar kod
+    return araliklar
+
+
+def _basliklar(md: str) -> list[dict]:
+    kod = _kod_bloklari(md)
+    return [{"seviye": len(m.group(1)), "baslik": m.group(2).strip(), "satir_bas": m.start()}
+            for m in _BASLIK.finditer(md)
+            if not any(a <= m.start() < b for a, b in kod)]
 
 # Bölüm-hedefli düzenleme sistem promptu. TÜM doküman değil, YALNIZ hedef bölüm
 # gönderilir; AI aynı başlığı koruyarak yalnız bu bölümü döndürür.
@@ -61,10 +85,7 @@ def bolumlere_ayir(md: str) -> list[dict]:
     Döner: [{indeks, seviye, baslik, baslangic, bitis, icerik}] — `baslangic`/`bitis`
     `md` içinde karakter ofsetleridir (splice için).
     """
-    basliklar = [
-        {"seviye": len(m.group(1)), "baslik": m.group(2).strip(), "satir_bas": m.start()}
-        for m in _BASLIK.finditer(md)
-    ]
+    basliklar = _basliklar(md)   # çitli kod bloğu içindeki '#' satırları atlanır
     bolumler: list[dict] = []
 
     # Başlıktan önce önsöz (ör. HTML meta yorumu, yönetici özeti) varsa koru
@@ -140,14 +161,33 @@ def bolum_bul(md: str, anahtar: str) -> dict | None:
     return en_iyi
 
 
+def _cikti_butcesi(bolum: str) -> int:
+    """Bölüm tamamen yeniden yazılır → çıktı bütçesi bölüm uzunluğundan (≈ karakter/3 + 1500), tavan MAX_TOKENS_UZUN.
+    Sabit 3000 token büyük bölümlerde çıktıyı kesiyor, kesik bölüm dokümana spliced ediliyordu."""
+    return max(MAX_TOKENS_KISA, min(MAX_TOKENS_UZUN, len(bolum or "") // 3 + 1500))
+
+
+def _duzenleme_dogrula(eski: str, yeni: str) -> None:
+    """Kesik/bozuk çıktı dokümana GİRMESİN: boş · başlık değişti · %50'den kısa → ValueError (Türkçe neden)."""
+    y = (yeni or "").strip()
+    if not y:
+        raise ValueError("Bölüm düzenlemesi boş döndü — doküman değiştirilmedi.")
+    eski_baslik = (eski or "").strip().split("\n", 1)[0].lstrip("#").strip()
+    yeni_baslik = y.split("\n", 1)[0].lstrip("#").strip()
+    if eski_baslik and eski_baslik != yeni_baslik:
+        raise ValueError(f"Bölüm başlığı değişti ('{eski_baslik[:60]}' → '{yeni_baslik[:60]}') — düzenleme reddedildi.")
+    if len(y) < 0.5 * len((eski or "").strip()):
+        raise ValueError("Düzenlenmiş bölüm orijinalin yarısından kısa (kesik/silinmiş içerik şüphesi) — düzenleme reddedildi.")
+
+
 def _refine_bolum_ai(talimat: str, bolum: str) -> str:
     """Tek AI çağrısı — yalnız hedef bölümü düzenler. Token harcayan tek nokta."""
     sistem = REFINE_BOLUM_PROMPT.format(talimat=talimat, bolum=bolum)
     mesajlar = [{"role": "user", "content": [
         {"type": "text", "text": "Talimatı bu bölüme uygula ve yalnız bölümü döndür."}
     ]}]
-    # Analistin açık düzenleme isteği — önbellekten değil, taze üret.
-    return _api_cagri(sistem, mesajlar, max_tokens=MAX_TOKENS_KISA, onbellek=False)
+    # Analistin açık düzenleme isteği — önbellekten değil, taze üret. Bütçe bölüm boyutundan.
+    return _api_cagri(sistem, mesajlar, max_tokens=_cikti_butcesi(bolum), onbellek=False)
 
 
 def bolum_duzenle(
@@ -198,8 +238,9 @@ def bolum_duzenle(
     if bolum is None:
         raise ValueError(f"Bölüm bulunamadı: '{anahtar}'")
 
-    # 3) AI düzenleme (yalnız bölüm)
+    # 3) AI düzenleme (yalnız bölüm) + koruma: kesik/başlığı değişmiş çıktı splice EDİLMEZ (ValueError)
     yeni_bolum = _ai_fn(talimat, bolum["icerik"]).strip("\n")
+    _duzenleme_dogrula(bolum["icerik"], yeni_bolum)
     # Bölümler arası tek boş satır düzenini koru (splice sonrası ardışık \n\n)
     if not yeni_bolum.endswith("\n"):
         yeni_bolum += "\n"

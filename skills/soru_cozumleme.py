@@ -138,9 +138,10 @@ def _adaylar(soru: dict) -> list[str]:
 
 
 # ── Kanıt toplama (0 token) ───────────────────────────────────────────────────
-def _corpus() -> list[dict]:
-    """Referans dosyalarını BM25 için okunmuş metne çevirir (tip: swagger/confluence/jira/canli_uygulama/diger)."""
-    dosyalar = referans_dosyalari_hazirla() or []
+def _corpus(rag_ctx: dict | None = None) -> list[dict]:
+    """Referans dosyalarını BM25 için okunmuş metne çevirir (tip: swagger/confluence/jira/canli_uygulama/diger).
+    `rag_ctx` (köprü — kendi kendine yeterli bağlam: task keyword'leri) verilirse ekrandaki filtre yerine o kullanılır."""
+    dosyalar = (referans_dosyalari_hazirla(ctx_override=rag_ctx) if rag_ctx is not None else referans_dosyalari_hazirla()) or []
     grup: dict[str, list[Path]] = {"swagger": [], "canli_uygulama": [], "confluence": [], "jira": [], "diger": []}
     for f in dosyalar:
         try:
@@ -214,8 +215,11 @@ def _kod_kaniti(soru: dict) -> str:
     return ("Kod araması (bağlı repo):\n" + "\n".join(sat[:_MAX_KOD * 2])) if sat else ""
 
 
-def kanit_topla(sorular: list[dict]) -> dict[str, str]:
-    corpus = _corpus()
+def kanit_topla(sorular: list[dict], rag_ctx: dict | None = None) -> dict[str, str]:
+    try:
+        corpus = _corpus(rag_ctx) if rag_ctx is not None else _corpus()
+    except TypeError:          # test enjeksiyonu parametre almıyorsa
+        corpus = _corpus()
     out = {}
     for s in sorular:
         parcalar = [x for x in (_referans_kaniti(corpus, s), _tuketici_kaniti(s), _kod_kaniti(s)) if x]
@@ -273,9 +277,15 @@ def _siniflandir(gorev: dict, sorular: list[dict], kanitlar: dict[str, str], _ai
     for s in sorular:
         parcalar.append(f"### {s['id']}: {s['baslik']}\n{s['govde'].strip()}\n\n#### KANITLAR ({s['id']})\n{kanitlar.get(s['id'], '')}")
     parcalar.append("Her soru için karar ver ve bloğu yaz.")
-    yanit = ai(_SISTEM, [{"role": "user", "content": [{"type": "text", "text": p} for p in parcalar]}])
+    mesajlar = [{"role": "user", "content": [{"type": "text", "text": p} for p in parcalar]}]
+    yanit = ai(_SISTEM, mesajlar)
+    ham = _json_dizi(yanit, "soru_cozum")
+    if not ham and _ai is None:
+        # Bozuk/boş yanıt 7 gün önbellekte kalmasın → BİR KEZ önbelleksiz tekrar
+        yanit = _api_cagri(_SISTEM, mesajlar, max_tokens=MAX_TOKENS_KISA, thinking=False, katman="yardimci", onbellek=False)
+        ham = _json_dizi(yanit, "soru_cozum")
     out: dict[str, dict] = {}
-    for r in _json_dizi(yanit, "soru_cozum") or []:
+    for r in ham or []:
         if not isinstance(r, dict):
             continue
         qid = str(r.get("id") or "").strip()
@@ -289,30 +299,42 @@ def _siniflandir(gorev: dict, sorular: list[dict], kanitlar: dict[str, str], _ai
 
 
 # ── Canlı gözlem (tek tur, yalnız işaretli sorular) ───────────────────────────
-def _canli_hedef(sorular_gozlem: list[tuple[dict, dict]]) -> str | None:
+def _canli_kapsam_sec(canli_kapsam: str | None = None) -> str | None:
+    """Gözlem URL kaynağı: açıkça verilen kapsam ('gorev' → live_app_gorev, 'surec' → live_app ana adresi) o alan doluysa;
+    yoksa eski sıra: live_app_gorev varsa 'gorev', değilse live_app varsa 'surec', hiçbiri yoksa None."""
+    if canli_kapsam == "gorev" and gorev_live_app_urls():
+        return "gorev"
+    if canli_kapsam == "surec" and live_app_urls():
+        return "surec"
+    if gorev_live_app_urls():
+        return "gorev"
+    return "surec" if live_app_urls() else None
+
+
+def _canli_hedef(sorular_gozlem: list[tuple[dict, dict]], canli_kapsam: str | None = None) -> str | None:
     adimlar = "\n".join(f"- **{s['id']}** {s['soru']}\n  · Gözlem: {c['gozlem_adimi'] or '—'}" for s, c in sorular_gozlem)
     hedef = ("AÇIK SORU DOĞRULAMASI — yalnız aşağıdaki soruları kesinleştirecek kadar gez; analiz yazma.\n" + adimlar
              + "\n" + _GOZLEM_FORMAT)
-    if gorev_live_app_urls():
+    kapsam = _canli_kapsam_sec(canli_kapsam)
+    if kapsam == "gorev":
         return canli_uygulama_baglami_hazirla(gorev=True, hedef_tarif=hedef)
-    urls = live_app_urls()
-    if urls:
+    if kapsam == "surec":
         from urllib.parse import urlparse
-        p = urlparse(urls[0])
+        p = urlparse(live_app_urls()[0])
         if p.scheme and p.netloc:
             return canli_uygulama_baglami_hazirla(base_url_override=f"{p.scheme}://{p.netloc}", hedef_tarif=hedef)
     return None
 
 
-def _gozlemle(gorev: dict, sorular_gozlem: list[tuple[dict, dict]], _ai=None) -> dict[str, dict]:
-    canli = _canli_hedef(sorular_gozlem)
+def _gozlemle(gorev: dict, sorular_gozlem: list[tuple[dict, dict]], _ai=None, canli_kapsam: str | None = None) -> dict[str, dict]:
+    canli = _canli_hedef(sorular_gozlem, canli_kapsam)
     if not canli:
         return {}
     sistem = ("Kıdemli analist/testçisin. Verilen uygulamada yalnız listelenen açık soruları kesinleştirmek için gözlem "
               "yaparsın; her soru için fiilen gördüğünü kanıtla raporlarsın. Analiz yazmazsın.")
     icerik = [{"type": "text", "text": canli},
               {"type": "text", "text": f"### Task: {gorev.get('key', '')} — {gorev.get('summary', '')}"}]
-    kapsam = "gorev" if gorev_live_app_urls() else "surec"
+    kapsam = _canli_kapsam_sec(canli_kapsam) or "surec"
     asama_ayarla("soru:gozlem")
     ai = _ai or (lambda s, m, k=kapsam: _api_cagri(s, m, max_tokens=MAX_TOKENS_COMBINED, thinking=False, onbellek=False,
                                                   canli_uygulama_kapsami=k, katman="yardimci"))
@@ -340,8 +362,11 @@ def _bloga_yaz(blok: dict, c: dict) -> str:
     return "\n".join(sat) + "\n"
 
 
-def cozumle(acik_md: str, gorev: dict, canli: bool = True, _ai=None, _ai_canli=None) -> str:
-    """Açık sorular md'sini agent araştırmasıyla zenginleştirir. Hata → orijinal md. Analizi yeniden yazmaz."""
+def cozumle(acik_md: str, gorev: dict, canli: bool = True, _ai=None, _ai_canli=None,
+            rag_ctx: dict | None = None, canli_kapsam: str | None = None) -> str:
+    """Açık sorular md'sini agent araştırmasıyla zenginleştirir. Hata → orijinal md. Analizi yeniden yazmaz.
+    `rag_ctx` / `canli_kapsam`: köprü (ekran_baglami=False) kendi kendine yeterli bağlamını geçirir → kanıt araması
+    task keyword'leriyle, gözlem doğru URL kapsamıyla (eskiden ekrandaki filtre + sabit sıra kullanılıyordu)."""
     if not (acik_md or "").strip() or "açık soru tespit edilmedi" in acik_md.lower():
         return acik_md
     try:
@@ -349,7 +374,7 @@ def cozumle(acik_md: str, gorev: dict, canli: bool = True, _ai=None, _ai_canli=N
         if not sorular:
             return acik_md
         print(f"  🔎 Açık soru öz-çözümleme: {len(sorular)} soru için referans/kod kanıtı toplanıyor...")
-        kanitlar = kanit_topla(sorular)
+        kanitlar = kanit_topla(sorular, rag_ctx=rag_ctx) if rag_ctx is not None else kanit_topla(sorular)
         cozum = _siniflandir(gorev, sorular, kanitlar, _ai=_ai)
         if not cozum:
             return acik_md
@@ -358,7 +383,7 @@ def cozumle(acik_md: str, gorev: dict, canli: bool = True, _ai=None, _ai_canli=N
         if canli and gozlem_listesi:
             print(f"  🌐 {len(gozlem_listesi)} soru canlı gözlemle kesinleştiriliyor...")
             try:
-                g = _gozlemle(gorev, gozlem_listesi, _ai=_ai_canli)
+                g = _gozlemle(gorev, gozlem_listesi, _ai=_ai_canli, canli_kapsam=canli_kapsam)
             except Exception as e:
                 print(f"  ⚠ Soru gözlemi yapılamadı: {str(e)[:160]}")
                 g = {}

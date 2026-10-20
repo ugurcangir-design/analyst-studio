@@ -36,6 +36,9 @@ chk("açık soru sayacı deterministik (model sayımı atılır)", "**Açık sor
 chk("kapsam sayacı modelin Kapsam maddesini tekrarlamaz", oz.count("**Kapsam:**") == 1)
 chk("gövde başlıkla başlar", gov.startswith("# BAŞLIK"))
 
+oz_k = yonetici_ozeti_olustur("### Açık Sorular\n\n### Q-T-001: a\n- Öncelik: Kritik\n- Soru: x\n\n### Q-002: b\n- Önem: Kritik\n- Soru: y\n")
+chk("kritik sayımı 'Öncelik:' (teknik Q-T) ve 'Önem:' (süreç/BRD) ikisini de sayar", "**Açık sorular:** 2 (2 kritik)" in oz_k, oz_k)
+
 print("2) model özeti yokken eski davranış")
 oz2 = yonetici_ozeti_olustur(GOVDE)
 chk("yalnız deterministik satırlar", "**Açık sorular:** 2" in oz2 and "Kritik çelişki" not in oz2)

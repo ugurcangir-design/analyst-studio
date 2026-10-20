@@ -8,6 +8,7 @@ Kapsam:
   4. Rapor markdown: sonuç etiketi, tablo, geri dönecek maddeler, yazma işlemleri, durum notu
   5. Köprü: `kontrol` + eş anlamlılar eşlenir, yardım metninde var · app iş modu + yorum ucu doğrulama
 """
+import inspect
 import os
 import sys
 from pathlib import Path
@@ -49,7 +50,7 @@ cok = "<kabul_listesi>[" + ",".join(f'{{"id":"K-{i:02d}","madde":"m{i}"}}' for i
 chk("en fazla 25", len(KK.kabul_listesi_cikar(GOREV, _ai=lambda s, m: cok)) == 25)
 
 print("2) karar mantığı")
-KK._canli_hedef = lambda g, t="": "### CANLI GÖREV (mock)"
+KK._canli_hedef = lambda g, t="": ("### CANLI GÖREV (mock)", "gorev")
 yakala = {}
 
 
@@ -81,12 +82,12 @@ r = KK.canli_dogrula(GOREV, maddeler, _ai=lambda s, m: "bozuk çıktı")
 chk("bozuk agent çıktısı → tümü doğrulanamadı, hata yok", r["sonuc"] == "dogrulanamadi" and r["sayim"]["dogrulanamadi"] == 2)
 
 print("3) canlı hedef yok")
-KK._canli_hedef = lambda g, t="": None
+KK._canli_hedef = lambda g, t="": (None, "gorev")
 r = KK.canli_dogrula(GOREV, maddeler, _ai=_yasak)
 chk("AI çağrılmaz, net neden", r["sonuc"] == "dogrulanamadi" and "hedefi tanımlı değil" in r["maddeler"][0]["neden"], r["maddeler"][0])
 
 print("4) rapor")
-KK._canli_hedef = lambda g, t="": "mock"
+KK._canli_hedef = lambda g, t="": ("mock", "gorev")
 r = KK.canli_dogrula(GOREV, maddeler, _ai=ai_sonuc(
     '{"maddeler":[{"id":"K-01","durum":"dogrulandi","gozlem":"ok","kanit":"[K: Canlı UI:/c]"},{"id":"K-02","durum":"eksik","gozlem":"500"}],'
     '"yazma_islemleri":["AI-TEST Kat 1"],"gezilemeyen":["Rapor ekranı — menüde yok"]}'))
@@ -173,7 +174,7 @@ M2 = KK._liste_normalize([
     {"id": "K-04", "tur": "rol", "madde": "yetkisiz kullanıcı", "ref": "AC-3", "denenebilir": False},
     {"id": "K-05", "tur": "buton", "madde": "ref'siz madde"},
 ])
-KK._canli_hedef = lambda g, t="": "mock"
+KK._canli_hedef = lambda g, t="": ("mock", "gorev")
 r = KK.canli_dogrula(GOREV2, M2, talimat="https://dev-ornek.local/app/groups — BE kriterlerini endpoint'ten doğrula", _ai=ai_sonuc(
     '{"maddeler":[{"id":"K-01","durum":"dogrulandi","kanit":"[K: Network:DELETE /g/1 → 409]"},{"id":"K-02","durum":"dogrulandi","kanit":"x"},'
     '{"id":"K-03","durum":"dogrulanamadi","neden":"detay servisi yanıtı görülemedi"},{"id":"K-05","durum":"dogrulandi","kanit":"y"}],'
@@ -196,10 +197,30 @@ chk("Genel değerlendirme + Öne çıkan bulgular + Netleştirilmesi gereken kon
     and "### Öne çıkan bulgular" in md and "HTTP 409" in md and "### Netleştirilmesi gereken konular" in md)
 chk("Sonuç cümlesi: karşılanan + doğrulanamayan kapsam uyarısı", "**Sonuç:** 2 kabul kriteri karşılanmıştır. AC-2 ile doğrulanamayan senaryolar tamamlanmadan tüm kapsamın doğrulandığı kabul edilmemelidir." in md, md[-400:])
 chk("kriter tablosu: kriter sütunu", "| AC-2 | K-03 · sport alanı dolu | ⚠" in md)
+# kısmi sonuç etiketi + 'hiç gözlem olmadı' → tamamlama turu atlanır
+r_k = KK._sonuc_normalize({"maddeler": [{"id": "K-01", "durum": "dogrulandi", "kanit": "x"}, {"id": "K-02", "durum": "dogrulanamadi", "neden": "veri yok"}]}, maddeler)
+chk("teste_hazir_kismi → '⚠ KISMİ DOĞRULANDI' (✅ değil); ✅ yalnız dogrulanamadi==0", r_k["sonuc"] == "teste_hazir_kismi"
+    and "⚠ KISMİ DOĞRULANDI" in KK.rapor_md(GOREV, r_k) and "✅ TESTE HAZIR" not in KK.rapor_md(GOREV, r_k))
+r_yok = KK._sonuc_normalize({"maddeler": [{"id": m["id"], "durum": "dogrulanamadi", "neden": "oturum sona erdi / test edilemedi"} for m in maddeler if m["denenebilir"]]}, maddeler)
+chk("_gozlem_olmadi: hiç doğrulandı/eksik yok + hepsi aynı neden → True", KK._gozlem_olmadi(r_yok))
+r_t = KK.tamamlama_turu(GOREV, maddeler, r_yok, _ai=lambda s, m: (_ for _ in ()).throw(AssertionError("ikinci tur çağrılmamalı")))
+chk("tarayıcı hiç çalışmadıysa tamamlama turu ATLANIR (AI çağrılmaz, sonuç aynen)", r_t is r_yok and "tamamlama" not in r_t)
+r_karma = KK._sonuc_normalize({"maddeler": [{"id": "K-01", "durum": "dogrulandi", "kanit": "x"}, {"id": "K-02", "durum": "dogrulanamadi", "neden": "oturum sona erdi"}]}, maddeler)
+chk("_gozlem_olmadi: en az bir doğrulandı varsa False (tamamlama normal çalışır)", not KK._gozlem_olmadi(r_karma))
 # talimat URL → doğrudan ekran; yoksa bağlam filtresi base
 KK.load_context_filter = lambda: {"live_app_gorev": {"target_url": "https://uat-ornek.local/app/x/y"}}
 chk("_hedef_url: talimat URL'i öncelikli, yoksa live_app_gorev", KK._hedef_url("bak: https://dev-ornek.local/app/groups.") == "https://dev-ornek.local/app/groups"
     and KK._hedef_url("") == "https://uat-ornek.local/app/x/y")
+chk("kapsam: live_app_gorev varsa 'gorev'", KK._hedef_url_kapsam("") == ("https://uat-ornek.local/app/x/y", "gorev"))
+KK.load_context_filter = lambda: {"live_app": {"target_url": "https://surec-ornek.local/app/home"}}
+chk("YALNIZ Süreç URL'i varsa hedef live_app + kapsam 'surec' (eskiden hep 'gorev' → MCP bağlanmıyordu)",
+    KK._hedef_url_kapsam("") == ("https://surec-ornek.local/app/home", "surec") and KK._hedef_url_kapsam("x https://dev.local/a")[1] == "surec")
+yak_k: dict = {}
+KK._canli_hedef = lambda g, t="": ("mock", "surec")
+KK.canli_dogrula(GOREV, maddeler, _ai=lambda s, m: "bozuk")   # enjekte AI — kapsam akışı aşağıda kaynak düzeyinde
+chk("canli_dogrula kullanılan kapsamı _api_cagri'ye geçirir (sabit 'gorev' değil)",
+    'canli_uygulama_kapsami=k' in inspect.getsource(KK.canli_dogrula) and 'canli_uygulama_kapsami="gorev"' not in inspect.getsource(KK.canli_dogrula))
+KK.load_context_filter = lambda: {"live_app_gorev": {"target_url": "https://uat-ornek.local/app/x/y"}}
 chk("_ortam_adi: DEV/UAT sınıfı + host", KK._ortam_adi("https://dev-ornek.local/a") == "DEV (dev-ornek.local)" and KK._ortam_adi("https://uat-ornek.local/a").startswith("UAT"))
 yak2: dict = {}
 KK.canli_uygulama_baglami_hazirla = lambda **kw: (yak2.update(kw) or "CANLI")
@@ -224,8 +245,9 @@ ui = Path(A.__file__).parent.joinpath("templates/index.html").read_text(encoding
 chk("kartta 'Kabul Kontrolü' düğmesi (ANALIZ CHECK statüsünde vurgulu) + jgKabulKontrolBaslat mode kabul-kontrol, markdown boş",
     "jgKabulKontrolBaslat(" in ui and "_jgKabulDurumuMu(g.status)" in ui and "mode: 'kabul-kontrol', markdown: '', acik_sorular: '', gorev: g, talimat" in ui)
 chk("rapor-tek görünüm: kabulOnly → başlık 'Kabul Kontrolü', editörde rapor, Jira yazımı/eğitim/düzelt kapalı",
-    "kabulOnly: !!(rs.kabul" in ui and "'Kabul Kontrolü — ' : 'Teknik Analiz — '" in ui and "_kabulOnly ? (s.kabul.markdown || '')" in ui
-    and "_sentetik || _kabulOnly" in ui and "Kabul kontrolü raporu eğitim örneği değildir" in ui)
+    ("kabulOnly: !!(rs.kabul" in ui or "const kabulOnly = rs.kabul ?" in ui) and "'Kabul Kontrolü — ' : 'Teknik Analiz — '" in ui
+    and "_kabulOnly ? (s.kabul.markdown || '')" in ui
+    and ("_sentetik || _kabulOnly" in ui or "!_sentetik && !_kabulOnly" in ui) and "Kabul kontrolü raporu eğitim örneği değildir" in ui)
 
 print()
 if _hata:

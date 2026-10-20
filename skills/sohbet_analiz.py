@@ -195,19 +195,28 @@ def sohbet_mesaj(metin: str, gozlem: bool = False) -> dict:
         mesajlar.append({"role": rol, "content": [{"type": "text", "text": m.get("metin", "")}]})
 
     canli = _canli_tabanli_baglam(metin) if gozlem else None
+    gozlem_raporu = None
     if gozlem and canli:
-        mesajlar.append({"role": "user", "content": [{"type": "text", "text": canli},
-            {"type": "text", "text": (
-                "### 🌐 CANLI GÖZLEM TURU\nAnalistin SON mesajı için yukarıdaki canlı uygulama görevini GERÇEKTEN uygula "
-                "(gir, ilgili ekrana git, gör), sonra gözlemi KISA sohbet yanıtına çevir: ekran/kolon/buton/servis ne "
-                "gördüysen onu yaz; göremediğini yazma. Rapor biçimi değil, sohbet tonu; sonunda bir sonraki adımı öner.")}]})
+        # Kota: gözlem, tam bağlamlı sohbet çağrısının İÇİNDE değil, küçük promptlu AYRI fazda (skills/gozlem.py) yapılır;
+        # sohbet yanıtı TARAYICISIZ üretilir ve rapora dayanır (eskiden her araç turu RAG+BFF+konuşma bağlamını yeniden okuyordu).
+        from . import gozlem as _gz
+        gozlem_raporu = _gz.rapor_al(canli, "surec", gorev_ozet=metin, yeniden=True)
+        if gozlem_raporu.get("ok") and gozlem_raporu.get("md"):
+            mesajlar.append({"role": "user", "content": [{"type": "text", "text": _gz.rapor_blogu(gozlem_raporu)},
+                {"type": "text", "text": (
+                    "### 🌐 CANLI GÖZLEM TURU\nYukarıdaki gözlem raporu analistin SON mesajı için az önce yapıldı. Raporu KISA "
+                    "sohbet yanıtına çevir: ekran/kolon/buton/servis ne gözlendiyse onu yaz; raporda olmayanı yazma. Rapor "
+                    "biçimi değil, sohbet tonu; sonunda bir sonraki adımı öner.")}]})
+        else:
+            mesajlar.append({"role": "user", "content": [{"type": "text", "text": _gz.gozlem_yok_blogu(gozlem_raporu.get("neden", ""))},
+                {"type": "text", "text": "(Analist canlı gözlem istedi ama gözlem yapılamadı — nedenini kısaca belirt, referanslara dayanarak yanıtla.)"}]})
     elif gozlem:
         mesajlar.append({"role": "user", "content": [{"type": "text", "text":
             "(Analist canlı gözlem istedi ama canlı uygulama URL'i tanımlı değil — bunu belirt, Bağlam Filtresi'ne yönlendir.)"}]})
 
     sistem = _SOHBET_SISTEM + _domain_kurallari_oku()
-    yanit = _api_cagri(sistem, mesajlar, max_tokens=MAX_TOKENS_COMBINED, thinking=False,
-                       onbellek=not (gozlem and canli), canli_uygulama_kapsami=("surec" if (gozlem and canli) else None))
+    # Gözlem ayrı fazda yapıldı → bu çağrı tarayıcı aracı kullanmaz (taze rapor metni zaten prompt'u/önbellek anahtarını değiştirir).
+    yanit = _api_cagri(sistem, mesajlar, max_tokens=MAX_TOKENS_COMBINED, thinking=False, onbellek=not (gozlem and canli))
     yanit = (yanit or "").strip()
     oturum = oturum_oku()   # gözlem sürerken oturum değişmiş olabilir → taze oku
     oturum["mesajlar"].append({"rol": "agent", "metin": yanit, "ts": time.time(), **({"gozlem": True} if gozlem else {})})
@@ -332,14 +341,24 @@ def ekran_listesi_cikar() -> list[dict]:
         {"type": "text", "text": _cevaplanan_sorular_metni() and ("### CEVAPLANAN SORULAR\n" + _cevaplanan_sorular_metni()) or "(cevaplanmış soru yok)"},
         {"type": "text", "text": "Ekran envanterini çıkar."},
     ]
-    yanit = _api_cagri(_EKRAN_SISTEM + _domain_kurallari_oku(), [{"role": "user", "content": icerik}],
-                       max_tokens=MAX_TOKENS_KISA, thinking=False, katman="yardimci")
-    ham = _xml_ayir(_metin_sikistir(yanit or ""), "ekranlar")
-    try:
-        liste = json.loads(ham)
-    except Exception:
-        a, b = ham.find("["), ham.rfind("]")
-        liste = json.loads(ham[a:b + 1]) if a != -1 and b > a else []
+    sistem = _EKRAN_SISTEM + _domain_kurallari_oku()
+    mesajlar = [{"role": "user", "content": icerik}]
+
+    def _coz(yanit):
+        ham = _xml_ayir(_metin_sikistir(yanit or ""), "ekranlar")
+        try:
+            return json.loads(ham)
+        except Exception:
+            a, b = ham.find("["), ham.rfind("]")
+            try:
+                return json.loads(ham[a:b + 1]) if a != -1 and b > a else []
+            except Exception:
+                return []
+
+    liste = _coz(_api_cagri(sistem, mesajlar, max_tokens=MAX_TOKENS_KISA, thinking=False, katman="yardimci"))
+    if not liste:
+        # Bozuk/boş yanıt 7 gün önbellekte kalmasın → BİR KEZ önbelleksiz tekrar
+        liste = _coz(_api_cagri(sistem, mesajlar, max_tokens=MAX_TOKENS_KISA, thinking=False, katman="yardimci", onbellek=False))
     ekranlar = []
     for e in liste if isinstance(liste, list) else []:
         if not isinstance(e, dict) or not str(e.get("ad") or "").strip():

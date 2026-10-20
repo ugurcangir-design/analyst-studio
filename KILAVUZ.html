@@ -1052,6 +1052,13 @@ Doküman yükle <span class="arr">→</span> Süreç Analizi <span class="arr">�
             görürsünüz. Kısmen bulduklarında kutu en olası yanıtla ön-dolu gelir (<span class="pill">🤖 agent kısmen buldu</span>,
             kontrol edin), yalnız gerçek ürün kararları boş kalır (<em>kararınız gerekli</em> + agent notu). Kalanları cevaplayıp
             <strong>Cevapları İşle</strong> deyin. Ek maliyet: kısa bir çağrı + gerekirse bir gözlem turu + bir düzeltme çağrısı.</li>
+        <li><strong>Panel davranışı ve güvenlik düzeltmeleri <span class="pill new">Yeni</span></strong> — Task Analizi'nde Esc, Kapat ve listeyi
+            yenilemek artık analiz setini silmez (yalnız gizler; "Göster" çipiyle geri gelir); bir iş sürerken ikinci iş başlatılamaz; başarısız bir
+            Düzelt/Cevap adımı önceki analizi korur. "Onayla ve Jira'da Güncelle" task açıklamasını ezmez: orijinal talep <em>📌 Orijinal Talep</em>
+            başlığı altında korunur, analiz <em>🤖 Teknik Analiz</em> altına yazılır. Kabul Kontrolü'nde doğrulanamayan madde varsa sonuç
+            "⚠ KISMİ DOĞRULANDI" olarak etiketlenir (eskiden ✅ görünüyordu). FE+BE ayrımında FE artık BE'nin servis sözleşmesini tam görür ve
+            açık sorular iki katman için tek listede toplanır. Claude kullanım limiti dolduğunda canlı gözlem artık tarayıcısız "sahte" rapor
+            üretmez; net hata verir.</li>
         <li><strong>Kabul Kontrolü maddeleri eksik bırakmaz <span class="pill new">Yeni</span></strong> — uzun kontrollerde
             (20+ madde) agent'ın tarayıcı tur bütçesi doluyordu ve kalan maddeler "oturum sona erdi / test edilemedi" kalıyordu.
             Artık bütçe madde sayısına göre ayrılır, dolunca yenilenip aynı oturumdan devam edilir; yine de denenemeyen maddeler

@@ -52,6 +52,15 @@ base.USE_CLAUDE_CLI = True
 k_ana = base._api_cache_key("s", [{"role": "user", "content": "m"}], base.MODEL_ANALIZ, 100, False, "ana")
 k_yar = base._api_cache_key("s", [{"role": "user", "content": "m"}], base.MODEL_ANALIZ, 100, False, "yardimci")
 chk("önbellek anahtarı katmana göre ayrışır (aynı girdi, farklı model)", k_ana != k_yar)
+_eski_cache_dir = base._API_CACHE_DIR
+base._API_CACHE_DIR = Path(tempfile.mkdtemp())
+base._api_cache_yaz(k_yar, "bozuk yanıt")
+chk("api_cache_sil: _api_cagri ile AYNI argümanlardan anahtar türetir, kaydı siler (atomik yazılmış .txt), ikinci çağrı False",
+    base._api_cache_oku(k_yar) == "bozuk yanıt" and not list(base._API_CACHE_DIR.glob("*.tmp"))
+    and base.api_cache_sil("s", [{"role": "user", "content": "m"}], max_tokens=100, katman="yardimci") is True
+    and base._api_cache_oku(k_yar) is None
+    and base.api_cache_sil("s", [{"role": "user", "content": "m"}], max_tokens=100, katman="yardimci") is False)
+base._API_CACHE_DIR = _eski_cache_dir
 
 yakalanan: list = []
 
@@ -77,7 +86,7 @@ base.USE_CLAUDE_CLI = _eski_cli
 # Yardımcı çağrı noktaları gerçekten katman geçiyor mu (kaynak düzeyinde — davranış testi yukarıda)
 kok = Path(__file__).resolve().parents[1] / "skills"
 for mod, n in (("gozlem.py", 1), ("canli_giris.py", 1), ("bff_kesif.py", 1), ("kabul_kontrolu.py", 2),
-               ("soru_cozumleme.py", 2), ("sohbet_analiz.py", 1)):
+               ("soru_cozumleme.py", 3), ("sohbet_analiz.py", 2)):   # +1: bozuk yanıtta önbelleksiz tekrar
     chk(f"{mod}: {n} yardımcı çağrı", (kok / mod).read_text(encoding="utf-8").count('katman="yardimci"') == n)
 chk("jira_gorevleri: düzeltme yardımcı katmanda",
     'katman="yardimci"' in (kok / "jira_gorevleri.py").read_text(encoding="utf-8").split("def gorev_analiz_duzelt", 1)[1].split("\ndef ", 1)[0])
@@ -85,7 +94,8 @@ chk("jira_gorevleri: düzeltme yardımcı katmanda",
 # ── Faz 2: hedefli cevap uygulama ─────────────────────────────────────────────
 duzelt_girdi: list = []
 soru_girdi: list = []
-jg.gorev_analiz_duzelt = lambda gorev, mevcut, talimat: duzelt_girdi.append((mevcut, talimat)) or (mevcut + "\n\n[İŞLENDİ]")
+_ORJ_DUZELT = jg.gorev_analiz_duzelt   # aşağıda gerçek fonksiyon (asama/özet) test edilir
+jg.gorev_analiz_duzelt = lambda gorev, mevcut, talimat, **kw: duzelt_girdi.append((mevcut, talimat)) or (mevcut + "\n\n[İŞLENDİ]")
 jg._gorev_acik_sorular_uret = lambda md, gorev, cevaplar="", onceki_sorular="": soru_girdi.append((cevaplar, onceki_sorular)) or "Q-T-002: kalan?"
 
 gorev = {"key": "MBSTRADE-7", "summary": "Filtre alanı", "description": "açıklama"}
@@ -114,6 +124,29 @@ chk("soru üretimi düşerse cevaplar yine işlenir (acik boş)", "[İŞLENDİ]"
 os.environ["CEVAP_HEDEFLI"] = "false"
 chk("CEVAP_HEDEFLI=false kapatır", jg.cevap_hedefli_acik() is False)
 os.environ.pop("CEVAP_HEDEFLI", None)
+# Özetli girdi: Yönetici Özeti düzeltmeye GİTMEZ, sonuçta güncel sayaçlarla YENİDEN kurulur; RAG yorumu ilk 3 satırda olsa da bulunur
+jg._gorev_acik_sorular_uret = lambda md, gorev, cevaplar="", onceki_sorular="": "### Q-T-009: kalan\n- Soru: ?"
+duzelt_girdi.clear()
+md_ozetli = base.yonetici_ozeti_olustur("## 1. Amaç\nx", acik_sorular="### Q-T-001: a\n### Q-T-002: b") + "<!-- RAG: 2 referans -->\n\n## 1. Amaç\nx\n\n| GET /a | b |"
+r3 = jg.gorev_cevap_uygula(gorev, md_ozetli, "Q-T-001: cevap")
+chk("cevap: özet + RAG gövdeden ayrıldı (düzeltmeye yalnız saf gövde gitti)", duzelt_girdi[-1][0].startswith("## 1. Amaç") and "Yönetici Özeti" not in duzelt_girdi[-1][0]
+    and "RAG:" not in duzelt_girdi[-1][0])
+chk("cevap: RAG yorumu geri + özet YENİDEN (kalan 1 soru) + tek özet bloğu", r3["markdown"].startswith("<!-- RAG: 2 referans -->")
+    and base.yonetici_ozetini_cikar(r3["markdown"]) != r3["markdown"] and r3["markdown"].count("Yönetici Özeti") == 1
+    and "[İŞLENDİ]" in r3["markdown"])
+asamalar: list = []
+_eski_asama = jg.asama_ayarla
+jg.asama_ayarla = lambda ad: asamalar.append(ad)
+jg._api_cagri = lambda s, m, **k: "<teknik_analiz>## 1. Amaç\ndüzeltildi\n</teknik_analiz>"
+_gercek_duzelt = _ORJ_DUZELT
+_gercek_duzelt(gorev, "## 1. Amaç\nx", "düzelt", asama="gorev:cevap")
+chk("gorev_analiz_duzelt(asama=…) telemetri etiketi ezilmez ('gorev:cevap')", asamalar[-1] == "gorev:cevap")
+_gercek_duzelt(gorev, "## 1. Amaç\nx", "düzelt")
+chk("varsayılan etiket 'gorev:duzelt'", asamalar[-1] == "gorev:duzelt")
+r4 = _gercek_duzelt(gorev, base.yonetici_ozeti_olustur("## 1. Amaç\nx") + "<!-- RAG: 1 -->\n\n## 1. Amaç\nx", "düzelt")
+chk("düzelt: özetli girdi → çıktıda RAG yorumu + tek yeni özet + düzeltilmiş gövde", r4.startswith("<!-- RAG: 1 -->") and r4.count("Yönetici Özeti") == 1
+    and "düzeltildi" in r4)
+jg.asama_ayarla = _eski_asama
 chk("varsayılan açık", jg.cevap_hedefli_acik() is True)
 
 # ── App iş modu 'cevap' → hedefli yol (Flask test client, görev dict'li adım → Jira gerekmez) ──

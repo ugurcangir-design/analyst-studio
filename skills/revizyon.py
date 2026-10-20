@@ -234,6 +234,12 @@ def onayla(hedef_dosya: str, revizyon_id: str) -> dict:
     r = _revizyon_bul(oturum, revizyon_id)
     if r["onay_durumu"] != "beklemede":
         raise ValueError(f"Revizyon '{revizyon_id}' zaten {r['onay_durumu']}.")
+    # BAYAT TABAN KORUMASI: öneri, o anki aktif versiyon üzerine kurulmadıysa (arada başka bir düzenleme onaylandı)
+    # onaylamak önceki onaylı düzenlemeyi SESSİZCE silerdi → reddet, analist öneriyi yeniden üretsin.
+    if r.get("onceki_versiyon") and r["onceki_versiyon"] != oturum.get("aktif_versiyon"):
+        raise ValueError(
+            f"Revizyon '{revizyon_id}' bayat: {r['onceki_versiyon']} üzerine kuruldu ama aktif versiyon "
+            f"{oturum.get('aktif_versiyon')} (arada başka bir düzenleme onaylandı). Düzenlemeyi güncel içerik üzerinde yeniden üretin.")
     r["onay_durumu"] = "onaylandi"
     r["onaylandi_at"] = _simdi()
     oturum["aktif_versiyon"] = r["yeni_versiyon"]

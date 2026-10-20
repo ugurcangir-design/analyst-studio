@@ -92,10 +92,26 @@ import app as A  # noqa: E402
 src = Path(A.__file__).read_text(encoding="utf-8")
 chk("app: uçlar + arka plan iş farkındalığı", '"/api/live-app/giris-durum"' in src and '"/api/live-app/giris-test"' in src and '("_giris_isler", "canlı uygulama giriş doğrulaması")' in src)
 ui = Path(A.__file__).parent.joinpath("templates/index.html").read_text(encoding="utf-8")
-chk("UI: kapı iş başlatmadan önce + canlı modlar + 'Girişi Doğrula' düğmesi", "if (!(await _jgCanliKapi(adimlar))) return;" in ui
+chk("UI: kapı iş başlatmadan önce + canlı modlar + 'Girişi Doğrula' düğmesi", ("if (!(await _jgCanliKapi(adimlar))) return;" in ui or "if (!(await _jgCanliKapi(adimlar))) return false;" in ui)
     and "_JG_CANLI_MODLAR" in ui and "jgGirisDogrula()" in ui and "YAPILMADAN üretilecek" in ui)
 from skills import sohbet_analiz as SA  # noqa: E402
 chk("İnteraktif Girişi Test Et aynı çekirdeği kullanır", "canli_giris import test_et" in Path(SA.__file__).read_text(encoding="utf-8"))
+
+print("6) agent oturumu atlaması HOST BAZLI")
+CG.gorev_live_app_urls = lambda: ["https://uat-ornek.local/app/x"]
+CG.test_et("gorev", _ai=ai('<giris_sonuc>{"ok": true, "ekran": "/x"}</giris_sonuc>'))   # bu host'ta başarılı giriş kaydı
+CG.oturum_durumu = lambda: {"var": True, "kaynak": "agent", "yas_dk": 3, "son_giris": 1.0}
+CG.gorev_live_app_urls = lambda: ["https://baska-host.local/app"]
+d = CG.durum("gorev")
+chk("agent oturumu var ama bu kapsamın host'u için başarılı giriş yok → ATLANMAZ (gerekli=True)", d["gerekli"] and "oturum" not in d, d)
+CG.gorev_live_app_urls = lambda: ["https://uat-ornek.local/app/x"]
+d = CG.durum("gorev")
+chk("aynı host'ta önceki başarılı giriş varsa atlama korunur (gerekli=False, 'Kayıtlı oturum')", not d["gerekli"] and "Kayıtlı oturum" in d["mesaj"], d)
+CG.oturum_durumu = lambda: {"var": True, "kaynak": "agent", "yas_dk": 3, "son_giris": 1.0, "host": "baska-host.local"}
+chk("oturum kaydında host varsa doğrudan onunla karşılaştırılır (farklı → oturum atlaması kullanılmaz; taze giriş testi karar verir)",
+    "oturum" not in CG.durum("gorev") and not CG._oturum_bu_host_icin_mi({"host": "baska-host.local"}, "https://uat-ornek.local/app/x", None)
+    and CG._oturum_bu_host_icin_mi({"host": "uat-ornek.local"}, "https://uat-ornek.local/app/x", None))
+CG.oturum_durumu = lambda: {}
 
 print()
 if _hata:

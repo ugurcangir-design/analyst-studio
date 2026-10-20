@@ -89,6 +89,11 @@ def durum(kapsam: str) -> dict:
     except Exception:
         o = {}
     oturum_taze = bool(o.get("var")) and o.get("kaynak") == "agent" and float(o.get("yas_dk") or 1e9) * 60 < gecerlilik_sn()
+    # Atlama HOST BAZLI: agent oturumu başka bir uygulamada (örn. Task hedefi) açılmış olabilir → bu kapsamın host'u için
+    # geçerli değildir. Oturum kaydında host varsa onunla; yoksa bu kapsamın SON BAŞARILI giriş kaydının host'uyla
+    # karşılaştırılır (aynı host'ta daha önce girilmişse çerez o host'a aittir). Hiçbiri eşleşmiyorsa atlanmaz.
+    if oturum_taze and not _oturum_bu_host_icin_mi(o, url, g):
+        oturum_taze = False
     if oturum_taze and not (taze and g and not g.get("ok")):
         return {"kapsam": kapsam, "url": url, "var": True, "gerekli": False, "oturum": o,
                 "giris": {"ok": True, "neden": "", "ekran": "", "ts": float(o.get("son_giris") or 0), "taze": True},
@@ -105,6 +110,29 @@ def durum(kapsam: str) -> dict:
     else:
         mesaj = "Giriş henüz doğrulanmadı — analiz öncesi test edilecek."
     return {"kapsam": kapsam, "url": url, "var": True, "giris": giris, "gerekli": gerekli, "mesaj": mesaj}
+
+
+def _host(u: str) -> str:
+    """URL ya da çıplak host adından host (küçük harf). 'https://a.local/x' → 'a.local' · 'a.local' → 'a.local'."""
+    u = (u or "").strip()
+    if not u:
+        return ""
+    p = urlparse(u if "://" in u else "//" + u)
+    return (p.netloc or "").lower()
+
+
+def _oturum_bu_host_icin_mi(oturum: dict, url: str, son_giris: dict | None) -> bool:
+    """Kayıtlı agent oturumu BU kapsamın host'u için mi? Oturum kaydında `host` varsa doğrudan; yoksa bu kapsamın son
+    BAŞARILI giriş kaydındaki URL host'u ile aynıysa evet; aksi hâlde hayır (atlama yapılmaz, giriş test edilir)."""
+    h = _host(url)
+    if not h:
+        return False
+    kayitli = _host(str(oturum.get("host") or oturum.get("url") or ""))
+    if kayitli:
+        return kayitli == h
+    if son_giris and son_giris.get("ok") and _host(str(son_giris.get("url") or "")) == h:
+        return True
+    return False
 
 
 def giris_calistir(canli: str, kapsam: str, _ai=None) -> dict:

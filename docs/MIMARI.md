@@ -963,6 +963,42 @@ diyordu) ve içerik sonradan değişebilir.
 - Kısmi yazım kalıcı: `jiraYazildi` sette (`_jgSetKaydet`) → sayfa yenilense de "FE KEY açıldı ✓" görünür, diğer katman
   sonra yazılabilir. Test: `tests/test_katman_secimi.py`.
 
+### Denetim 2026-10-20 — tam tarama ve düzeltmeler
+Beş paralel salt-okuma denetim (app.py iş sistemi · base.py CLI/canlı çekirdek · analiz motorları · arayüz · telemetri/güvenlik/test/doküman)
++ dört düzeltici; özet CLAUDE.md "TAM DENETİM 2026-10-20". Modül bazında:
+- **app.py:** `_telemetri_olay` `has_request_context`; iş budama yalnız bitmişler (`_gorev_isler`/`_kopru_isler`/`_sohbet_isler`);
+  `_arka_plan_isleri_calisiyor` yaş sınırı `ARKA_PLAN_IS_AZAMI_SN`; `_gorev_is_calistir` try/except → `hata` + `aktif_bas=None`; `_adim_isle` `cevap`
+  ValueError → tam üretim (BFF raporu `rapor_oku`, ilişkili filtre); `/api/adim/duzelt` olayı yalnız süreç/teknik ve doğrulama sonrası; kimlik kapısı
+  `/api/approve, /api/revizyon, /api/mockup, /api/live-app/giris-test, /api/confluence/publish`; `GIZLENEBILIR_KATALOG` gerçek uçlar + `_endpoint_eslesir`
+  (`yol?alan=deger` POST gövdesi); `_surec_calistir` bool (15 sn bekleme) + approve 409; `_bekle` yerel `p`, SIGTERM→SIGKILL process grubu;
+  `/api/update` → `_mesgul_mu`+`_guncelleme_kontrol`+`_guncelleme_uygula`; `_pip_kur_sessiz`; `sifirla` ahead>0 reddi; `/api/rerun` 409 (workflow
+  çalışırken) + kilit sızıntısı yok + `Popen(start_new_session)`/killpg + `RERUN_TIMEOUT` + `_rerun_durum`; `_uzun_istek_sayac` (before/teardown_request)
+  `_mesgul_mu`'da; `_giris_lock`; sorular_uygula kilit sızıntısı; köprü bildirim hatası durumu bozmaz; bildirim dedup her koşuda sıfır; `@admin_gerekli`
+  restart/update/simdi/sifirla/settings POST/jira-config POST; OAuth `state` (session, `jira_auth.state_dogrula`) + callback `html.escape`; `_env_sanit`;
+  `_host_izinli` (csrf_kontrol başında) ; `/api/bye` yabancı Origin 403; referans yolları `is_relative_to`; `.html` çıktılar `CSP sandbox`; mockup işi
+  `key` + `.gorev-mockup-meta.json` → `/mockup/mevcut.key`; mockup eki `jira_gonder` sayılmaz; `son_restart.log` truncate.
+- **base.py:** `_pgrep_komutu`, `_api_hata_turu`, `_oturum_kilidi`/`_dizin_kopyala_atomik`/`_OTURUM_GIRIS_DOSYALARI`, canlı çağrı önbellek dışı +
+  CLI→API fallback canlıda YOK (+ fallback sonucu cache'lenmez), slot sızıntısı yok (try/except → `_slot_birak`), `_CLI_DURDUR` thread bayrağı
+  (`_durdur_kontrol`), tamamlatma `--disallowedTools` + kısmi sonuç kurtarma, `_kullanim_isle` (başarısızlıkta da kayıt, `basarisiz`), atomik slot kilidi
+  (`_slot_kilidi_yaz`, genç boş kilit = dolu), `_canli_toplam_sure`/`_son_an`/`_kalan`, `mcp_isit` thread+timeout, `_mesajlari_birlestir` rol önekleri
+  (çoklu mesajda), `_live_app_uretilmis_mi`, `api_cache_sil`/`_api_katman_coz`, `jira_icin_temizle` kod bloğu/tablo korumaları, `_cli_durum_yaz(model=)`,
+  `_cli_limit_hatasi` (is_error 429 exit 0), MCP_BOS_CONFIG atomik.
+- **skills:** `gozlem` kanıt zorunlu `ok` + özet-anahtar + bayat durum (`_durum_bu_cagrinin_mi`) + `rapor_soru_blogu`; `kabul_kontrolu._hedef_url_kapsam`
+  + `_gozlem_olmadi`; `jira_gorevleri` `canli_kapsam`, `soru_asamasi`/`_soru_asamasi`, `_fe_icin_be_sozlesme`, `govde_birlestir`/`orijinal_talep_ayikla`
+  (köprüden taşındı), `gorev_jiraya_yaz(orijinal_koru)`, `_govde_ayir` + özet yeniden kurma, `_ornek_kendisi_mi`, `_http_durum`, `_adf_to_text`
+  tablo/başlık; `revizyon_ai._duzenleme_dogrula`/`_cikti_butcesi`/kod bloğu başlıkları; `revizyon.onayla` bayat taban; `soru_cozumleme.cozumle(rag_ctx,
+  canli_kapsam)`; `bff_kesif.rapor_tam_mi`; `sohbet_analiz` 🌐 → gözlem fazı; `akis_kapatma.sorulari_analize_ekle` bölüm altına; `canli_giris.
+  _oturum_bu_host_icin_mi`; `jira_fe_be`/`jira_tasks`/`kabul_listesi`/`_ai_siniflandir`/`_siniflandir`/`_tespit_ai`/`ekran_listesi_cikar` parse hatasında
+  1 kez `onbellek=False`.
+- **telemetri/ornek_havuzu/kod_kaynagi/jira_auth:** `_TEST_MODU`/`_SINK_KAPALI`, `_ts_parse`, taze yerel birleştirme (`olaylari_oku`), `kalite_ozeti`
+  filtreleri, `donem_detay` kimlik hariç, hata metni sızıntısı yok, `USAGE_SINK_TOKEN`; çekim hijyeni (`_temizle` ortak, `_ID_DESEN`, jira_key dedup,
+  ★ budanmaz, `<ornek>`); `rg --fixed-strings -e … --`; `yeni_state`/`state_dogrula`/`auth_url_olustur(state)`.
+- **UI:** `_jgPanelSadeceGizle`, `_jgBasliyor`/`_jgMesgul`, hata merge koruması, kabul-only editör ayrımı, 404 iş çözümü, `dataset.temel`, `_jgIptalIstek`,
+  `_jgSurenIsGoster`, mockup `key` kilidi (`_jgMockupJiraKilit`), `_kapiBtn/_kapiCalistir/_kapiJson`, `escHtml`, `.ku-tablo`/`.ku-grup-genis`,
+  `_jgPollBusy`, `_shPoll` oksuz tavan, `rerun-status` hata gösterimi. Yeni id'ler: `jg-approve-alt`, `jg-preview-msg-akis/-kabul/-bff`.
+Açıkta kalanlar (owner aksiyonu): Apps Script sertleştirme (sır + Owners listesi; `docs/telemetri-apps-script.md`), kimlik beyanı honor-system
+(`/api/analist` kapısız — tasarım kararı), `CSP 'unsafe-inline'` kaldırma (büyük UI işi).
+
 ### Analiz kalitesi vekilleri + ★ iyi örnek (2026-10-19)
 **Kalite:** `telemetri.soru_sayilari(md)` → `{acik_soru (benzersiz Q-/Q-T-/PO- id; yoksa madde sayısı), zorunlu_soru ('Zorunlu: Evet')}`;
 `olay_yaz(kalite=…)` → işarete `aq=,zq=` + `baglam.islem` → `i=` (sink korur; `_olay_normalize` geri çözer). Kaynaklar: app

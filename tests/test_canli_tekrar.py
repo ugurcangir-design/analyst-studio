@@ -112,6 +112,88 @@ except Exception as e:
 finally:
     B.subprocess.run = _orj
 
+print("6) Durdur bayrağı / sessiz düşüş / ham çıktı / limit / roller / canlı kapsamda API fallback YOK")
+cagrilar.clear()
+yanitlar[:] = [{"subtype": "error_max_turns", "is_error": True, "session_id": "sid-d", "num_turns": 40},
+               {"result": "OLMAMALI", "num_turns": 2}]
+
+
+def durduran_cli(cmd, prompt, env, timeout=0):
+    r = sahte_cli(cmd, prompt, env, timeout=timeout)
+    B.cli_proc_durdur(B.threading.get_ident())   # ilk koşu biter bitmez analist Durdur'a bastı (süreç yok → False döner)
+    return r
+
+
+B._cli_calistir = durduran_cli
+try:
+    B._api_cagri_cli("sistem", MSJ, canli_uygulama_kapsami="gorev")
+    chk("koşular ARASINDA Durdur → sonraki alt-süreç başlamaz (DurdurulduError)", False)
+except B.DurdurulduError:
+    chk("koşular ARASINDA Durdur → sonraki alt-süreç başlamaz (DurdurulduError)", len(cagrilar) == 1, len(cagrilar))
+B._cli_calistir = sahte_cli
+cagrilar.clear()
+yanitlar[:] = [{"result": "temiz", "num_turns": 1}]
+chk("taze üst-düzey çağrı Durdur bayrağını temizler", B._api_cagri_cli("sistem", MSJ) == "temiz")
+# sessiz düşüş: kapsam istendi ama MCP/URL yok
+B._live_app_cli_argumanlari = lambda kapsam=None: []
+cagrilar.clear()
+yanitlar[:] = [{"result": "gözlemsiz", "num_turns": 1}]
+r = B._api_cagri_cli("sistem", MSJ, canli_uygulama_kapsami="gorev")
+chk("kapsam istendi ama MCP/URL yok → analiz üretilir AMA durum yapildi=False, neden 'MCP/URL yok'",
+    r == "gözlemsiz" and len(cagrilar) == 1 and not durum()["yapildi"] and durum()["neden"] == "MCP/URL yok", durum())
+B._live_app_cli_argumanlari = lambda kapsam=None: (["--mcp-config", "x", "--allowedTools", "mcp__playwright__browser_navigate"] if kapsam else [])
+# ham (JSON olmayan) çıktı da redaksiyondan geçer; JSON liste gövde AttributeError vermez
+_orj_ctx = B.load_context_filter
+B.load_context_filter = lambda: {"live_app_auth": {"password": "GizliSifre1"}}
+B._cli_calistir = lambda cmd, p, e, timeout=0: subprocess.CompletedProcess(cmd, 0, "düz metin GizliSifre1 ile", "")
+chk("JSON olmayan ham çıktı şifre redaksiyonundan geçer", B._api_cagri_cli("sistem", MSJ) == "düz metin «redakte» ile")
+B.load_context_filter = _orj_ctx
+B._cli_calistir = lambda cmd, p, e, timeout=0: subprocess.CompletedProcess(cmd, 0, json.dumps([1, 2]), "")
+chk("JSON liste gövde → AttributeError yok, ham döner", B._api_cagri_cli("sistem", MSJ) == "[1, 2]")
+B._cli_calistir = lambda cmd, p, e, timeout=0: subprocess.CompletedProcess(
+    cmd, 0, json.dumps({"is_error": True, "api_error_status": 429, "result": "You've hit your limit · resets 3:50pm (Europe/Istanbul)"}), "")
+try:
+    B._api_cagri_cli("sistem", MSJ)
+    chk("is_error 429 + exit 0 → CliLimitError", False)
+except B.CliLimitError as e:
+    chk("is_error 429 + exit 0 → CliLimitError + reset ayıklandı", e.reset == "3:50pm (Europe/Istanbul)", e.reset)
+B._cli_calistir = sahte_cli
+# roller: tek kullanıcı mesajı AYNEN; çok mesajda [ANALİST]/[ASİSTAN]
+tek = B._mesajlari_birlestir("SYS", [{"role": "user", "content": [{"type": "text", "text": "a"}, {"type": "text", "text": "b"}]}])
+chk("tek kullanıcı mesajı: biçim AYNEN (rol öneki yok)", tek == "SYS\n\n" + "\n\n" + "─" * 60 + "\n" + "\n\n" + "a\n\nb", repr(tek))
+cok = B._mesajlari_birlestir("SYS", [{"role": "user", "content": "soru"}, {"role": "assistant", "content": "cevap"}, {"role": "user", "content": "devam"}])
+chk("çok mesaj: [ANALİST]/[ASİSTAN] önekleri sırayla", "[ANALİST]:\nsoru" in cok and "[ASİSTAN]:\ncevap" in cok
+    and cok.index("[ANALİST]:\nsoru") < cok.index("[ASİSTAN]:\ncevap") < cok.index("[ANALİST]:\ndevam"), cok)
+# _api_cagri: canlı kapsamda önbellek NE okunur NE yazılır; CLI limiti → canlıda API fallback YOK, canlı değilse var ama cache'e yazılmaz
+B._API_CACHE_DIR = tmp / "cache"
+_eski_use, _eski_cli_fn, _eski_direct = B.USE_CLAUDE_CLI, B._api_cagri_cli, B._api_cagri_direct
+_eski_key = os.environ.get("ANTHROPIC_API_KEY")
+B.USE_CLAUDE_CLI = True
+k_canli = B._api_cache_key("s2", MSJ, B.MODEL_ANALIZ, B.MAX_TOKENS_UZUN, False, "ana")
+B._api_cache_yaz(k_canli, "ESKİ GÖZLEM")
+B._api_cagri_cli = lambda *a, **k: "TAZE"
+chk("canlı kapsam: 7 günlük önbellek OKUNMAZ (taze sonuç) ve YAZILMAZ (eski kayıt olduğu gibi)",
+    B._api_cagri("s2", MSJ, canli_uygulama_kapsami="gorev") == "TAZE" and B._api_cache_oku(k_canli) == "ESKİ GÖZLEM")
+chk("gözlemsiz çağrı önbelleği okur (eski davranış)", B._api_cagri("s2", MSJ) == "ESKİ GÖZLEM")
+B._api_cagri_cli = lambda *a, **k: (_ for _ in ()).throw(B.CliLimitError("limit", reset="x"))
+direct: list = []
+B._api_cagri_direct = lambda *a, **k: direct.append(1) or "API SONUCU"
+os.environ["ANTHROPIC_API_KEY"] = "sk-ant-test"
+os.environ.pop("CLI_LIMIT_API_FALLBACK", None)
+try:
+    B._api_cagri("s3", MSJ, canli_uygulama_kapsami="gorev")
+    chk("canlı kapsamda CLI limiti → API fallback YOK", False)
+except B.CliLimitError:
+    chk("canlı kapsamda CLI limiti → CliLimitError yükselir, _api_cagri_direct ÇAĞRILMAZ (tarayıcısız 'gözlem' uydurulmaz)", not direct)
+k3 = B._api_cache_key("s3", MSJ, B.MODEL_ANALIZ, B.MAX_TOKENS_UZUN, False, "ana")
+chk("canlı olmayan çağrıda fallback çalışır; API sonucu CLI anahtarına YAZILMAZ",
+    B._api_cagri("s3", MSJ) == "API SONUCU" and direct and B._api_cache_oku(k3) is None)
+B.USE_CLAUDE_CLI, B._api_cagri_cli, B._api_cagri_direct = _eski_use, _eski_cli_fn, _eski_direct
+if _eski_key is None:
+    os.environ.pop("ANTHROPIC_API_KEY", None)
+else:
+    os.environ["ANTHROPIC_API_KEY"] = _eski_key
+
 print()
 if _hata:
     print(f"CANLI TEKRAR TESTLERİ BAŞARISIZ ({_hata} hata)")

@@ -17,6 +17,10 @@ import threading
 import time
 from pathlib import Path
 from dotenv import load_dotenv
+try:
+    import fcntl                       # oturum kopyası/geri yazımı için süreçler arası kilit (POSIX)
+except ImportError:                    # pragma: no cover — Windows'ta kilit atlanır (uygulama macOS)
+    fcntl = None
 
 # base.py 5 yerde logger.warning() çağırıyordu ama logger hiç tanımlı değildi
 # (ruff F821). O yollar çalıştığında graceful uyarı yerine NameError fırlıyordu:
@@ -68,7 +72,7 @@ def aktif_cli_model() -> str:
 
 if not USE_CLAUDE_CLI:
     try:
-        import anthropic
+        import anthropic  # noqa: F401 — API modunda paket varlığı açılışta doğrulanır; çağrı yollarında tembel import
     except ImportError:
         print("HATA: anthropic paketi yüklü değil. pip install anthropic")
         sys.exit(1)
@@ -1831,7 +1835,8 @@ def yonetici_ozeti_olustur(markdown: str, kapsam: dict | None = None,
     # İki format: başlık (### Q-T-001) ve tablo satırı (| Q-001 | ...) — ikisini de say.
     soru_kaynak = acik_sorular or markdown
     soru = say(r"^(?:#{2,4}\s+|\|\s*)Q-", soru_kaynak)
-    kritik = say(r"^-?\s*\**\s*Önem\s*\**\s*:\s*Kritik", soru_kaynak)
+    # Süreç/BRD soruları `Önem:`, teknik analiz `Öncelik:` yazar — ikisi de sayılsın.
+    kritik = say(r"^-?\s*\**\s*(?:Önem|Öncelik)\s*\**\s*:\s*Kritik", soru_kaynak)
 
     kapsam_parca = []
     if endpoint:
@@ -2011,7 +2016,15 @@ _META_ISARET = (r"yaklaşımına kıyasla|alternatif(?:ler)?e kıyasla|en doğru
                 r"kontrolü dışıdır|bu varsayımın uygulanıp uygulanmadığı")
 # bir seviye iç parantez toleranslı — "(… bkz. `## Bağımlılık (FE↔BE)`.)" bütünüyle silinsin
 _META_PARANTEZ = re.compile(r"[ \t]*\((?:[^()\n]|\([^()\n]*\))*(?:" + _META_ISARET + r")(?:[^()\n]|\([^()\n]*\))*\)[ \t]*\.?", re.I)
-_META_GEREKCE = re.compile(r"[^.\n]*(?:" + _META_ISARET + r")[^.\n]*\.?[ \t]*", re.I)
+# `|` sınıf dışı: tablo hücresindeki meta cümle silinirken satırın diğer hücreleri/ayraçları KORUNUR (satır yaşar).
+_META_GEREKCE = re.compile(r"[^.\n|]*(?:" + _META_ISARET + r")[^.\n|]*\.?[ \t]*", re.I)
+_KOD_CITI = re.compile(r"(```.*?```|~~~.*?~~~)", re.S)
+
+
+def _kod_citi_disinda(metin: str, fn) -> str:
+    """`fn`'yi yalnız çitli kod blokları (``` / ~~~) DIŞINDAKİ parçalara uygular; kod aynen kalır."""
+    parcalar = _KOD_CITI.split(metin)
+    return "".join(p if i % 2 else fn(p) for i, p in enumerate(parcalar))
 # Bölüm başlığı: `## 3. Teknik …` / `### 3.3. Alt …` / `### 3.3 Alt …`
 _BOLUM_BASLIK = re.compile(r"^(#{2,3})\s+(\d+)(?:\.(\d+))?\.?\s+(.+)$", re.M)
 
@@ -2032,9 +2045,12 @@ def _bolumleri_yeniden_numarala(markdown: str) -> str:
     (1,2,3,7,11 → 1,2,3,4,5); alt başlık `### N.M` ve metindeki `bkz. N.M` / `(N.M)` atıfları
     aynı haritayla güncellenir. Numarasız başlıklara dokunmaz; zaten ardışıksa değişiklik yok."""
     ust = []
+    alt_basliklar: set[tuple[int, int]] = set()   # gerçekten var olan `### N.M` başlıkları
     for m in _BOLUM_BASLIK.finditer(markdown):
         if m.group(1) == "##" and m.group(3) is None and int(m.group(2)) not in ust:
             ust.append(int(m.group(2)))
+        elif m.group(3) is not None:
+            alt_basliklar.add((int(m.group(2)), int(m.group(3))))
     if not ust or ust == list(range(1, len(ust) + 1)):
         return markdown
     harita = {eski: i + 1 for i, eski in enumerate(ust)}
@@ -2050,8 +2066,14 @@ def _bolumleri_yeniden_numarala(markdown: str) -> str:
     out = _BOLUM_BASLIK.sub(_baslik, markdown)
 
     def _atif(m):
-        n = int(m.group(2))
-        return f"{m.group(1)}{harita.get(n, n)}.{m.group(3)}" if n in harita else m.group(0)
+        n, alt = int(m.group(2)), int(m.group(3))
+        if n not in harita:
+            return m.group(0)
+        # Parantezli biçim ("(3.3)") yalnız GERÇEK bir `### N.M` başlığına işaret ediyorsa yeniden numaralanır —
+        # "(1.5 sn)", "(2.0 sürümü)" gibi sayılar bölüm atfı DEĞİLDİR, dokunulmaz. "bkz./bölüm" bağlamı açık atıftır.
+        if m.group(1) == "(" and (n, alt) not in alt_basliklar:
+            return m.group(0)
+        return f"{m.group(1)}{harita[n]}.{m.group(3)}"
     # yalnız açık atıf bağlamı: "bkz. 3.3", "(3.3)", "bölüm 3.3", "Bölüm 3.3'te"
     out = re.sub(r"((?:bkz\.?|bölüm|Bölüm)\s+|\()(\d+)\.(\d+)(?=[)\s'’,.;:]|$)", _atif, out)
     return out
@@ -2073,8 +2095,10 @@ def jira_icin_temizle(markdown: str) -> str:
     m = _KAYNAK_ONEK.sub(_onek_sil, m)   # cümle başındaysa sonraki harf büyütülür
     m = _META_PARANTEZ.sub("", m)     # önce parantez bütünüyle (içindeki noktalar cümle bölmesin)
     m = _META_GEREKCE.sub("", m)
-    # Etiket/alıntı silinince boş kalan madde ("- " / "- **Başlık:**") ve boş parantez artıkları
-    m = re.sub(r"\(\s*\)", "", m)
+    # Etiket/alıntı silinince boş kalan madde ("- " / "- **Başlık:**") ve boş parantez artıkları.
+    # Boş parantez yalnız BOŞLUKTAN SONRA gelen, içi boş olan `( )`/`()`'dir — `foo()` fonksiyon çağrısı ve çitli
+    # kod blokları DOKUNULMAZ (eskiden `liste()` → `liste` oluyordu).
+    m = _kod_citi_disinda(m, lambda s: re.sub(r"(?<![^\s])\(\s*\)", "", s))
     m = re.sub(r"^[ \t]*[-*]\s*(?:\*\*[^*\n]*:\*\*\s*)?$\n?", "", m, flags=re.M)
     m = re.sub(r"[ \t]+([.,;:!?])", r"\1", m)
     m = re.sub(r"\n{3,}", "\n\n", m)
@@ -3118,6 +3142,21 @@ def _jira_keyleri_uzaktan_cek(keyler: list[str]) -> list[dict]:
     return cekilen
 
 
+def _live_app_uretilmis_mi(f: Path) -> bool:
+    """`reference/live-app/` altında agent'ın KENDİ ürettiği ara çıktılar: gözlem fazı raporları (`gozlem/**`),
+    BFF ham transkriptleri (`bff/*.ham.txt`) ve BFF meta dosyaları (`bff/*.json`). Bunlar RAG corpus'una girince
+    kendi gözlemimiz 'canlı uygulama referansı' diye analize geri sızıyordu. BFF `*.md` sözleşme raporları KALIR."""
+    try:
+        rel = f.relative_to(LIVE_APP_DIR).as_posix()
+    except ValueError:
+        return False
+    if rel.startswith("gozlem/"):
+        return True
+    if rel.startswith("bff/") and (f.name.endswith(".ham.txt") or f.suffix.lower() == ".json"):
+        return True
+    return False
+
+
 def referans_dosyalari_hazirla(ctx_override: dict | None = None) -> list[Path]:
     """Referans dosyalarını (RAG) toplar. `ctx_override` verilmezse (None) ekranda
     KAYITLI bağlam filtresi (load_context_filter) uygulanır — varsayılan davranış.
@@ -3133,6 +3172,8 @@ def referans_dosyalari_hazirla(ctx_override: dict | None = None) -> list[Path]:
                         continue
                     if dizin != LIVE_APP_DIR and f.name.startswith("_"):
                         continue
+                    if dizin == LIVE_APP_DIR and _live_app_uretilmis_mi(f):
+                        continue      # gözlem raporu / ham transkript / BFF meta → corpus'a GİRMEZ
                     tum_dosyalar.append(f)
     ctx = ctx_override if ctx_override is not None else load_context_filter()
     if not tum_dosyalar:
@@ -3160,15 +3201,26 @@ def referans_dosyalari_hazirla(ctx_override: dict | None = None) -> list[Path]:
 # ─── API Çağrısı ──────────────────────────────────────────────────────────────
 
 def _mesajlari_birlestir(sistem: str, mesajlar: list) -> str:
+    """CLI (`claude -p`) tek metin alır → sistem + mesajlar birleştirilir. Birden çok mesaj ya da bir asistan
+    mesajı varsa her mesaj `[ANALİST]:` / `[ASİSTAN]:` önekiyle ayrılır (roller kaybolmasın — sohbet geçmişi,
+    cevap turu). TEK kullanıcı mesajında çıktı AYNEN eski biçimdir (mevcut promptlar/önbellek anahtarları kaymaz)."""
     parcalar = [sistem, "\n\n" + "─" * 60 + "\n"]
+    rolleri_yaz = len(mesajlar) > 1 or any((m.get("role") == "assistant") for m in mesajlar)
     for m in mesajlar:
         icerik = m.get("content", [])
+        metinler: list[str] = []
         if isinstance(icerik, str):
-            parcalar.append(icerik)
+            metinler.append(icerik)
         elif isinstance(icerik, list):
             for p in icerik:
                 if isinstance(p, dict) and p.get("type") == "text":
-                    parcalar.append(p["text"])
+                    metinler.append(p["text"])
+        if not metinler:
+            continue
+        metin = "\n\n".join(metinler)
+        if rolleri_yaz:
+            metin = ("[ASİSTAN]:" if m.get("role") == "assistant" else "[ANALİST]:") + "\n" + metin
+        parcalar.append(metin)
     return "\n\n".join(parcalar)
 
 
@@ -3304,6 +3356,20 @@ def _surec_var_mi(pid: int) -> bool:
         return True
 
 
+def _ere_escape(s: str) -> str:
+    """POSIX ERE (pgrep) için güvenli kaçış — yalnız gerçekten özel karakterler. `re.escape` `-`/boşluk gibi
+    karakterlere de `\\` koyar; BSD regcomp'ta `\\-` tanımsızdır → desen bozulabilir."""
+    return re.sub(r"([.\[\]()*+?{}|^$\\])", r"\\\1", s)
+
+
+def _pgrep_komutu(profil: Path | str) -> list[str]:
+    """`--user-data-dir=<profil>` argümanını TAM eşleşmeyle (`.live-app-profile` ≠ `.live-app-profiles/slot-1`)
+    taşıyan süreçleri bulan pgrep komutu. `--` ŞART: desen `--user-data-dir=` ile başladığından BSD pgrep onu
+    SEÇENEK sanıp 'illegal option' (exit 2, çıktı yok) veriyordu → yetim Chrome hiç bulunamıyor, "Browser is
+    already in use" sürüyordu. macOS pgrep (ERE) `\\s` tanımaz → `[[:space:]]`."""
+    return ["pgrep", "-f", "--", f"--user-data-dir={_ere_escape(str(profil))}([[:space:]]|$)"]
+
+
 def live_app_kilidi_temizle() -> None:
     """Kapatılmadan kalmış (yetim) Chrome sürecini sonlandırıp profil kilit
     dosyalarını (`SingletonLock` vb.) temizler.
@@ -3347,8 +3413,7 @@ def live_app_kilidi_temizle() -> None:
     # penceresi ya da yetim headless) kalmış olabilir → süreç listesinden bul, kapat. Chrome aynı
     # --user-data-dir'i ikinci kez açamaz ("Browser is already in use") → gözlem baştan düşer.
     try:
-        r = subprocess.run(["pgrep", "-f", f"--user-data-dir={re.escape(str(LIVE_APP_PROFILE_DIR))}(\\s|$)"],
-                           capture_output=True, text=True, timeout=5)
+        r = subprocess.run(_pgrep_komutu(LIVE_APP_PROFILE_DIR), capture_output=True, text=True, timeout=5)
         pids = [int(x) for x in (r.stdout or "").split() if x.isdigit()]
         for p_ in pids:
             try:
@@ -3415,7 +3480,63 @@ _SLOT_LOCK = threading.Lock()
 _SLOT_SAHIPLI: set[int] = set()       # bu süreçte thread'lerce tutulan slotlar (kilit dosyasındaki pid aynı olduğundan)
 _SLOT_OTURUM_DOSYALARI = ("Default/Cookies", "Default/Cookies-journal", "Default/Network/Cookies",
                           "Default/Network/Cookies-journal", "Default/Login Data", "Default/Preferences")
+# "Giriş yapıldı mı?" mtime kıyası YALNIZ çerez + Login Data'ya bakar — `Preferences` Chrome her açılışta yeniden
+# yazıldığından (pencere boyutu, sayaçlar) oturumsuz slot bile 'daha yeni' görünüp ana profile boş oturum yazıyordu.
+_OTURUM_GIRIS_DOSYALARI = ("Default/Cookies", "Default/Network/Cookies", "Default/Login Data")
 _SLOT_OTURUM_DIZINLERI = ("Default/Local Storage", "Default/Session Storage", "Default/IndexedDB")
+_OTURUM_KILIT_ADI = ".oturum.lock"       # havuz dizininde: kopyalama ↔ geri yazım süreçler arası sıralı (flock)
+
+
+class _oturum_kilidi:
+    """`.live-app-profiles/.oturum.lock` üzerinde `fcntl.flock(LOCK_EX)` — slota kopyalama ile ana profile geri yazım
+    (farklı thread/süreçler: run.py alt-süreci + Flask thread'leri) aynı anda dosyalara dokunmasın. fcntl yoksa no-op."""
+    def __enter__(self):
+        self.fd = None
+        if fcntl is None:
+            return self
+        try:
+            LIVE_APP_PROFILE_HAVUZ.mkdir(parents=True, exist_ok=True)
+            self.fd = os.open(LIVE_APP_PROFILE_HAVUZ / _OTURUM_KILIT_ADI, os.O_CREAT | os.O_RDWR, 0o600)
+            fcntl.flock(self.fd, fcntl.LOCK_EX)
+        except Exception:
+            if self.fd is not None:
+                try:
+                    os.close(self.fd)
+                except OSError:
+                    pass
+            self.fd = None
+        return self
+
+    def __exit__(self, *exc):
+        if self.fd is not None:
+            try:
+                fcntl.flock(self.fd, fcntl.LOCK_UN)
+            finally:
+                os.close(self.fd)
+        return False
+
+
+def _dizin_kopyala_atomik(src: Path, hedef: Path) -> None:
+    """Dizin ağacını önce yanındaki geçici dizine kopyalar, sonra takas eder (rename) — hedef hiçbir anda yarım
+    kalmaz (eskiden `rmtree` + `copytree` yerinde yapılıyordu; o sırada Chrome okursa bozuk/boş profil görüyordu).
+    Dizin rename'i (`os.replace`) dolu hedefi ezemediğinden eski→kenar, yeni→hedef, kenar silinir."""
+    hedef.parent.mkdir(parents=True, exist_ok=True)
+    etiket = f"{os.getpid()}-{threading.get_ident()}"
+    gecici = hedef.parent / f".{hedef.name}.tmp-{etiket}"
+    eski = hedef.parent / f".{hedef.name}.eski-{etiket}"
+    shutil.rmtree(gecici, ignore_errors=True)
+    shutil.rmtree(eski, ignore_errors=True)
+    shutil.copytree(src, gecici)
+    try:
+        if hedef.exists():
+            os.rename(hedef, eski)
+        os.rename(gecici, hedef)
+    except Exception:
+        shutil.rmtree(gecici, ignore_errors=True)
+        if not hedef.exists() and eski.exists():
+            os.rename(eski, hedef)        # geri al
+        raise
+    shutil.rmtree(eski, ignore_errors=True)
 
 
 def _slot_sayisi() -> int:
@@ -3440,8 +3561,7 @@ def _profil_sureclerini_kapat(profil: Path) -> int:
     kullanan Chrome süreçlerini kapatır; Singleton* kilit dosyalarını siler. Dönen: kapatılan süreç sayısı."""
     pids: list[int] = []
     try:
-        r = subprocess.run(["pgrep", "-f", f"--user-data-dir={re.escape(str(profil))}(\\s|$)"],
-                           capture_output=True, text=True, timeout=5)
+        r = subprocess.run(_pgrep_komutu(profil), capture_output=True, text=True, timeout=5)
         pids = [int(x) for x in (r.stdout or "").split() if x.isdigit()]
     except Exception:
         pids = []
@@ -3479,39 +3599,69 @@ def _slot_oturum_kopyala(slot_dir: Path) -> None:
     if not (kaynak / "Default").exists():
         return
     damga = slot_dir / ".oturum-damga"
-    try:
-        kaynak_mtime = max((kaynak / rel).stat().st_mtime for rel in _SLOT_OTURUM_DOSYALARI if (kaynak / rel).exists())
-    except ValueError:
-        return
-    try:
-        if damga.exists() and float(damga.read_text() or 0) >= kaynak_mtime:
+    with _oturum_kilidi():            # geri yazımla (başka slot/süreç) çakışmasın
+        kaynak_mtime = _oturum_mtime(kaynak)
+        if kaynak_mtime <= 0:
             return
-    except Exception:
-        pass
-    import shutil
-    (slot_dir / "Default").mkdir(parents=True, exist_ok=True)
-    (slot_dir / "Default" / "Network").mkdir(parents=True, exist_ok=True)
-    for rel in _SLOT_OTURUM_DOSYALARI:
-        src = kaynak / rel
-        if src.exists():
-            try:
-                shutil.copy2(src, slot_dir / rel)
-            except Exception:
-                pass
-    for rel in _SLOT_OTURUM_DIZINLERI:
-        src = kaynak / rel
-        if src.is_dir():
-            try:
-                hedef = slot_dir / rel
-                if hedef.exists():
-                    shutil.rmtree(hedef, ignore_errors=True)
-                shutil.copytree(src, hedef, dirs_exist_ok=True)
-            except Exception:
-                pass
+        try:
+            if damga.exists() and float(damga.read_text() or 0) >= kaynak_mtime:
+                return
+        except Exception:
+            pass
+        (slot_dir / "Default").mkdir(parents=True, exist_ok=True)
+        (slot_dir / "Default" / "Network").mkdir(parents=True, exist_ok=True)
+        for rel in _SLOT_OTURUM_DOSYALARI:
+            src = kaynak / rel
+            if src.exists():
+                try:
+                    shutil.copy2(src, slot_dir / rel)
+                except Exception:
+                    pass
+        for rel in _SLOT_OTURUM_DIZINLERI:
+            src = kaynak / rel
+            if src.is_dir():
+                try:
+                    _dizin_kopyala_atomik(src, slot_dir / rel)
+                except Exception:
+                    pass
+        try:
+            damga.write_text(str(kaynak_mtime), encoding="utf-8")
+        except Exception:
+            pass
+
+
+def _slot_kilidi_yaz(kilit: Path) -> bool:
+    """Kilit dosyasını pid'li ve ATOMİK oluşturur: pid geçici dosyaya yazılır, `os.link` ile kilit adına bağlanır
+    (zaten varsa FileExistsError → False). Eskiden O_EXCL ile boş dosya açılıp pid SONRA yazılıyordu → başka süreç o
+    arada boş kilidi 'bayat' sanıp devralabiliyordu. link desteklenmeyen dosya sisteminde O_EXCL'e düşer."""
+    gecici = kilit.parent / f".{kilit.name}.{os.getpid()}-{threading.get_ident()}.tmp"
     try:
-        damga.write_text(str(kaynak_mtime), encoding="utf-8")
-    except Exception:
-        pass
+        gecici.write_text(str(os.getpid()), encoding="utf-8")
+        try:
+            os.link(gecici, kilit)
+            return True
+        except FileExistsError:
+            return False
+        except OSError:
+            try:
+                fd = os.open(kilit, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            except FileExistsError:
+                return False
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(str(os.getpid()))
+            return True
+    finally:
+        try:
+            gecici.unlink()
+        except OSError:
+            pass
+
+
+def _kilit_genc_mi(kilit: Path, sn: float = 5.0) -> bool:
+    try:
+        return (time.time() - kilit.stat().st_mtime) < sn
+    except OSError:
+        return False
 
 
 def _slot_al(bekle_sn: int | None = None) -> tuple[int, Path] | None:
@@ -3531,10 +3681,9 @@ def _slot_al(bekle_sn: int | None = None) -> tuple[int, Path] | None:
             slot_dir = LIVE_APP_PROFILE_HAVUZ / f"slot-{n}"
             kilit = LIVE_APP_PROFILE_HAVUZ / f"slot-{n}.lock"
             with _SLOT_LOCK:
-                try:
-                    fd = os.open(kilit, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-                except FileExistsError:
-                    # bayat mı? (sahibi ölmüş)
+                if not _slot_kilidi_yaz(kilit):
+                    # Kilit var — bayat mı? (sahibi ölmüş). Pid'siz ama 5 sn'den GENÇ kilit = başka süreç tam o anda
+                    # yazıyor olabilir → tutuluyor say (yarış koruması); eski boş kilit bayattır.
                     try:
                         sahip = int((kilit.read_text(encoding="utf-8") or "0").strip() or 0)
                     except Exception:
@@ -3543,18 +3692,23 @@ def _slot_al(bekle_sn: int | None = None) -> tuple[int, Path] | None:
                         continue                      # başka süreç (run.py alt-süreci) tutuyor
                     if sahip == os.getpid() and n in _SLOT_SAHIPLI:
                         continue                      # aynı süreçte başka thread tutuyor
+                    if not sahip and _kilit_genc_mi(kilit):
+                        continue
                     try:
                         kilit.unlink()
-                        fd = os.open(kilit, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
                     except Exception:
                         continue
+                    if not _slot_kilidi_yaz(kilit):
+                        continue
                     logger.info("Canlı profil slot-%d bayat kilit devralındı (sahip pid %s).", n, sahip)
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    f.write(str(os.getpid()))
                 _SLOT_SAHIPLI.add(n)
-            slot_dir.mkdir(parents=True, exist_ok=True)
-            _profil_sureclerini_kapat(slot_dir)     # yetim headless Chrome kaldıysa
-            _slot_oturum_kopyala(slot_dir)
+            try:
+                slot_dir.mkdir(parents=True, exist_ok=True)
+                _profil_sureclerini_kapat(slot_dir)     # yetim headless Chrome kaldıysa
+                _slot_oturum_kopyala(slot_dir)
+            except BaseException:
+                _slot_birak(n)                          # kilit SIZMASIN (eskiden hata slotu dolu bırakıyordu)
+                raise
             _SLOT_TL.slot = n
             return n, slot_dir
         if time.time() >= son:
@@ -3569,9 +3723,9 @@ _OTURUM_ISARET = ".oturum-son-giris"     # ana profilde: en son hangi slot/zaman
 
 
 def _oturum_mtime(profil: Path) -> float:
-    """Profildeki oturum dosyalarının (çerez/Login Data) en yeni mtime'ı; yoksa 0."""
+    """Profildeki GİRİŞ dosyalarının (çerez/Login Data — `Preferences` DEĞİL) en yeni mtime'ı; yoksa 0."""
     try:
-        return max((profil / rel).stat().st_mtime for rel in _SLOT_OTURUM_DOSYALARI if (profil / rel).exists())
+        return max((profil / rel).stat().st_mtime for rel in _OTURUM_GIRIS_DOSYALARI if (profil / rel).exists())
     except ValueError:
         return 0.0
 
@@ -3579,8 +3733,7 @@ def _oturum_mtime(profil: Path) -> float:
 def _base_profil_kullanimda() -> bool:
     """Ana profili bir Chrome (başlı 'Tarayıcıda Giriş Yap' penceresi) açık tutuyor mu? (pgrep TAM eşleşme)"""
     try:
-        r = subprocess.run(["pgrep", "-f", f"--user-data-dir={re.escape(str(LIVE_APP_PROFILE_DIR))}(\\s|$)"],
-                           capture_output=True, text=True, timeout=5)
+        r = subprocess.run(_pgrep_komutu(LIVE_APP_PROFILE_DIR), capture_output=True, text=True, timeout=5)
         return bool((r.stdout or "").strip())
     except Exception:
         return False
@@ -3596,38 +3749,35 @@ def _slot_oturum_geri_yaz(slot_dir: Path, slot_no: int | None = None) -> bool:
     try:
         if not (slot_dir / "Default").exists():
             return False
-        slot_m = _oturum_mtime(slot_dir)
-        if slot_m <= 0 or slot_m <= _oturum_mtime(LIVE_APP_PROFILE_DIR) + 1:
-            return False                       # slotta yeni oturum yok
         if _base_profil_kullanimda():
             logger.info("Oturum geri yazımı atlandı: ana profil başlı Chrome'da açık.")
             return False
-        import shutil
-        (LIVE_APP_PROFILE_DIR / "Default" / "Network").mkdir(parents=True, exist_ok=True)
-        for rel in _SLOT_OTURUM_DOSYALARI:
-            src = slot_dir / rel
-            if src.exists():
-                try:
-                    shutil.copy2(src, LIVE_APP_PROFILE_DIR / rel)
-                except Exception:
-                    pass
-        for rel in _SLOT_OTURUM_DIZINLERI:
-            src = slot_dir / rel
-            if src.is_dir():
-                try:
-                    hedef = LIVE_APP_PROFILE_DIR / rel
-                    if hedef.exists():
-                        shutil.rmtree(hedef, ignore_errors=True)
-                    shutil.copytree(src, hedef, dirs_exist_ok=True)
-                except Exception:
-                    pass
-        yeni_m = _oturum_mtime(LIVE_APP_PROFILE_DIR)
-        (LIVE_APP_PROFILE_DIR / _OTURUM_ISARET).write_text(json.dumps(
-            {"ts": time.time(), "slot": slot_no, "kaynak": "agent"}), encoding="utf-8")
-        try:
-            (slot_dir / ".oturum-damga").write_text(str(yeni_m), encoding="utf-8")   # bu slot kendini yeniden kopyalamasın
-        except Exception:
-            pass
+        with _oturum_kilidi():         # başka slotun kopyalaması / geri yazımı ile sıralı
+            slot_m = _oturum_mtime(slot_dir)
+            if slot_m <= 0 or slot_m <= _oturum_mtime(LIVE_APP_PROFILE_DIR) + 1:
+                return False                       # slotta yeni oturum yok
+            (LIVE_APP_PROFILE_DIR / "Default" / "Network").mkdir(parents=True, exist_ok=True)
+            for rel in _SLOT_OTURUM_DOSYALARI:
+                src = slot_dir / rel
+                if src.exists():
+                    try:
+                        shutil.copy2(src, LIVE_APP_PROFILE_DIR / rel)
+                    except Exception:
+                        pass
+            for rel in _SLOT_OTURUM_DIZINLERI:
+                src = slot_dir / rel
+                if src.is_dir():
+                    try:
+                        _dizin_kopyala_atomik(src, LIVE_APP_PROFILE_DIR / rel)
+                    except Exception:
+                        pass
+            yeni_m = _oturum_mtime(LIVE_APP_PROFILE_DIR)
+            (LIVE_APP_PROFILE_DIR / _OTURUM_ISARET).write_text(json.dumps(
+                {"ts": time.time(), "slot": slot_no, "kaynak": "agent"}), encoding="utf-8")
+            try:
+                (slot_dir / ".oturum-damga").write_text(str(yeni_m), encoding="utf-8")   # bu slot kendini yeniden kopyalamasın
+            except Exception:
+                pass
         logger.info("Canlı uygulama oturumu slot-%s → ana profile geri yazıldı (sonraki analizler giriş yapmadan başlar).", slot_no)
         return True
     except Exception as e:
@@ -3657,7 +3807,12 @@ def _slot_birak(n: int | None = None) -> None:
     if not n:
         return
     kilit = LIVE_APP_PROFILE_HAVUZ / f"slot-{n}.lock"
-    _slot_oturum_geri_yaz(LIVE_APP_PROFILE_HAVUZ / f"slot-{n}", n)   # agent girişi varsa ana profile taşı
+    slot_dir = LIVE_APP_PROFILE_HAVUZ / f"slot-{n}"
+    try:
+        _profil_sureclerini_kapat(slot_dir)   # Chrome dosyaları yazarken kopyalanmasın (yetim headless kapanır)
+    except Exception:
+        pass
+    _slot_oturum_geri_yaz(slot_dir, n)        # agent girişi varsa ana profile taşı
     with _SLOT_LOCK:
         _SLOT_SAHIPLI.discard(n)
         try:
@@ -3716,11 +3871,15 @@ def _live_app_cli_argumanlari(kapsam: str | None = None) -> list[str]:
         raise RuntimeError("Canlı gözlem için boş tarayıcı profili yok — tüm profiller başka analizlerce meşgul. "
                            "Biraz sonra tekrar deneyin ya da .env LIVE_APP_PARALEL değerini artırın.")
     n, profil = s
-    cfg = live_app_mcp_config_yaz(profil_dir=profil, config_yol=LIVE_APP_PROFILE_HAVUZ / f"mcp.slot-{n}.json")
-    if not cfg:
-        _slot_birak(n)
-        return []
-    print(f"  🧩 Canlı gözlem profili: slot-{n}")
+    try:
+        cfg = live_app_mcp_config_yaz(profil_dir=profil, config_yol=LIVE_APP_PROFILE_HAVUZ / f"mcp.slot-{n}.json")
+        if not cfg:
+            _slot_birak(n)
+            return []
+        print(f"  🧩 Canlı gözlem profili: slot-{n}")
+    except BaseException:
+        _slot_birak(n)                 # slot alındıktan sonra hata → kilit sızmasın
+        raise
     return ["--mcp-config", str(cfg), "--strict-mcp-config",
             "--allowedTools", *LIVE_APP_ALLOWED_TOOLS]
 
@@ -3783,15 +3942,16 @@ def _cli_reset_ayikla(mesaj) -> str | None:
     return m.group(1).strip() if m else None
 
 
-def _cli_durum_yaz(available, reset=None, kaynak="analiz") -> None:
+def _cli_durum_yaz(available, reset=None, kaynak="analiz", model: str | None = None) -> None:
     """Son CLI çağrısının limit durumunu diske yazar (header okur). Gerçek analiz
     çağrılarına piggyback → bedava; probe ile de tazelenir. Alt süreç (run.py) ve app
-    aynı dosyayı paylaşır."""
+    aynı dosyayı paylaşır. `model`: çağrıda GERÇEKTEN kullanılan model (katman/arayüz değişimi
+    restart'sız yansısın); verilmezse canlı okunan aktif model (import-anı sabiti DEĞİL)."""
     try:
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         _CLI_DURUM_DOSYA.write_text(json.dumps({
             "mode": "cli", "available": available, "reset": reset,
-            "model": CLAUDE_CLI_MODEL, "checked_at": time.time(), "kaynak": kaynak,
+            "model": model or aktif_cli_model(), "checked_at": time.time(), "kaynak": kaynak,
         }), encoding="utf-8")
     except Exception:
         pass
@@ -4056,6 +4216,25 @@ def _api_usage_kaydet(yanit) -> None:
 # → torunlar da (Playwright/MCP) grup ile ölür. _surec_durdur ile aynı desen, ama in-process.
 _cli_lock = threading.Lock()
 _CLI_PROC_REG: dict[int, subprocess.Popen] = {}   # worker thread ident → çalışan claude Popen
+# Durdur bayrağı (thread başına): `cli_proc_durdur` o an süren süreci öldürür AMA aynı `_api_cagri_cli` içindeki
+# SONRAKİ alt-süreç koşusu (tur devamı / tamamlatma / araçsız tekrar) eskiden yine başlıyordu → analist durdurdu
+# sanırken token yanmaya devam ediyordu. Bayrak her koşu ÖNCESİ kontrol edilir; taze üst-düzey çağrıda temizlenir.
+_CLI_DURDUR: dict[int, threading.Event] = {}
+
+
+def _durdur_bayragi(tid: int | None = None) -> threading.Event:
+    tid = threading.get_ident() if tid is None else tid
+    with _cli_lock:
+        ev = _CLI_DURDUR.get(tid)
+        if ev is None:
+            ev = _CLI_DURDUR[tid] = threading.Event()
+    return ev
+
+
+def _durdur_kontrol() -> None:
+    """Bu thread için Durdur istendiyse yeni alt-süreç başlatmadan DurdurulduError fırlat."""
+    if _durdur_bayragi().is_set():
+        raise DurdurulduError("Görev analizi analist tarafından durduruldu (sonraki koşu başlatılmadı).")
 
 
 class DurdurulduError(RuntimeError):
@@ -4080,6 +4259,7 @@ def cli_proc_durdur(thread_ident: int | None) -> bool:
     True → bir süreç bulunup öldürüldü. Fail-safe."""
     if thread_ident is None:
         return False
+    _durdur_bayragi(thread_ident).set()      # koşular ARASINDA da geçerli: sonraki alt-süreç başlamaz
     with _cli_lock:
         p = _CLI_PROC_REG.get(thread_ident)
     if not (p and p.poll() is None):
@@ -4128,7 +4308,9 @@ def _cli_calistir(cmd: list, tam_prompt: str, cli_env: dict, timeout: int = 1200
         _CLI_PROC_REG[tid] = proc
     try:
         out, err = proc.communicate(input=tam_prompt, timeout=timeout)
-    except subprocess.TimeoutExpired:
+    except BaseException:
+        # Timeout, KeyboardInterrupt, thread iptali… — hangisi olursa olsun çocuk (ve Playwright/Chrome torunları)
+        # process-grubuyla öldürülür; eskiden yalnız TimeoutExpired yakalanıyor, diğerlerinde yetim kalıyordu.
         try:
             os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
         except Exception:
@@ -4172,7 +4354,7 @@ _LIVE_APP_TEKRAR_SAYISI = 2     # araçsız tek-tur sonucunda en fazla kaç ek d
 
 
 def _live_app_tekrar_acik() -> bool:
-    """Canlı gözlem istenip model hiç araç çağırmadıysa (num_turns<=1) bir kez daha dene.
+    """Canlı gözlem istenip model hiç araç çağırmadıysa (num_turns<=1) en fazla `_LIVE_APP_TEKRAR_SAYISI` ek deneme.
     `.env` LIVE_APP_TEKRAR=false kapatır (maliyet kontrolü)."""
     return (os.getenv("LIVE_APP_TEKRAR", "true") or "true").strip().lower() not in ("0", "false", "hayir", "no")
 
@@ -4249,7 +4431,10 @@ def _yalin_cli_argumanlari(mcp_verildi: bool, araclar_kapali: bool = True) -> li
     if not mcp_verildi:
         try:
             if not MCP_BOS_CONFIG.exists():
-                MCP_BOS_CONFIG.write_text('{"mcpServers": {}}\n', encoding="utf-8")
+                # Atomik: paralel ilk çağrılar aynı anda yazarken `claude` yarım dosya okumasın.
+                gecici = MCP_BOS_CONFIG.with_name(f"{MCP_BOS_CONFIG.name}.{os.getpid()}-{threading.get_ident()}.tmp")
+                gecici.write_text('{"mcpServers": {}}\n', encoding="utf-8")
+                os.replace(gecici, MCP_BOS_CONFIG)
             args += ["--mcp-config", str(MCP_BOS_CONFIG), "--strict-mcp-config"]
         except Exception:
             pass
@@ -4277,23 +4462,39 @@ def mcp_isit(bekle: bool = False) -> None:
                      "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "analyst-studio-isit", "version": "1"}}},
                     {"jsonrpc": "2.0", "method": "notifications/initialized"},
                     {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}]
+            bulundu = threading.Event()
+
+            def _oku():
+                # readline() sonsuza dek bloklayabilir (sunucu yanıt yazmazsa) → ayrı thread + join(25) tavanı
+                try:
+                    for satir in iter(p.stdout.readline, ""):
+                        if '"id":2' in satir.replace(" ", "") and "tools" in satir:
+                            bulundu.set()
+                            break
+                except Exception:
+                    pass
+
             try:
                 for m in msgs:
                     p.stdin.write(json.dumps(m) + "\n")
                 p.stdin.flush()
-                son = time.time() + 25
-                while time.time() < son:
-                    satir = p.stdout.readline()
-                    if not satir:
-                        break
-                    if '"id":2' in satir.replace(" ", "") and "tools" in satir:
-                        logger.info("Playwright MCP ısıtıldı (tools/list yanıtı alındı).")
-                        break
+                okuyucu = threading.Thread(target=_oku, daemon=True)
+                okuyucu.start()
+                okuyucu.join(25)
+                if bulundu.is_set():
+                    logger.info("Playwright MCP ısıtıldı (tools/list yanıtı alındı).")
             finally:
                 try:
                     os.killpg(os.getpgid(p.pid), signal.SIGTERM)
                 except Exception:
                     p.kill()
+                try:
+                    p.wait(timeout=5)
+                except Exception:
+                    try:
+                        os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+                    except Exception:
+                        pass
         except Exception as e:
             logger.info("MCP ısıtma atlandı: %s", str(e)[:120])
 
@@ -4326,12 +4527,48 @@ def _canli_tur_devam(varsayilan: int = 0) -> int:
         return varsayilan
 
 
+def _canli_toplam_sure(varsayilan: int = 1500) -> int:
+    """Bir canlı çağrının TOPLAM süre bütçesi (sn): ilk koşu + tur devamları + tamamlatma + araçsız tekrarlar bu bütçeyi
+    aşmaz — her alt-süreç timeout'u kalan bütçeyle sınırlanır. `LIVE_APP_TOPLAM_SURE` (vars. 1500 = 25 dk)."""
+    try:
+        return max(120, int(os.getenv("LIVE_APP_TOPLAM_SURE", str(varsayilan))))
+    except (TypeError, ValueError):
+        return varsayilan
+
+
+_CLI_LIMIT_MESAJI = (
+    "Bu, aboneliğin bir kullanım penceresidir (5 saatlik oturum, haftalık kota "
+    "VEYA usage-credit/ek kullanım tükenmesi olabilir) ve Claude Desktop SOHBET "
+    "ekranındaki sayaçlardan farklı ölçülebilir. Kesin sebebi görmek için bir "
+    "terminalde `claude` çalıştırıp `/status` (ve `/usage`) ile Claude Code'un "
+    "KENDİ limit/kredi görünümüne bakın. Belirtilen saatte sıfırlanır; hemen "
+    "devam etmek için .env'de ANTHROPIC_API_KEY tanımlayıp API moduna geçin "
+    "(USE_CLAUDE_CLI=false)."
+)
+
+
+def _cli_limit_hatasi(v, model: str | None = None) -> "CliLimitError | None":
+    """CLI JSON'u 429 (kullanım limiti) bildiriyorsa CliLimitError üretir (durum dosyası da yazılır); değilse None.
+    Hem returncode≠0 hem `is_error` + exit 0 yolunda kullanılır — ikinci yol eskiden düz RuntimeError veriyordu →
+    API fallback/limit göstergesi tetiklenmiyordu."""
+    if not isinstance(v, dict) or v.get("api_error_status") != 429:
+        return None
+    # "You've hit your session limit · resets 3:50pm (Europe/Istanbul)"
+    # NOT: Bu 429 birkaç ayrı sayaçtan biri yüzünden olabilir (5 saatlik oturum, haftalık kota, usage-credit).
+    ham_limit = str(v.get("result") or "limit doldu").strip()
+    _reset = _cli_reset_ayikla(ham_limit)
+    _cli_durum_yaz(False, _reset, kaynak="analiz", model=model)
+    return CliLimitError(f"Claude kullanım limitine ulaşıldı: {ham_limit}. " + _CLI_LIMIT_MESAJI, reset=_reset)
+
+
 def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | None = None,
                    _tekrar: int = 0, max_turns: int | None = None, katman: str = "ana",
-                   tur_devam: int | None = None) -> str:
-    """_tekrar: araç-çağırmama tekrarı sayacı (0 = ilk deneme). Tekrarlar yerleşik araçları KAPATMAZ (`--tools ""` yok) —
-    teşhis 2026-10-19: ilk tur bazen MCP araçları görünmeden gidiyor (model araç çağrısını METİN olarak yazıyor), özellikle
-    soğuk npx başlangıcında; tekrar farklı başlatma profiliyle + 2 sn gecikmeyle yapılır."""
+                   tur_devam: int | None = None, _son_an: float | None = None) -> str:
+    """_tekrar: araç-çağırmama tekrarı sayacı (0 = ilk deneme; en fazla `_LIVE_APP_TEKRAR_SAYISI` ek deneme). Tekrarlar
+    yerleşik araçları KAPATMAZ (`--tools ""` yok) — teşhis 2026-10-19: ilk tur bazen MCP araçları görünmeden gidiyor
+    (model araç çağrısını METİN olarak yazıyor), özellikle soğuk npx başlangıcında; tekrar 2 sn gecikmeyle yapılır.
+    _son_an: canlı çağrının TOPLAM süre bütçesinin bittiği an (`LIVE_APP_TOPLAM_SURE`) — devam/tamamlatma/tekrar koşuları
+    kalan bütçeyi aşmaz; üst-düzey çağrıda hesaplanır, tekrarlara aynen geçer."""
     claude_yolu = _claude_yolu_bul()
     if not claude_yolu:
         raise EnvironmentError(
@@ -4350,6 +4587,8 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
         )
     tam_prompt = _mesajlari_birlestir(sistem, mesajlar)
     cli_env = _cli_env_hazirla(claude_yolu)
+    if _tekrar == 0:
+        _durdur_bayragi().clear()      # taze üst-düzey çağrı: önceki işin Durdur bayrağı bu işe taşınmasın
     # ÖNEMLİ: --output-format json kullanılıyor, text DEĞİL.
     # text formatı uzun / çok-turn yanıtlarda çıktının BAŞINI kaybediyordu
     # (yalnızca son asistan mesajını veriyordu) → süreç analizinin Bölüm
@@ -4360,278 +4599,343 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
     # kırılımı) + büyük girdi → 10 dk yetmiyordu. CLI tam
     # çıktı (json result) üretirken uzun sürebiliyor. app.py _bekle bundan biraz
     # FAZLA bekler ki claude timeout'u önce tetiklensin ve net hata mesajı gelsin.
-    # Canlı uygulama (Chrome MCP): yalnızca çağıran bu çağrının mesajlarına GERÇEKTEN
-    # bir browsing talimatı eklediyse (canli_uygulama_kapsami verildiyse) MCP sunucusu
-    # + araç izinleri eklenir. Aksi halde hiçbir ek argüman gitmez.
-    _live_args = _live_app_cli_argumanlari(kapsam=canli_uygulama_kapsami)
-    # Canlı uygulama (Chrome MCP) çağrısı AYRI timeout kullanır: ulaşılamayan ekran/servis
-    # (VPN kopuk, MCP asılı) 20 dk sessizce beklenmesin → daha kısa süre, hızlı + net hata.
+    # CANLI çağrı: tek koşu `LIVE_APP_CLI_TIMEOUT` (vars. 720 sn) ile sınırlı (ulaşılamayan ekran/servis — VPN kopuk,
+    # MCP asılı — 20 dk sessiz beklenmesin) VE tüm koşular (ilk + tur devamları + tamamlatma + araçsız tekrarlar)
+    # birlikte `LIVE_APP_TOPLAM_SURE` (vars. 1500 sn) toplam bütçesini aşmaz; her alt-süreç kalan bütçeyi alır.
     _cli_timeout = 1200
-    if _live_args:
-        try:
-            _cli_timeout = int(os.getenv("LIVE_APP_CLI_TIMEOUT", "720"))
-        except (TypeError, ValueError):
-            _cli_timeout = 720
-        print(f"  🌐 Canlı uygulama modu: Chrome MCP + {len(LIVE_APP_ALLOWED_TOOLS)} araç izni (timeout {_cli_timeout}s)")
-        # Zorunlu ilk-eylem direktifi promptun EN SONUNA (tekrar denemesinde sertleştirilmiş).
-        tam_prompt = tam_prompt + "\n\n" + (_LIVE_APP_TEKRAR_UYARISI if _tekrar else _LIVE_APP_ZORUNLU_ILK_ADIM)
-    # v2 Faz 3.c — Analiz veri kaynakları (Postgres/Jira MCP). Opt-in; varsayılan KAPALI.
-    # Canlı uygulama (Chrome MCP) ile AYNI çağrıda birleştirilmez (--strict-mcp-config
-    # tekildir): canlı uygulama aktifse bu çağrıda veri-MCP atlanır.
-    _analiz_mcp_args: list[str] = []
-    if not _live_args:
-        try:
-            from . import analiz_mcp
-            _analiz_mcp_args = analiz_mcp.cli_argumanlari()
-            if _analiz_mcp_args:
-                print("  🗄  Analiz veri kaynağı: Postgres/Jira MCP araç izni")
-        except Exception:
-            _analiz_mcp_args = []
+    if canli_uygulama_kapsami and _son_an is None:
+        _son_an = time.time() + _canli_toplam_sure()
+
+    def _kalan(ust: int, taban: int = 30) -> int:
+        """Bir alt-süreç için timeout: `ust`'ü aşmaz, toplam bütçeden kalanla sınırlı (en az `taban`)."""
+        if _son_an is None:
+            return int(ust)
+        return int(max(taban, min(ust, _son_an - time.time())))
+
+    _live_args: list[str] = []
+    _onceki_koşular: list[dict] = []   # tavan/devam koşularının JSON'ları (kullanım birikimi için)
+    _max_tur_takildi = False
+    _kullanim_kaydedildi = False
+    _son_veri: dict | None = None
+    _cagri_bas = time.time()
     # --model DAİMA açıkça geçilir → Claude Code'un varsayılan (ör. Fable) modeli KULLANILMAZ.
     _aktif_model = cli_model_katman(katman)   # canlı okuma → arayüzden değişince restart gerekmez; katman → model
-    _model_args = ["--model", _aktif_model] if _aktif_model else []
-    if katman != "ana" and _aktif_model != aktif_cli_model():
-        print(f"  🪜 Model katmanı: {katman} → {_aktif_model}")
-    # Canlı gözlem döngüsüne TUR TAVANI (Faz 1 A1.4): kaçak döngü (her tur ~bağlam kadar okuma) kesilir;
-    # tavana takılırsa oturum --resume ile sürdürülüp rapor araçsız tamamlatılır (çıktı kaybolmaz).
-    _tur_args: list[str] = []
-    _onceki_koşular: list[dict] = []   # tavan/devam koşularının JSON'ları (kullanım birikimi için)
-    if _live_args:
-        _tur_tavani = int(max_turns or _canli_max_tur())
-        _tur_args = ["--max-turns", str(_tur_tavani)]
-    # YALIN CLI (kota ölçümü 2026-10-19): `claude -p` varsayılan bağlamı ~98k token (yerleşik araç şemaları ~35k +
-    # kullanıcı profilindeki tüm MCP sunucuları). Analizler metin-içi çalışır, yerleşik araç/slash komutu kullanmaz →
-    # `--tools ""` + `--disable-slash-commands`; canlı olmayan çağrıda BOŞ strict MCP config (Playwright/analiz-MCP
-    # verilmişse onlar zaten strict). Ölçüm: 98k → 62k sabit bağlam; canlı turda ~107k → ~69k. CLI_YALIN=false kapatır.
-    # CANLI çağrıda yerleşik araçlar KAPATILMAZ: `--tools ""` ile soğuk süreçte ilk tur araçsız gidiyordu (2 gerçek koşuda
-    # ilk deneme düştü, araçları açık tekrar başardı); +~30k/tur maliyet güvenilirlik için kabul. Canlı olmayan çağrı yalın.
-    # Ölçüm 2026-10-19 (MCP boot ısıtması sonrası, 4/4 koşu başarılı): canlı çağrıda `--tools ""` tur başına bağlamı
-    # ~100k→~73k düşürüyor (cache okuma −35%). Soğuk başlangıç riski için: İLK denemede kapalı, `_tekrar>0` denemelerinde
-    # AÇIK (araçsız ilk tur tespiti zaten tekrar tetikler). LIVE_APP_YERLESIK_ARACLAR=true → canlıda hep açık (eski).
-    _canli_araclar_acik = os.getenv("LIVE_APP_YERLESIK_ARACLAR", "false").strip().lower() in ("1", "true", "yes")
-    _yalin_args = _yalin_cli_argumanlari(bool(_live_args or _analiz_mcp_args),
-                                         araclar_kapali=(not _live_args) or (_tekrar == 0 and not _canli_araclar_acik))
-    _cagri_bas = time.time()
-    try:
-        proc = _cli_calistir(
-            [claude_yolu, "-p", "--output-format", "json", *_model_args, *_yalin_args, *_live_args, *_tur_args, *_analiz_mcp_args],
-            tam_prompt, cli_env, timeout=_cli_timeout,
-        )
-        # Tur tavanına takıldıysa (subtype error_max_turns): aynı oturumu sürdür, araçsız tamamlat.
-        _max_tur_takildi = False
+
+    def _kullanim_isle(son: dict | None, basarisiz: bool = False) -> int:
+        """Tavan/devam/tamamlatma koşuları + son koşunun kullanımını TEK SEFER sayaca (`_token_ekle`) ve
+        `cagri.jsonl`'a yazar; toplam turu döner. Başarısız bitişte de (hata / timeout / JSON parse) önceki
+        koşuların tüketimi kaydedilir (eskiden 40 turluk gözlem son adımda düşünce hiç sayılmıyordu).
+        Son koşunun JSON'u yalnız 1-3 turluk tamamlatmayı gösterir; birikim bu yüzden şart."""
+        nonlocal _kullanim_kaydedildi
+        if _kullanim_kaydedildi:
+            return 0
+        _kullanim_kaydedildi = True
+        tur = 0
         try:
-            _v0 = json.loads((proc.stdout or "").strip() or "{}")
+            kosular = list(_onceki_koşular)
+            if isinstance(son, dict) and (son.get("usage") or son.get("num_turns") or not basarisiz):
+                kosular.append(son)
+            if not kosular:
+                return 0
+            _u: dict = {}
+            _maliyet = 0.0
+            for _k in kosular:
+                _ku = _k.get("usage") or {}
+                for _a in ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"):
+                    _u[_a] = int(_u.get(_a) or 0) + int(_ku.get(_a) or 0)
+                _maliyet += float(_k.get("total_cost_usd") or 0.0)
+                tur += int(_k.get("num_turns") or 0)
+            _token_ekle(girdi=_u.get("input_tokens", 0), cikti=_u.get("output_tokens", 0),
+                        cache_yaz=_u.get("cache_creation_input_tokens", 0),
+                        cache_oku=_u.get("cache_read_input_tokens", 0),
+                        maliyet=_maliyet)
+            _cagri_kaydet(model=_aktif_model, katman=katman, canli=bool(_live_args), kapsam=canli_uygulama_kapsami or "",
+                          tur=tur, girdi=int(_u.get("input_tokens") or 0),
+                          cikti=int(_u.get("output_tokens") or 0), cache_yaz=int(_u.get("cache_creation_input_tokens") or 0),
+                          cache_oku=int(_u.get("cache_read_input_tokens") or 0), sure_sn=int(time.time() - _cagri_bas),
+                          tekrar=int(_tekrar), max_tur_takildi=bool(_max_tur_takildi), prompt_kc=len(tam_prompt),
+                          basarisiz=bool(basarisiz))
         except Exception:
-            _v0 = {}
-        # Tur DEVAMI (kabul kontrolü gibi çok maddeli işler; owner 2026-10-19 'eksik bırakmamalı'): tavana takılınca
-        # çıktıyı zorlamak yerine AYNI oturum `tur_devam` kez yenilenmiş bütçeyle sürdürülür (kaldığı maddeden devam;
-        # giriş düştüyse yeniden girer). Devam hakkı bitince eski davranış: araçsız tamamlatma.
-        _devam_hakki = int(tur_devam if tur_devam is not None else _canli_tur_devam())
-        _devam_sayisi = 0
-        # Tavan/devam/tamamlatma koşularının kullanım sayaçları BİRİKTİRİLİR — son koşunun JSON'u yalnız 1-3 turluk
-        # tamamlatmayı gösterir; eskiden bu yüzden (a) cagri.jsonl 40 turluk döngüyü '1 tur' diye yazıyor, (b) aşağıdaki
-        # "model araç çağırmadı (num_turns<=1)" tekrarı yanlış tetiklenip tüm gözlem 2 kez daha koşuyordu (BFF keşfi 3×40 tur).
-        def _biriktir(v):
-            if isinstance(v, dict) and (v.get("usage") or v.get("num_turns")):
-                _onceki_koşular.append(v)
-        while (_live_args and isinstance(_v0, dict) and str(_v0.get("subtype") or "") == "error_max_turns"
-               and _v0.get("session_id") and _devam_sayisi < _devam_hakki):
-            _devam_sayisi += 1
-            _max_tur_takildi = True
-            _biriktir(_v0)
-            logger.warning("Canlı gözlem tur tavanına (%s) takıldı — bütçe yenilenip sürdürülüyor (%s/%s).",
-                           _tur_args[-1], _devam_sayisi, _devam_hakki)
-            print(f"  ⏱ Tur tavanına ({_tur_args[-1]}) ulaşıldı — bütçe yenilendi, kaldığı yerden devam ({_devam_sayisi}/{_devam_hakki})…")
-            proc = _cli_calistir(
-                [claude_yolu, "-p", "--output-format", "json", *_model_args, *_yalin_args, "--resume", str(_v0["session_id"]),
-                 *_live_args, *_tur_args],
-                _TUR_DEVAM_MESAJI, cli_env, timeout=_cli_timeout,
-            )
-            try:
-                _v0 = json.loads((proc.stdout or "").strip() or "{}")
-            except Exception:
-                _v0 = {}
-        if _live_args and isinstance(_v0, dict) and str(_v0.get("subtype") or "") == "error_max_turns" and _v0.get("session_id"):
-            _max_tur_takildi = True
-            _biriktir(_v0)
-            logger.warning("Canlı gözlem tur tavanına (%s) takıldı — oturum sürdürülüp rapor araçsız tamamlatılıyor.", _tur_args[-1])
-            print(f"  ⏱ Gözlem tur tavanına ({_tur_args[-1]}) ulaştı — rapor mevcut kanıtla tamamlatılıyor…")
-            proc = _cli_calistir(
-                [claude_yolu, "-p", "--output-format", "json", *_model_args, *_yalin_args, "--resume", str(_v0["session_id"]),
-                 *_live_args, "--max-turns", "3"],
-                _MAX_TUR_TAMAMLA, cli_env, timeout=max(300, _cli_timeout // 3),
-            )
-    finally:
-        if _live_args:
-            _slot_birak()      # profil slotu serbest (tekrar denemesi yeni slot alır)
-    if proc.returncode != 0:
-        # stdout JSON ise içinden okunabilir mesaj çıkar (429 limit, billing vb.)
-        ham_err = proc.stdout.strip() or proc.stderr.strip() or "Bilinmeyen hata"
+            pass
+        return tur
+
+    def _biriktir(v):
+        if isinstance(v, dict) and (v.get("usage") or v.get("num_turns")):
+            _onceki_koşular.append(v)
+
+    def _json(proc_):
         try:
-            v = json.loads(ham_err)
-            if v.get("api_error_status") == 429:
-                # "You've hit your session limit · resets 3:50pm (Europe/Istanbul)"
-                # NOT: Bu 429, birkaç ayrı sayaçtan biri yüzünden olabilir — 5 saatlik oturum,
-                # haftalık kota VEYA usage-credit (ek kullanım) tükenmesi. Claude Desktop'un
-                # SOHBET ekranındaki 5 saatlik sayaç dolu görünmese bile Claude Code CLI'ın
-                # kendi limiti/usage-credit'i dolmuş olabilir (farklı ölçülür). Bu yüzden tek
-                # bir sebep iddia etmeyip kullanıcıyı Claude Code'un KENDİ /status'una yönlendir.
-                ham_limit = (v.get("result") or "limit doldu").strip()
-                _reset = _cli_reset_ayikla(ham_limit)
-                _cli_durum_yaz(False, _reset, kaynak="analiz")
-                raise CliLimitError(
-                    f"Claude kullanım limitine ulaşıldı: {ham_limit}. "
-                    "Bu, aboneliğin bir kullanım penceresidir (5 saatlik oturum, haftalık kota "
-                    "VEYA usage-credit/ek kullanım tükenmesi olabilir) ve Claude Desktop SOHBET "
-                    "ekranındaki sayaçlardan farklı ölçülebilir. Kesin sebebi görmek için bir "
-                    "terminalde `claude` çalıştırıp `/status` (ve `/usage`) ile Claude Code'un "
-                    "KENDİ limit/kredi görünümüne bakın. Belirtilen saatte sıfırlanır; hemen "
-                    "devam etmek için .env'de ANTHROPIC_API_KEY tanımlayıp API moduna geçin "
-                    "(USE_CLAUDE_CLI=false).",
-                    reset=_reset,
+            v = json.loads((proc_.stdout or "").strip() or "{}")
+            return v if isinstance(v, dict) else {}
+        except Exception:
+            return {}
+
+    try:
+        try:
+            # Canlı uygulama (Chrome MCP): yalnızca çağıran bu çağrının mesajlarına GERÇEKTEN bir browsing talimatı
+            # eklediyse (canli_uygulama_kapsami verildiyse) MCP sunucusu + araç izinleri eklenir. Slot alımı BURADA,
+            # try içinde: argüman hazırlığında/koşuda ne olursa olsun finally slotu bırakır (kilit sızmaz).
+            _live_args = _live_app_cli_argumanlari(kapsam=canli_uygulama_kapsami)
+            if canli_uygulama_kapsami and not _live_args:
+                # Sessiz düşüş: gözlem İSTENDİ ama canlı URL/MCP (npx) yok → tarayıcısız üretilecek. Rozet 'YAPILAMADI'
+                # + log; eskiden hiçbir iz kalmıyor, analiz gözlemli sanılıyordu.
+                logger.warning("⚠ Canlı gözlem istendi (kapsam=%s) ama canlı uygulama URL'i/MCP yok — gözlemsiz üretilecek.",
+                               canli_uygulama_kapsami)
+                print("  ⚠ Canlı gözlem istendi ama canlı uygulama hedefi/MCP yok — gözlem YAPILMADAN üretilecek.")
+                _gozlem_durum_yaz(yapildi=False, turns=0, reddedilen=[], kapsam=canli_uygulama_kapsami, neden="MCP/URL yok")
+            if _live_args:
+                try:
+                    _cli_timeout = int(os.getenv("LIVE_APP_CLI_TIMEOUT", "720"))
+                except (TypeError, ValueError):
+                    _cli_timeout = 720
+                print(f"  🌐 Canlı uygulama modu: Chrome MCP + {len(LIVE_APP_ALLOWED_TOOLS)} araç izni "
+                      f"(koşu timeout {_cli_timeout}s · toplam bütçe {int(_son_an - time.time())}s)")
+                # Zorunlu ilk-eylem direktifi promptun EN SONUNA (tekrar denemesinde sertleştirilmiş).
+                tam_prompt = tam_prompt + "\n\n" + (_LIVE_APP_TEKRAR_UYARISI if _tekrar else _LIVE_APP_ZORUNLU_ILK_ADIM)
+            # v2 Faz 3.c — Analiz veri kaynakları (Postgres/Jira MCP). Opt-in; varsayılan KAPALI.
+            # Canlı uygulama (Chrome MCP) ile AYNI çağrıda birleştirilmez (--strict-mcp-config
+            # tekildir): canlı uygulama aktifse bu çağrıda veri-MCP atlanır.
+            _analiz_mcp_args: list[str] = []
+            if not _live_args:
+                try:
+                    from . import analiz_mcp
+                    _analiz_mcp_args = analiz_mcp.cli_argumanlari()
+                    if _analiz_mcp_args:
+                        print("  🗄  Analiz veri kaynağı: Postgres/Jira MCP araç izni")
+                except Exception:
+                    _analiz_mcp_args = []
+            _model_args = ["--model", _aktif_model] if _aktif_model else []
+            if katman != "ana" and _aktif_model != aktif_cli_model():
+                print(f"  🪜 Model katmanı: {katman} → {_aktif_model}")
+            # Canlı gözlem döngüsüne TUR TAVANI (Faz 1 A1.4): kaçak döngü (her tur ~bağlam kadar okuma) kesilir;
+            # tavana takılırsa oturum --resume ile sürdürülüp rapor araçsız tamamlatılır (çıktı kaybolmaz).
+            _tur_args: list[str] = []
+            if _live_args:
+                _tur_tavani = int(max_turns or _canli_max_tur())
+                _tur_args = ["--max-turns", str(_tur_tavani)]
+            # YALIN CLI (kota ölçümü 2026-10-19): `claude -p` varsayılan bağlamı ~98k token (yerleşik araç şemaları ~35k +
+            # kullanıcı profilindeki tüm MCP sunucuları). Analizler metin-içi çalışır, yerleşik araç/slash komutu kullanmaz →
+            # `--tools ""` + `--disable-slash-commands`; canlı olmayan çağrıda BOŞ strict MCP config (Playwright/analiz-MCP
+            # verilmişse onlar zaten strict). Ölçüm: 98k → 62k sabit bağlam. CLI_YALIN=false kapatır.
+            # CANLI çağrıda yerleşik araçlar: İLK denemede KAPALI (`--tools ""`; tur başına bağlam ~100k→~73k, cache okuma
+            # −35% — MCP boot ısıtması sonrası 4/4 koşu başarılı), `_tekrar>0` denemelerinde AÇIK (soğuk başlangıçta ilk
+            # tur araçsız gidebiliyor; araçsız-tur tespiti zaten tekrarı tetikler). LIVE_APP_YERLESIK_ARACLAR=true →
+            # canlıda hep açık (eski davranış).
+            _canli_araclar_acik = os.getenv("LIVE_APP_YERLESIK_ARACLAR", "false").strip().lower() in ("1", "true", "yes")
+            _yalin_args = _yalin_cli_argumanlari(bool(_live_args or _analiz_mcp_args),
+                                                 araclar_kapali=(not _live_args) or (_tekrar == 0 and not _canli_araclar_acik))
+            _durdur_kontrol()
+            proc = _cli_calistir(
+                [claude_yolu, "-p", "--output-format", "json", *_model_args, *_yalin_args, *_live_args, *_tur_args, *_analiz_mcp_args],
+                tam_prompt, cli_env, timeout=_kalan(_cli_timeout),
+            )
+            # Tur tavanına takıldıysa (subtype error_max_turns): aynı oturumu sürdür, araçsız tamamlat.
+            _v0 = _json(proc)
+            # Tur DEVAMI (kabul kontrolü gibi çok maddeli işler; owner 2026-10-19 'eksik bırakmamalı'): tavana takılınca
+            # çıktıyı zorlamak yerine AYNI oturum `tur_devam` kez yenilenmiş bütçeyle sürdürülür (kaldığı maddeden devam;
+            # giriş düştüyse yeniden girer). Devam hakkı bitince eski davranış: araçsız tamamlatma.
+            _devam_hakki = int(tur_devam if tur_devam is not None else _canli_tur_devam())
+            _devam_sayisi = 0
+            # Tavan/devam/tamamlatma koşularının kullanım sayaçları BİRİKTİRİLİR (`_biriktir` → `_kullanim_isle`) — son
+            # koşunun JSON'u yalnız 1-3 turluk tamamlatmayı gösterir; eskiden bu yüzden (a) cagri.jsonl 40 turluk döngüyü
+            # '1 tur' diye yazıyor, (b) "model araç çağırmadı (num_turns<=1)" tekrarı yanlış tetikleniyordu.
+            while (_live_args and str(_v0.get("subtype") or "") == "error_max_turns"
+                   and _v0.get("session_id") and _devam_sayisi < _devam_hakki):
+                _devam_sayisi += 1
+                _max_tur_takildi = True
+                _biriktir(_v0)
+                logger.warning("Canlı gözlem tur tavanına (%s) takıldı — bütçe yenilenip sürdürülüyor (%s/%s).",
+                               _tur_args[-1], _devam_sayisi, _devam_hakki)
+                print(f"  ⏱ Tur tavanına ({_tur_args[-1]}) ulaşıldı — bütçe yenilendi, kaldığı yerden devam ({_devam_sayisi}/{_devam_hakki})…")
+                _durdur_kontrol()
+                proc = _cli_calistir(
+                    [claude_yolu, "-p", "--output-format", "json", *_model_args, *_yalin_args, "--resume", str(_v0["session_id"]),
+                     *_live_args, *_tur_args],
+                    _TUR_DEVAM_MESAJI, cli_env, timeout=_kalan(_cli_timeout),
                 )
-            mesaj = v.get("result") or v.get("subtype") or "bilinmeyen hata"
-            if _cli_oturum_hatasi_mi(v.get("api_error_status"), mesaj):
+                _v0 = _json(proc)
+            if _live_args and str(_v0.get("subtype") or "") == "error_max_turns" and _v0.get("session_id"):
+                _max_tur_takildi = True
+                _biriktir(_v0)
+                logger.warning("Canlı gözlem tur tavanına (%s) takıldı — oturum sürdürülüp rapor araçsız tamamlatılıyor.", _tur_args[-1])
+                print(f"  ⏱ Gözlem tur tavanına ({_tur_args[-1]}) ulaştı — rapor mevcut kanıtla tamamlatılıyor…")
+                _durdur_kontrol()
+                # Tarayıcı araçları bu koşuda FİİLEN kapalı (`--disallowedTools`) — yalnız prompt 'araç kullanma' deyince
+                # model yine gezmeye devam edip 3 turu da tüketebiliyordu (çıktı yine kayboluyordu).
+                proc = _cli_calistir(
+                    [claude_yolu, "-p", "--output-format", "json", *_model_args, *_yalin_args, "--resume", str(_v0["session_id"]),
+                     *_live_args, "--max-turns", "3", "--disallowedTools", ",".join(LIVE_APP_ALLOWED_TOOLS)],
+                    _MAX_TUR_TAMAMLA, cli_env, timeout=_kalan(max(300, _cli_timeout // 3), taban=60),
+                )
+                _v1 = _json(proc)
+                if str(_v1.get("subtype") or "") == "error_max_turns" and str(_v1.get("result") or "").strip():
+                    # Tamamlatma da tavana takıldı ama kısmi metin var → KURTAR (hata yerine eldeki çıktı).
+                    logger.warning("Tamamlatma koşusu da tur tavanına takıldı — kısmi 'result' kurtarıldı (%d kc).",
+                                   len(str(_v1.get("result"))))
+                    print("  ⚠ Tamamlatma da tavana takıldı — eldeki kısmi çıktı kullanılıyor.")
+                    _v1["is_error"] = False
+                    _v1["kismi"] = True
+                    proc = subprocess.CompletedProcess(proc.args, 0, json.dumps(_v1), proc.stderr or "")
+        finally:
+            if _live_args:
+                _slot_birak()      # profil slotu serbest (tekrar denemesi yeni slot alır)
+        if proc.returncode != 0:
+            # stdout JSON ise içinden okunabilir mesaj çıkar (429 limit, billing vb.)
+            ham_err = proc.stdout.strip() or proc.stderr.strip() or "Bilinmeyen hata"
+            try:
+                v = json.loads(ham_err)
+                if not isinstance(v, dict):
+                    raise ValueError("JSON gövdesi nesne değil")
+                _son_veri = v
+                _lim = _cli_limit_hatasi(v, _aktif_model)
+                if _lim:
+                    raise _lim
+                mesaj = v.get("result") or v.get("subtype") or "bilinmeyen hata"
+                if _cli_oturum_hatasi_mi(v.get("api_error_status"), mesaj):
+                    raise RuntimeError(_CLI_OTURUM_MESAJI)
+                raise RuntimeError(f"claude CLI hatası: {mesaj}")
+            except (ValueError, KeyError, TypeError):
+                pass  # JSON değilse alttaki ham mesaja düş
+            # JSON değil ama metinde oturum-süresi-doldu izi varsa yine net yönerge ver
+            if _cli_oturum_hatasi_mi(None, ham_err):
                 raise RuntimeError(_CLI_OTURUM_MESAJI)
-            raise RuntimeError(f"claude CLI hatası: {mesaj}")
-        except (ValueError, KeyError, TypeError):
-            pass  # JSON değilse alttaki ham mesaja düş
-        # JSON değil ama metinde oturum-süresi-doldu izi varsa yine net yönerge ver
-        if _cli_oturum_hatasi_mi(None, ham_err):
-            raise RuntimeError(_CLI_OTURUM_MESAJI)
-        raise RuntimeError(f"claude CLI hatası (kod {proc.returncode}): {ham_err[:300]}")
+            raise RuntimeError(f"claude CLI hatası (kod {proc.returncode}): {ham_err[:300]}")
 
-    ham = proc.stdout.strip()
-    if not ham:
-        raise RuntimeError("claude CLI boş yanıt döndürdü.")
+        ham = proc.stdout.strip()
+        if not ham:
+            raise RuntimeError("claude CLI boş yanıt döndürdü.")
 
-    try:
-        veri = json.loads(ham)
-    except json.JSONDecodeError:
-        # Beklenmedik biçim — ham çıktıyı metin olarak kullan (geriye dönük güvence)
-        logger.warning("claude CLI json parse edilemedi, ham çıktı kullanılıyor.")
-        return ham
+        try:
+            veri = json.loads(ham)
+        except json.JSONDecodeError:
+            # Beklenmedik biçim — ham çıktıyı metin olarak kullan (geriye dönük güvence); şifre redaksiyonu burada da.
+            logger.warning("claude CLI json parse edilemedi, ham çıktı kullanılıyor.")
+            return _canli_app_sifre_redakte(ham)
+        if not isinstance(veri, dict):
+            logger.warning("claude CLI JSON gövdesi nesne değil (%s) — ham çıktı kullanılıyor.", type(veri).__name__)
+            return _canli_app_sifre_redakte(ham)
+        _son_veri = veri
 
-    if veri.get("is_error"):
-        _hata_metni = veri.get("result") or veri.get("subtype") or "bilinmeyen"
-        if _cli_oturum_hatasi_mi(veri.get("api_error_status"), _hata_metni):
-            raise RuntimeError(_CLI_OTURUM_MESAJI)
-        raise RuntimeError(f"claude CLI hata bildirdi: {_hata_metni}")
+        if veri.get("is_error"):
+            _lim = _cli_limit_hatasi(veri, _aktif_model)   # exit 0 + is_error 429 da limit sayılır
+            if _lim:
+                raise _lim
+            _hata_metni = veri.get("result") or veri.get("subtype") or "bilinmeyen"
+            if _cli_oturum_hatasi_mi(veri.get("api_error_status"), _hata_metni):
+                raise RuntimeError(_CLI_OTURUM_MESAJI)
+            raise RuntimeError(f"claude CLI hata bildirdi: {_hata_metni}")
 
-    yanit = (veri.get("result") or "").strip()
-    if not yanit:
-        raise RuntimeError("claude CLI 'result' alanı boş döndü.")
-    _cli_durum_yaz(True, None, kaynak="analiz")   # başarılı çağrı → CLI kullanılabilir
-    # Token/maliyet sayacı (P0 madde 2): CLI JSON'daki usage + total_cost_usd birikimli sayaca.
-    _toplam_tur = int(veri.get("num_turns") or 0)
-    try:
-        _u = dict(veri.get("usage") or {})
-        _maliyet = float(veri.get("total_cost_usd") or 0.0)
-        for _k in (_onceki_koşular if _live_args else []):     # tavan/devam koşuları (birikimli — bkz. yukarı)
-            _ku = _k.get("usage") or {}
-            for _a in ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"):
-                _u[_a] = int(_u.get(_a) or 0) + int(_ku.get(_a) or 0)
-            _maliyet += float(_k.get("total_cost_usd") or 0.0)
-            _toplam_tur += int(_k.get("num_turns") or 0)
-        _token_ekle(girdi=_u.get("input_tokens", 0), cikti=_u.get("output_tokens", 0),
-                    cache_yaz=_u.get("cache_creation_input_tokens", 0),
-                    cache_oku=_u.get("cache_read_input_tokens", 0),
-                    maliyet=_maliyet)
-        _cagri_kaydet(model=_aktif_model, katman=katman, canli=bool(_live_args), kapsam=canli_uygulama_kapsami or "",
-                      tur=_toplam_tur, girdi=int(_u.get("input_tokens") or 0),
-                      cikti=int(_u.get("output_tokens") or 0), cache_yaz=int(_u.get("cache_creation_input_tokens") or 0),
-                      cache_oku=int(_u.get("cache_read_input_tokens") or 0), sure_sn=int(time.time() - _cagri_bas),
-                      tekrar=int(_tekrar), max_tur_takildi=bool(_max_tur_takildi), prompt_kc=len(tam_prompt))
-    except Exception:
-        pass
+        yanit = (veri.get("result") or "").strip()
+        if not yanit:
+            raise RuntimeError("claude CLI 'result' alanı boş döndü.")
+        _cli_durum_yaz(True, None, kaynak="analiz", model=_aktif_model)   # başarılı çağrı → CLI kullanılabilir
+        # Token/maliyet sayacı (P0 madde 2) + cagri.jsonl — birikimli (tavan/devam koşuları dahil).
+        _toplam_tur = _kullanim_isle(veri)
 
-    # Canlı gözlem İSTENDİ ama GERÇEKLEŞMEMİŞ olabilir mi? (sessiz-düşüş tespiti — Faz 7)
-    # Tek turn (hiç araç kullanılmadı) veya İZİN VERİLEN bir tarayıcı aracının reddi →
-    # MCP/Chrome erişilememiş olabilir; analiz URL'lere dayalı iddiaları DOĞRULANMAMIŞ
-    # üretmiş olabilir. Sessiz kalmasın: net uyarı logla + subprocess çıktısına yaz.
-    # NOT: İzin listesinde OLMAYAN yardımcı araçların (browser_evaluate/screenshot, Bash)
-    # reddi BEKLENEN ve zararsızdır — model whitelist DIŞINA uzanmıştır, gözlemin
-    # başarısızlığı DEĞİLDİR; bunlar `_browser_reddi`'yi tetiklememeli (aksi halde çekirdek
-    # gözlem 29-57 tur başarıyla yapılsa bile yanlışlıkla "yapılmadı" damgası basılıyordu).
-    if canli_uygulama_kapsami and _live_args:
-        _denials = veri.get("permission_denials") or []
-        _turns = _toplam_tur if _live_args else (veri.get("num_turns") or 0)   # tavana takılan koşu: gerçek toplam tur
-        _izinli_araclar = set(LIVE_APP_ALLOWED_TOOLS)
-        _red_araclar = [(d.get("tool_name") if isinstance(d, dict) else str(d)) or "" for d in _denials]
-        _browser_reddi = any(a in _izinli_araclar for a in _red_araclar)
-        _yapildi = not (_browser_reddi or _turns <= 1)
-        # Model hiç araç çağırmadıysa (MCP bağlı olduğu hâlde — teşhis edilen gerçek neden) daha
-        # sert direktifle BİR KEZ daha dene; ikinci deneme de başarısızsa aşağıdaki uyarıya düşer.
-        # Araç çağrısını METİN olarak yazma (tool_use: browser_navigate / ```browser_navigate(...)```) = araçlar ilk turda
-        # modele ulaşmamış → tekrar şart (araçsız 1 tur zaten aynı sınıfa düşer; ayrıca etiketlenir).
-        _sahte_arac = bool(_turns <= 1 and re.search(r"tool_use\s*:|browser_navigate\s*[(→]|mcp__playwright__", yanit or ""))
-        if not _yapildi and _turns <= 1 and _tekrar < _LIVE_APP_TEKRAR_SAYISI and _live_app_tekrar_acik():
-            logger.warning("⚠ Canlı gözlem istendi ama model hiç tarayıcı aracı çağırmadı (num_turns=%s, MCP bağlıydı%s) "
-                           "— %d/%d tekrar (yerleşik araçlar açık, 2 sn gecikme).", _turns,
-                           "; araç çağrısı metin olarak yazıldı" if _sahte_arac else "", _tekrar + 1, _LIVE_APP_TEKRAR_SAYISI)
-            print(f"  ⚠ Model tarayıcıyı kullanmadı — canlı gözlem yeniden deneniyor ({_tekrar + 1}/{_LIVE_APP_TEKRAR_SAYISI})…")
-            time.sleep(2)
-            return _api_cagri_cli(sistem, mesajlar, canli_uygulama_kapsami, _tekrar=_tekrar + 1, max_turns=max_turns,
-                                  katman=katman, tur_devam=tur_devam)
-        _neden = ("izinli tarayıcı aracı reddedildi" if _browser_reddi
-                  else ((("model araç çağrısını metin olarak yazdı — araçlar ilk turda görünmedi" if _sahte_arac
-                          else "model hiç tarayıcı aracı çağırmadı (MCP bağlıydı")
-                         + (f"; {_tekrar} tekrar denendi)" if _tekrar else ")"))
-                        if _turns <= 1 else ""))
-        # UI'nın "Gözlem Raporu" rozeti için makine-doğrulanmış durum (log'un yanında).
-        _gozlem_durum_yaz(yapildi=_yapildi, turns=_turns, reddedilen=[str(d)[:120] for d in _denials],
-                          kapsam=canli_uygulama_kapsami, neden=_neden)
-        if not _yapildi:
+        # Canlı gözlem İSTENDİ ama GERÇEKLEŞMEMİŞ olabilir mi? (sessiz-düşüş tespiti — Faz 7)
+        # Tek turn (hiç araç kullanılmadı) veya İZİN VERİLEN bir tarayıcı aracının reddi →
+        # MCP/Chrome erişilememiş olabilir; analiz URL'lere dayalı iddiaları DOĞRULANMAMIŞ
+        # üretmiş olabilir. Sessiz kalmasın: net uyarı logla + subprocess çıktısına yaz.
+        # NOT: İzin listesinde OLMAYAN yardımcı araçların (browser_evaluate/screenshot, Bash)
+        # reddi BEKLENEN ve zararsızdır — model whitelist DIŞINA uzanmıştır, gözlemin
+        # başarısızlığı DEĞİLDİR; bunlar `_browser_reddi`'yi tetiklememeli (aksi halde çekirdek
+        # gözlem 29-57 tur başarıyla yapılsa bile yanlışlıkla "yapılmadı" damgası basılıyordu).
+        if canli_uygulama_kapsami and _live_args:
+            _denials = veri.get("permission_denials") or []
+            _turns = _toplam_tur          # tavana takılan koşu: gerçek toplam tur (birikimli)
+            _izinli_araclar = set(LIVE_APP_ALLOWED_TOOLS)
+            _red_araclar = [(d.get("tool_name") if isinstance(d, dict) else str(d)) or "" for d in _denials]
+            _browser_reddi = any(a in _izinli_araclar for a in _red_araclar)
+            _yapildi = not (_browser_reddi or _turns <= 1)
+            # Model hiç araç çağırmadıysa (MCP bağlı olduğu hâlde — teşhis edilen gerçek neden) daha sert direktifle
+            # en fazla `_LIVE_APP_TEKRAR_SAYISI` kez daha dene; hepsi başarısızsa aşağıdaki uyarıya düşer.
+            # Araç çağrısını METİN olarak yazma (tool_use: browser_navigate / ```browser_navigate(...)```) = araçlar ilk turda
+            # modele ulaşmamış → tekrar şart (araçsız 1 tur zaten aynı sınıfa düşer; ayrıca etiketlenir).
+            _sahte_arac = bool(_turns <= 1 and re.search(r"tool_use\s*:|browser_navigate\s*[(→]|mcp__playwright__", yanit or ""))
+            if not _yapildi and _turns <= 1 and _tekrar < _LIVE_APP_TEKRAR_SAYISI and _live_app_tekrar_acik():
+                if _son_an is not None and (_son_an - time.time()) < 60:
+                    logger.warning("⚠ Canlı gözlem tekrarı atlandı — toplam süre bütçesi (LIVE_APP_TOPLAM_SURE) tükendi.")
+                    print("  ⚠ Model tarayıcıyı kullanmadı — toplam süre bütçesi bittiği için tekrar denenmiyor.")
+                else:
+                    logger.warning("⚠ Canlı gözlem istendi ama model hiç tarayıcı aracı çağırmadı (num_turns=%s, MCP bağlıydı%s) "
+                                   "— %d/%d tekrar (yerleşik araçlar açık, 2 sn gecikme).", _turns,
+                                   "; araç çağrısı metin olarak yazıldı" if _sahte_arac else "", _tekrar + 1, _LIVE_APP_TEKRAR_SAYISI)
+                    print(f"  ⚠ Model tarayıcıyı kullanmadı — canlı gözlem yeniden deneniyor ({_tekrar + 1}/{_LIVE_APP_TEKRAR_SAYISI})…")
+                    time.sleep(2)
+                    _durdur_kontrol()
+                    return _api_cagri_cli(sistem, mesajlar, canli_uygulama_kapsami, _tekrar=_tekrar + 1, max_turns=max_turns,
+                                          katman=katman, tur_devam=tur_devam, _son_an=_son_an)
+            _neden = ("izinli tarayıcı aracı reddedildi" if _browser_reddi
+                      else ((("model araç çağrısını metin olarak yazdı — araçlar ilk turda görünmedi" if _sahte_arac
+                              else "model hiç tarayıcı aracı çağırmadı (MCP bağlıydı")
+                             + (f"; {_tekrar} tekrar denendi)" if _tekrar else ")"))
+                            if _turns <= 1 else ""))
+            # UI'nın "Gözlem Raporu" rozeti için makine-doğrulanmış durum (log'un yanında).
+            _gozlem_durum_yaz(yapildi=_yapildi, turns=_turns, reddedilen=[str(d)[:120] for d in _denials],
+                              kapsam=canli_uygulama_kapsami, neden=_neden)
+            if not _yapildi:
+                logger.warning(
+                    "⚠ CANLI GÖZLEM YAPILMAMIŞ OLABİLİR — MCP/Chrome erişilemedi veya araç reddedildi "
+                    "(num_turns=%s, reddedilen=%s). URL'lere dayalı iddialar doğrulanmalı.", _turns, _denials)
+                print("  ⚠ Canlı uygulama gözlemi gerçekleşmemiş olabilir (MCP/Chrome erişilemedi / araç reddedildi) — "
+                      "URL'lere dayalı iddialar DOĞRULANMALI.")
+
+        # Çıktı token limitine takılıp KESİLDİYSE kullanıcıyı uyar — eksik
+        # analizin sessizce "tam" sanılmasını önler.
+        stop = veri.get("stop_reason")
+        if stop and stop not in ("end_turn", "stop_sequence", None):
             logger.warning(
-                "⚠ CANLI GÖZLEM YAPILMAMIŞ OLABİLİR — MCP/Chrome erişilemedi veya araç reddedildi "
-                "(num_turns=%s, reddedilen=%s). URL'lere dayalı iddialar doğrulanmalı.", _turns, _denials)
-            print("  ⚠ Canlı uygulama gözlemi gerçekleşmemiş olabilir (MCP/Chrome erişilemedi / araç reddedildi) — "
-                  "URL'lere dayalı iddialar DOĞRULANMALI.")
-
-    # Çıktı token limitine takılıp KESİLDİYSE kullanıcıyı uyar — eksik
-    # analizin sessizce "tam" sanılmasını önler.
-    stop = veri.get("stop_reason")
-    if stop and stop not in ("end_turn", "stop_sequence", None):
-        logger.warning(
-            "claude CLI çıktısı '%s' nedeniyle erken bitti (num_turns=%s) — "
-            "analiz eksik olabilir.", stop, veri.get("num_turns"),
-        )
-    # Canlı gözlem çok-turlu tarama sonrası rapor ÖNCESİ ajan ön-sözü sızdırabilir → kırp.
-    if canli_uygulama_kapsami and _live_args:
-        yanit = _onsoz_kirp(yanit)
-    return _canli_app_sifre_redakte(yanit)
+                "claude CLI çıktısı '%s' nedeniyle erken bitti (num_turns=%s) — "
+                "analiz eksik olabilir.", stop, veri.get("num_turns"),
+            )
+        # Canlı gözlem çok-turlu tarama sonrası rapor ÖNCESİ ajan ön-sözü sızdırabilir → kırp.
+        if canli_uygulama_kapsami and _live_args:
+            yanit = _onsoz_kirp(yanit)
+        return _canli_app_sifre_redakte(yanit)
+    finally:
+        if not _kullanim_kaydedildi:
+            _kullanim_isle(_son_veri, basarisiz=True)   # hata/timeout/parse: önceki koşuların tüketimi kaybolmasın
 
 
 _RETRY_DENEMELER = 3
 _RETRY_TABAN_GECIKME = 4  # saniye — 4, 8, 16
 
 
+def _api_hata_turu(e: BaseException) -> str | None:
+    """Yeniden denenebilir API hatası sınıfı: '429' · '5xx' · 'baglanti'; değilse None.
+    `anthropic` TEMBEL çözülür — CLI modunda modül düzeyinde import edilmez; eskiden `except anthropic.X`
+    satırı CLI→API fallback'inde NameError veriyordu (gerçek hata gizleniyordu). Paket yoksa: denenmez."""
+    try:
+        import anthropic
+    except ImportError:
+        return None
+    if isinstance(e, anthropic.RateLimitError):
+        return "429"
+    if isinstance(e, anthropic.APIStatusError):
+        status = getattr(e, "status_code", None)
+        return "5xx" if (status and 500 <= int(status) < 600) else None
+    if isinstance(e, anthropic.APIConnectionError):
+        return "baglanti"
+    return None
+
+
 def _api_yeniden_dene(fn):
-    """429 ve 5xx için exponential backoff retry decorator'ı."""
+    """429 / 5xx / bağlantı hatası için exponential backoff retry decorator'ı (hata sınıfları çağrı anında çözülür)."""
     import time as _t
     def _sarici(*a, **kw):
         son_hata = None
         for deneme in range(_RETRY_DENEMELER):
             try:
                 return fn(*a, **kw)
-            except anthropic.RateLimitError as e:
-                son_hata = e
-                bekleme = _RETRY_TABAN_GECIKME * (2 ** deneme)
-                print(f"  ⚠ Rate limit (429). {bekleme}s sonra tekrar denenecek ({deneme+1}/{_RETRY_DENEMELER})")
-                _t.sleep(bekleme)
-            except anthropic.APIStatusError as e:
-                status = getattr(e, "status_code", None)
-                if status and 500 <= status < 600:
-                    son_hata = e
-                    bekleme = _RETRY_TABAN_GECIKME * (2 ** deneme)
-                    print(f"  ⚠ Sunucu hatası ({status}). {bekleme}s sonra tekrar denenecek ({deneme+1}/{_RETRY_DENEMELER})")
-                    _t.sleep(bekleme)
-                else:
+            except Exception as e:
+                tur = _api_hata_turu(e)
+                if tur is None:
                     raise
-            except anthropic.APIConnectionError as e:
                 son_hata = e
                 bekleme = _RETRY_TABAN_GECIKME * (2 ** deneme)
-                print(f"  ⚠ Bağlantı hatası. {bekleme}s sonra tekrar denenecek ({deneme+1}/{_RETRY_DENEMELER})")
+                etiket = {"429": "Rate limit (429)", "baglanti": "Bağlantı hatası"}.get(
+                    tur, f"Sunucu hatası ({getattr(e, 'status_code', '5xx')})")
+                print(f"  ⚠ {etiket}. {bekleme}s sonra tekrar denenecek ({deneme+1}/{_RETRY_DENEMELER})")
                 _t.sleep(bekleme)
         raise son_hata if son_hata else RuntimeError("API çağrısı bilinmeyen sebepten başarısız.")
     return _sarici
@@ -4763,9 +5067,39 @@ def _api_cache_yaz(key: str, icerik: str) -> None:
     try:
         _API_CACHE_DIR.mkdir(parents=True, exist_ok=True)
         _api_cache_temizle()
-        (_API_CACHE_DIR / f"{key}.txt").write_text(icerik, encoding="utf-8")
+        # Atomik: geçici dosyaya yaz → `os.replace`. Paralel çağrı/okuma yarım kayıt görmesin.
+        hedef = _API_CACHE_DIR / f"{key}.txt"
+        gecici = _API_CACHE_DIR / f"{key}.{os.getpid()}-{threading.get_ident()}.tmp"
+        gecici.write_text(icerik, encoding="utf-8")
+        os.replace(gecici, hedef)
     except Exception as e:
         logger.warning("API önbellek yazılamadı: %s", e)
+
+
+def _api_katman_coz(model: str, katman: str) -> str:
+    """`_api_cagri` ile AYNI katman türetmesi (açık katman > model sabiti > ana) — anahtar eşleşsin."""
+    if katman:
+        return katman
+    return "hafif" if model == MODEL_HAFIF else ("yardimci" if model == MODEL_YARDIMCI else "ana")
+
+
+def _api_cache_sil(key: str) -> bool:
+    try:
+        p = _API_CACHE_DIR / f"{key}.txt"
+        if p.exists():
+            p.unlink()
+            return True
+    except Exception as e:
+        logger.warning("API önbellek kaydı silinemedi: %s", e)
+    return False
+
+
+def api_cache_sil(sistem: str, mesajlar: list, model: str = MODEL_ANALIZ, max_tokens: int = MAX_TOKENS_UZUN,
+                  thinking: bool = False, katman: str = "") -> bool:
+    """Önbellekteki yanıtı SİLER — `_api_cagri`'ya verilen AYNI argümanlarla çağrılır (anahtar aynı şekilde
+    türetilir). Kullanım: çağıran yanıtı parse edemediyse (`<etiket>` bloğu yok / bozuk JSON) kaydı düşürür ki
+    bir sonraki deneme aynı bozuk yanıtı 'önbellek hit' diye geri almasın. Dönen: bir kayıt silindi mi."""
+    return _api_cache_sil(_api_cache_key(sistem, mesajlar, model, max_tokens, thinking, _api_katman_coz(model, katman)))
 
 
 def _api_cagri(
@@ -4781,6 +5115,9 @@ def _api_cagri(
     tur_devam: int | None = None,
 ) -> str:
     """onbellek=False → önbellek OKUMAZ (taze çağrı), ama sonucu yine YAZAR.
+    CANLI GÖZLEM (`canli_uygulama_kapsami` dolu) → önbellek NE OKUNUR NE YAZILIR: gözlem = uygulamanın o anki
+    durumu; 7 günlük kayıt bayat ortam/ekranı 'gözlemlendi' diye döndürürdü. CLI limiti (429) → API fallback'i de
+    canlı kapsamda YAPILMAZ (API yolunda tarayıcı yok → 'gözlemlendi' diye uydurma rapor çıkardı) — hata yükselir.
     max_turns: canlı gözlem döngüsü tur tavanı (yalnız CLI + canlı kapsamda; None → LIVE_APP_MAX_TUR / 40).
     Aynı prompt'la 'farklı sonuç bekleyen' retry'lar (örn. kesik çıktı yeniden
     denemesi) bunu kullanmalı; aksi halde cache aynı kesik yanıtı döndürür.
@@ -4794,6 +5131,10 @@ def _api_cagri(
     if not katman:
         katman = "hafif" if model == MODEL_HAFIF else ("yardimci" if model == MODEL_YARDIMCI else "ana")
     key = _api_cache_key(sistem, mesajlar, model, max_tokens, thinking, katman)
+    canli = bool(canli_uygulama_kapsami)
+    if canli:
+        onbellek = False            # canlı gözlem = MEVCUT durum; eski kayıt okunmaz
+    cache_yaz = not canli           # …ve yazılmaz (bir sonraki 'yeniden analiz' de taze gözlesin)
     if onbellek:
         kayit = _api_cache_oku(key)
         if kayit is not None:
@@ -4807,17 +5148,26 @@ def _api_cagri(
             # P1-B dayanıklılık: CLI limiti (429) doldu → API anahtarı varsa bu çağrıyı otomatik
             # API moduyla tamamla (analistin işi kesilmesin). Anahtar yoksa (analist CLI makinesi)
             # net hatayı yükselt. CLI_LIMIT_API_FALLBACK=false ile kapatılır (maliyet kontrolü).
+            # CANLI kapsamda fallback YOK: API yolunda tarayıcı/MCP yok → model gözlem yapmadan 'gözlemlendi'
+            # görünümlü rapor üretirdi (uydurma). Limit hatası aynen yükselir, analist bekler/CLI'ya döner.
             _fallback = os.getenv("CLI_LIMIT_API_FALLBACK", "true").lower() in ("1", "true", "yes")
+            if canli:
+                logger.warning("CLI limiti (429) — canlı gözlem istendiği için API fallback'i YAPILMIYOR "
+                               "(API yolunda tarayıcı yok; gözlemsiz 'gözlem' uydurulmasın).")
+                print("  ⛔ CLI kullanım limiti doldu — canlı gözlemli çağrı API moduna düşürülemez (tarayıcı yok).")
+                raise
             if _fallback and _api_anahtari_var():
                 logger.warning("CLI limiti (429) — bu çağrı API moduna otomatik düşürülüyor (fallback).")
                 print("  ⚠ CLI kullanım limiti doldu — bu çağrı API anahtarıyla tamamlanıyor "
                       "(otomatik fallback; token ücreti işler). Kapatmak için CLI_LIMIT_API_FALLBACK=false.")
                 sonuc = _api_cagri_direct(sistem, mesajlar, model, max_tokens, thinking=thinking)
+                cache_yaz = False   # API sonucu CLI-model anahtarı altına YAZILMAZ (farklı model/yol — yanlış hit olur)
             else:
                 raise
     else:
         sonuc = _api_cagri_direct(sistem, mesajlar, model, max_tokens, thinking=thinking)
-    _api_cache_yaz(key, sonuc)  # taze sonucu yaz (kesik kayıt varsa üzerine yazar)
+    if cache_yaz:
+        _api_cache_yaz(key, sonuc)  # taze sonucu yaz (kesik kayıt varsa üzerine yazar)
     return sonuc
 
 

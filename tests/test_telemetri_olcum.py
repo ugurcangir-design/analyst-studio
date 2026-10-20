@@ -103,6 +103,55 @@ g2 = [h for h in ko if h["olay"] == "surec_analizi"][0]
 chk("süreç analizi satırı + mutabakat hariç", g2["analiz"] == 1 and g2["duzeltme_orani"] == 1.0 and all(h["olay"] != "mutabakat" for h in ko))
 chk("istatistik() kalite döner", "kalite" in T.istatistik(gun=30))
 
+# ── 2026-10-20 denetimi: kalite sayımı (yalnız durum=ok + analiz/fe-be-ayir), kimlik hariç, TZ-farkında ts, taze yerel birleştirme ──
+ko2 = T.kalite_ozeti([
+    {"ts": "2026-10-13T10:00:00", "olay": "gorev_analiz", "durum": "ok", "baglam": {"islem": "analiz"}, "kalite": {"acik_soru": 2}},
+    {"ts": "2026-10-13T10:00:00", "olay": "gorev_analiz", "durum": "hata", "baglam": {"islem": "analiz"}, "kalite": {"acik_soru": 9}},
+    {"ts": "2026-10-13T10:00:00", "olay": "gorev_analiz", "durum": "ok", "baglam": {"islem": "formatla"}},
+    {"ts": "2026-10-13T10:00:00", "olay": "gorev_analiz", "durum": "ok", "baglam": {"islem": "kabul-kontrol"}},
+    {"ts": "2026-10-13T10:00:00", "olay": "gorev_analiz", "durum": "ok", "baglam": {"islem": "bff-kesif"}},
+    {"ts": "2026-10-13T10:00:00", "olay": "gorev_analiz", "durum": "ok", "baglam": {"islem": "akis-kapat"}},
+    {"ts": "2026-10-13T10:00:00", "olay": "gorev_analiz", "durum": "hata", "baglam": {"islem": "duzelt"}},
+])["haftalar"]
+chk("kalite_ozeti: hata + formatla/kabul/bff/akis modları analiz SAYILMAZ (1 analiz, ort 2.0, düzeltme 0)",
+    len(ko2) == 1 and ko2[0]["analiz"] == 1 and ko2[0]["ort_acik_soru"] == 2.0 and ko2[0]["duzeltme"] == 0, ko2)
+
+chk("_ts_parse: 'Z' → farkında + yerele çevrilmiş; naif → yerel; ofsetli korunur; bozuk → None",
+    T._ts_parse("2026-10-20T07:00:00Z").tzinfo is not None and T._ts_parse("2026-10-20T07:00:00.000Z") is not None
+    and T._ts_parse("2026-10-20T10:00:00").tzinfo is not None and T._ts_parse("2026-10-20T10:00:00+03:00").utcoffset().total_seconds() == 3 * 3600
+    and T._ts_parse("yok") is None and T._ts_parse("") is None)
+chk("_ts_parse: UTC 'Z' ile ofsetli aynı anı eşit sayar", T._ts_parse("2026-10-20T07:00:00Z") == T._ts_parse("2026-10-20T10:00:00+03:00"))
+chk("olay_yaz ts ofsetli yerel ISO (…+HH:MM / Z)", ham[-1]["ts"][-6] in "+-" or ham[-1]["ts"].endswith("Z"), ham[-1]["ts"])
+os.environ["KOTA_OLCUM_BASLANGIC"] = "2026-10-19T18:00:00+03:00"
+kk = T.kota_karsilastirma([{"ts": "2026-10-19T15:30:00Z", "olay": "x", "token": {"girdi": 1}},    # = 18:30+03 → sonra (dize kıyası 'once' derdi)
+                           {"ts": "2026-10-19T14:30:00Z", "olay": "x", "token": {"girdi": 1}}])["olaylar"]["x"]   # = 17:30+03 → once
+chk("kota_karsilastirma eşik kıyası TZ-farkında (UTC 'Z' damga ofsetli eşikle doğru kovada)", kk["sonra"]["n"] == 1 and kk["once"]["n"] == 1, kk)
+os.environ.pop("KOTA_OLCUM_BASLANGIC", None)
+
+# Taze yerel birleştirme: remote varken bu makinenin remote'taki en yeni ts'inden SONRAKİ yerel olaylar eklenir, tekrarlar düşer
+import socket  # noqa: E402
+tmp2 = Path(tempfile.mkdtemp())
+T.USAGE_DIR, T.EVENTS_DOSYA, T.UZAK_DOSYA = tmp2, tmp2 / "events.jsonl", tmp2 / "remote.jsonl"
+mk = socket.gethostname()
+T.UZAK_DOSYA.write_text("\n".join(json.dumps(o) for o in [
+    {"ts": "2026-10-01T07:00:00Z", "analist": "A", "olay": "surec_analizi", "makine": mk},
+    {"ts": "2026-10-02T07:00:00Z", "analist": "A", "olay": "gorev_analiz", "makine": mk},
+    {"ts": "2026-10-05T07:00:00Z", "analist": "B", "olay": "gorev_analiz", "makine": "baska-makine"},
+    {"ts": "2026-10-03T10:00:00", "analist": "A", "olay": "kimlik", "makine": mk},
+]) + "\n", encoding="utf-8")
+T.EVENTS_DOSYA.write_text("\n".join(json.dumps(o) for o in [
+    {"ts": "2026-10-01T10:00:00+03:00", "analist": "A", "olay": "surec_analizi", "makine": mk},   # == remote[0] (aynı an) → eski, girmez
+    {"ts": "2026-10-02T07:00:00Z", "analist": "A", "olay": "gorev_analiz", "makine": mk},         # remote ile birebir aynı → dedup
+    {"ts": "2026-10-04T09:00:00+03:00", "analist": "A", "olay": "teknik_analiz", "makine": mk},   # en yeni remote'tan SONRA → eklenir
+    {"ts": "2026-10-06T09:00:00+03:00", "analist": "Z", "olay": "teknik_analiz", "makine": "yabanci"},  # başka makine → eklenmez
+]) + "\n", encoding="utf-8")
+ol = T.olaylari_oku()
+chk("olaylari_oku: remote 4 + yalnız 1 taze yerel (teknik_analiz) = 5; tekrar/eski/yabancı yok",
+    len(ol) == 5 and sum(1 for o in ol if o["olay"] == "teknik_analiz") == 1 and all(o.get("analist") != "Z" for o in ol), [(o["ts"], o["olay"]) for o in ol])
+dd = T.donem_detay("2026-10-01", "2026-10-10")
+chk("donem_detay: kimlik olayı HARİÇ (4 olay), gün kovası yerel saatle", dd["toplam"] == 4 and "kimlik" not in dd["tip_toplam"], dd)
+chk("istatistik: kimlik hariç toplam 4", T.istatistik(gun=3650)["toplam_analiz"] == 4)
+
 print()
 if HATA:
     print(f"FAIL — {HATA} kontrol başarısız")

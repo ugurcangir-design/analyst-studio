@@ -202,9 +202,9 @@ def kesfet(hedef_url: str = "", ekran_tarif: str = "", ekran_bazli: bool = False
         ham_yol = _ham_kaydet(anahtar, yanit or "")
         return {"ok": False, "anahtar": anahtar, "md": "",
                 "neden": "Rapor üretilemedi (tarayıcı aracı çalışmamış olabilir)." + (f" Ham yanıt: {ham_yol}" if ham_yol else "")}
-    ok = bool(md) and ("## CREATE" in md or "POST" in md or "## Açılış" in md)
     if not md:
         return {"ok": False, "anahtar": anahtar, "md": "", "neden": "Rapor boş."}
+    ok = rapor_tam_mi(md)
     ts = time.time()
     baslik = (f"<!-- bff-kesif · url={hedef_url} · ekran={ekran_tarif[:80] if ekran_tarif else '-'} · "
               f"{datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M')} -->\n"
@@ -218,11 +218,33 @@ def kesfet(hedef_url: str = "", ekran_tarif: str = "", ekran_bazli: bool = False
             "neden": "" if ok else "Rapor eksik görünüyor (CREATE/servis bölümü yok) — keşif yarım kalmış olabilir."}
 
 
+_SERVIS_BOLUM = re.compile(r"(?im)^##\s*(?:CREATE|Açılış|Aksiyon|Servis|Liste|UPDATE|DELETE)")
+_AG_KANIT = re.compile(r"\[K:\s*Network:\s*(?:GET|POST|PUT|PATCH|DELETE)\b")
+
+
+def rapor_tam_mi(md: str) -> bool:
+    """Rapor GERÇEK gözlem içeriyor mu? CREATE/servis bölümü VE en az bir `[K: Network:<METHOD> …]` kanıt etiketi.
+    Eski sezgisel (`'POST' in md`) biçim şablonunda zaten 'POST' geçtiği için her zaman doğruydu → boş/yarım rapor
+    7 gün 'taze' sayılıp analize gerçek sözleşme diye giriyordu."""
+    m = md or ""
+    return bool(_SERVIS_BOLUM.search(m)) and bool(_AG_KANIT.search(m))
+
+
 def rapor_blogu(rapor: dict) -> str:
-    """Analiz promptuna girecek blok (Task Analizi: hedef ekranın gerçek sözleşmesi)."""
+    """Analiz promptuna girecek blok (Task Analizi: hedef ekranın gerçek sözleşmesi). Rapor eksik (`ok` False) ya da
+    eski (taze değil) ise açık uyarı eklenir → analiz onu kesin sözleşme değil, doğrulanacak ipucu olarak kullanır."""
     tarih = datetime.fromtimestamp(float(rapor.get("ts") or time.time())).strftime("%Y-%m-%d %H:%M")
-    return ("### BFF SÖZLEŞME RAPORU — canlı CRUD gözlemi (" + tarih + ", "
-            + str(rapor.get("ekran") or rapor.get("hedef_url") or "") + ")\n"
-            "Aşağıdaki endpoint/alan/mesajlar GERÇEK gözlemdir (agent kayıt oluşturdu/güncelledi/sildi). API, DB ve "
-            "validasyon bölümlerini BU sözleşmeye dayandır; `[K: Network:<METHOD> <path>]` etiketiyle atıf ver. "
-            "Burada olmayan endpoint UYDURMA.\n\n" + (rapor.get("md") or ""))
+    md = rapor.get("md") or ""
+    tam = bool(rapor.get("ok")) and rapor_tam_mi(md)
+    taze = taze_mi(rapor) if rapor.get("ts") else tam
+    bas = ("### BFF SÖZLEŞME RAPORU — canlı CRUD gözlemi (" + tarih + ", "
+           + str(rapor.get("ekran") or rapor.get("hedef_url") or "") + ")\n")
+    if tam and taze:
+        return bas + ("Aşağıdaki endpoint/alan/mesajlar GERÇEK gözlemdir (agent kayıt oluşturdu/güncelledi/sildi). API, DB ve "
+                      "validasyon bölümlerini BU sözleşmeye dayandır; `[K: Network:<METHOD> <path>]` etiketiyle atıf ver. "
+                      "Burada olmayan endpoint UYDURMA.\n\n") + md
+    neden = ("rapor EKSİK (CREATE/servis bölümü ya da ağ kanıtı yok — keşif yarım kalmış olabilir)" if not tam
+             else f"rapor ESKİ ({rapor.get('yas_gun', '?')} gün)")
+    return bas + ("⚠ UYARI: " + neden + ". Buradaki endpoint/alanları KESİN sözleşme sayma — doğrulanacak ipucu olarak kullan; "
+                  "kapsam için gereken ama raporda olmayan endpoint'i `[K: ❓ Belirsiz]` ile ÖNERİ olarak yazabilirsin "
+                  "(yeni endpoint önerilebilir).\n\n") + md
