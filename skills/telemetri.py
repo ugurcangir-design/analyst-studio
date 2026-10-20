@@ -69,10 +69,24 @@ def _sink_key() -> str:
     return ""
 
 
+EKIP_SINK_TOKEN_DOSYA = BASE_DIR / "reference" / "ekip_sink_token.json"   # TRACKED — ekip sırrı (owner kararı, aşağı bak)
+
+
 def _yazma_token() -> str:
-    """Sink YAZMA paylaşılan sırrı (opsiyonel, env `USAGE_SINK_TOKEN`). Doluysa POST gövdesine ve GET
-    isteklerine `t` olarak eklenir (docs/telemetri-apps-script.md 'Güvenlik sertleştirme'). Boş → eski davranış."""
-    return os.getenv("USAGE_SINK_TOKEN", "").strip()
+    """Sink paylaşılan sırrı: env `USAGE_SINK_TOKEN` > `reference/ekip_sink_token.json` (git'te İZLENİR). Doluysa POST
+    gövdesine ve GET isteklerine `t` olarak eklenir (docs/telemetri-apps-script.md 'Güvenlik sertleştirme'). Boş → eski davranış.
+    Neden tracked dosya (owner kararı 2026-10-20): analistler .env'e elle sır girmesin — güncellemeyle gelsin. Depo özel; sır,
+    depoya erişimi olanlarla sınırlı kalır (kapatılan açık 'URL'i bilen herkes yazar/okur' idi; URL loglara düşebiliyordu).
+    Kişisel sır DEĞİL, ekip sırrıdır; sızarsa owner dosyayı + Apps Script'teki değeri yeniler (rotasyon = 1 commit)."""
+    env = os.getenv("USAGE_SINK_TOKEN", "").strip()
+    if env:
+        return env
+    try:
+        if EKIP_SINK_TOKEN_DOSYA.exists():
+            return str(json.loads(EKIP_SINK_TOKEN_DOSYA.read_text(encoding="utf-8")).get("token") or "").strip()
+    except Exception:
+        pass
+    return ""
 
 
 def _ts_parse(ts: str | None) -> datetime | None:

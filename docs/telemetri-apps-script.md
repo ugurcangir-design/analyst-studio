@@ -206,7 +206,8 @@ okuyamadığı için). Sorgu dizesi proxy/erişim loglarına düşebilir → scr
 gövdeye taşınacak (client değişikliği: `uzaktan_cek`/`ornekleri_cek`/`tani` tek yerde). Bu geçişe kadar client hata
 mesajlarına URL/sorgu dizesini KOYMAZ (yalnız istisna türü + ipucu).
 
-**Dağıtım sırası:** (1) script'e `PAYLASILAN_SIR` + kapıları ekle ve yeni sürüm dağıt (URL aynı), (2) owner `.env`
-`USAGE_SINK_TOKEN=<sır>` girip yeniden başlat, (3) analist makinelerine aynı değeri `.env` ile ver (sır git'e GİRMEZ).
+**Dağıtım sırası (güncel — owner kararı 2026-10-20, analist dokunmaz):** sır `reference/ekip_sink_token.json` (TRACKED) dosyasında;
+(1) owner dosyadaki değeri Apps Script `PAYLASILAN_SIR`'a kopyalayıp yeni sürüm dağıtır (URL aynı), (2) commit+push → analistler
+güncellemeyle alır (`.env` gerekmez; env `USAGE_SINK_TOKEN` varsa dosyayı ezer). Eski yol (`.env`) da çalışır.
 Token dağıtılana kadar script'te `PAYLASILAN_SIR=''` bırakılırsa `_sirOk` false döner → **yazma durur**; bu yüzden
 sırrı önce dağıt, sonra script'e koy (ya da `_sirOk`'u `!PAYLASILAN_SIR || …` ile geçici gevşet).

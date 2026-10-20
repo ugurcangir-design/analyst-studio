@@ -207,8 +207,16 @@ try:
     T.uzaktan_cek()
     chk("uzaktan_cek: GET'e `t` eklenir (+ read geri uyum)", yakalanan["params"].get("t") == "paylasilan-sir" and yakalanan["params"].get("read") == "GIZLI-ANAHTAR")
     os.environ.pop("USAGE_SINK_TOKEN", None)
+    _eski_dosya = T.EKIP_SINK_TOKEN_DOSYA
+    T.EKIP_SINK_TOKEN_DOSYA = Path(tempfile.mkdtemp()) / "yok.json"   # ekip dosyası da yok → geri uyum
     T._sink_gonder({"olay": "x"})
-    chk("token yokken gövdede `t` yok (geri uyum)", "t" not in (yakalanan["json"] or {}))
+    chk("token yokken (env + ekip dosyası yok) gövdede `t` yok (geri uyum)", "t" not in (yakalanan["json"] or {}))
+    _eski_dosya.parent.mkdir(parents=True, exist_ok=True)
+    T.EKIP_SINK_TOKEN_DOSYA = Path(tempfile.mkdtemp()) / "ekip.json"
+    T.EKIP_SINK_TOKEN_DOSYA.write_text('{"token": "ekip-sirri"}', encoding="utf-8")
+    T._sink_gonder({"olay": "y"})
+    chk("ekip dosyası (tracked) sırrı env yokken kullanılır — analist .env'e dokunmaz", (yakalanan["json"] or {}).get("t") == "ekip-sirri")
+    T.EKIP_SINK_TOKEN_DOSYA = _eski_dosya
 finally:
     T._TEST_MODU = True
     T._sink_key = _eski_key
