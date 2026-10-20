@@ -4459,11 +4459,13 @@ async function kuCagriOzetYukle() {
     if (!d.ok) { kap.innerHTML = ''; return; }
     const f = n => (n || 0).toLocaleString('tr-TR');
     const t = d.toplam || {};
-    document.getElementById('ku-cagri-toplam').textContent = `${f(t.cagri)} çağrı · cache oku ${f(t.cache_oku)} · ${f(t.tur)} tur · ~$${(t.maliyet_usd || 0).toFixed(2)} (API eşdeğeri; CLI aboneliğinde kota ölçüsü)`;
+    document.getElementById('ku-cagri-toplam').textContent = d.cli_modu
+      ? `${f(t.cagri)} çağrı · cache oku ${f(t.cache_oku)} · ${f(t.tur)} tur · API-eşd. ~$${(t.maliyet_usd || 0).toFixed(2)} (CLI/abonelik: GERÇEK ücret değil, yalnız göreli kota ağırlığı)`
+      : `${f(t.cagri)} çağrı · cache oku ${f(t.cache_oku)} · ${f(t.tur)} tur · ~$${(t.maliyet_usd || 0).toFixed(2)} tahmini ücret`;
     if (!(d.asamalar || []).length) { kap.innerHTML = '<span style="color:var(--text3)">Henüz kayıt yok — ölçüm bu sürümle başladı; ilk analizden sonra dolar.</span>'; return; }
-    kap.innerHTML = '<table class="ku-table" style="width:100%;font-size:12px"><thead><tr><th>Aşama</th><th>Model</th><th>Canlı</th><th>Çağrı</th><th>Tur</th><th>Girdi</th><th>Çıktı</th><th>Cache yaz</th><th>Cache oku</th><th>~Maliyet</th><th>Süre</th><th>Tekrar/Tavan</th></tr></thead><tbody>'
+    kap.innerHTML = '<table class="ku-table" style="width:100%;font-size:12px"><thead><tr><th>Aşama</th><th>Model</th><th>Canlı</th><th>Çağrı</th><th>Tur</th><th>Girdi</th><th>Çıktı</th><th>Cache yaz</th><th>Cache oku</th><th title="${d.cli_modu ? 'CLI/abonelik modunda GERÇEK ücret DEĞİL — aynı iş API&apos;de yapılsaydı ki tahmini tutar; yalnız modeller arası göreli kota ağırlığı için.' : 'API modunda tahmini ücret.'}">${d.cli_modu ? 'API-eşd.*' : '~Maliyet'}</th><th>Süre</th><th>Tekrar/Tavan</th></tr></thead><tbody>'
       + d.asamalar.map(a => `<tr><td>${escHtml(a.asama)}</td><td>${escHtml(String(a.model).replace('claude-', ''))}</td><td>${a.canli ? '🌐' : ''}</td><td>${f(a.cagri)}</td><td>${f(a.tur)}</td><td>${f(a.girdi)}</td><td>${f(a.cikti)}</td><td>${f(a.cache_yaz)}</td><td><b>${f(a.cache_oku)}</b></td><td>${a.maliyet_usd ? '$' + a.maliyet_usd.toFixed(2) : '·'}</td><td>${Math.round((a.sure_sn || 0) / 60)} dk</td><td>${a.tekrar || 0} / ${a.max_tur || 0}</td></tr>`).join('')
-      + '</tbody></table><div style="color:var(--text3);margin-top:4px">Cache oku = agentik döngüde her turda yeniden okunan bağlam; kota tüketiminin ana kalemi. Gözlem fazı (aşama "gozlem") ile analiz ("gorev:analiz" vb.) artık ayrı ölçülür.</div>';
+      + '</tbody></table><div style="color:var(--text3);margin-top:4px">' + (d.cli_modu ? '<b>API-eşd.*</b> = CLI/abonelik modunda token başına ÜCRET YOK; bu sütun aynı işin API fiyatıyla tahminidir, yalnızca hangi modelin kotayı daha ağır tükettiğini KARŞILAŞTIRMAK için. Gerçek ölçü: cache oku + tur. ' : '') + 'Cache oku = agentik döngüde her turda yeniden okunan bağlam; kota tüketiminin ana kalemi. Gözlem fazı (aşama "gozlem") ile analiz ("gorev:analiz" vb.) artık ayrı ölçülür.</div>';
   } catch (e) { kap.innerHTML = ''; }
 }
 async function ornekDurumYukle() {

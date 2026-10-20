@@ -3671,8 +3671,8 @@ def usage_cagri_ozet():
         gun = int(request.args.get("gun", 7))
     except Exception:
         gun = 7
-    from skills.base import cagri_ozeti
-    return jsonify({"ok": True, **cagri_ozeti(gun=gun)})
+    from skills.base import cagri_ozeti, USE_CLAUDE_CLI
+    return jsonify({"ok": True, "cli_modu": bool(USE_CLAUDE_CLI), **cagri_ozeti(gun=gun)})
 
 
 @app.route("/api/usage/donem-detay", methods=["GET"])
