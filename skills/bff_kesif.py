@@ -56,9 +56,22 @@ def rapor_oku(hedef_url: str, ekran_tarif: str = "") -> dict | None:
     except Exception:
         meta = {}
     ts = float(meta.get("ts") or md_yol.stat().st_mtime)
-    return {"anahtar": anahtar, "md": md_yol.read_text(encoding="utf-8"), "ts": ts,
+    md = md_yol.read_text(encoding="utf-8")
+    # `ok` OKUMA ANINDA yeniden değerlendirilir (meta eski heuristikle True kalmış olabilir — 2026-10-20: 4 günlük
+    # 'Bad credentials' raporu 7 gün 'taze' sayılıp analize giriyordu): gerçek istek kanıtı şart + giriş hatası izi yok.
+    ok = bool(meta.get("ok", True)) and rapor_tam_mi(md) and not _giris_hatasi_var(md)
+    return {"anahtar": anahtar, "md": md, "ts": ts,
             "yas_gun": round((time.time() - ts) / 86400, 1), "hedef_url": meta.get("hedef_url", hedef_url),
-            "ekran": meta.get("ekran", ekran_tarif), "yol": str(md_yol), "ok": bool(meta.get("ok", True))}
+            "ekran": meta.get("ekran", ekran_tarif), "yol": str(md_yol), "ok": ok}
+
+
+_GIRIS_HATASI = re.compile(r"bad credentials|wrong password|giriş (başarısız|yapılamadı)|login (failed|başarısız)|HTTP 40[13]\b.*(login|giriş|auth)", re.I)
+
+
+def _giris_hatasi_var(md: str) -> bool:
+    """Rapor giriş duvarında kalmış mı (keşif yapılamamış)? Böyle rapor taze sayılmaz → otomatik yeniden keşif."""
+    bas = (md or "")[:4000]
+    return bool(_GIRIS_HATASI.search(bas)) and ("[K: Network:POST" not in md and "[K: Network:PUT" not in md)
 
 
 def taze_mi(rapor: dict | None, gun: int = ONBELLEK_GUN) -> bool:

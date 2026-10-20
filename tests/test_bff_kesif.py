@@ -142,6 +142,17 @@ n = _context_filter_normalize({"live_app_gorev": {"target_url": "https://u/x", "
 chk("normalize: bff_otomatik korunur (false) / varsayılan true",
     n["live_app_gorev"]["bff_otomatik"] is False and _context_filter_normalize({})["live_app_gorev"]["bff_otomatik"] is True)
 
+# Okuma anında yeniden değerlendirme: giriş duvarında kalmış eski rapor taze sayılmaz (2026-10-20)
+chk("_giris_hatasi_var: 'Bad credentials' + kanıt yok → True; kanıtlı rapor → False",
+    BK._giris_hatasi_var("## Ekran\nGiriş denendi: Bad credentials (HTTP 400). Keşif yapılamadı.")
+    and not BK._giris_hatasi_var("## Ekran\nBad credentials sonra düzeldi\n[K: Network:POST /x → 201]"))
+_t = __import__("time")
+_md_yol, _meta_yol = BK._yollar(BK._anahtar("https://x.test", "e"))
+_md_yol.write_text("## Ekran\nGiriş: Bad credentials (HTTP 400)\n", encoding="utf-8")
+_meta_yol.write_text(json.dumps({"anahtar": "k", "hedef_url": "https://x.test", "ekran": "e", "ts": _t.time(), "ok": True}), encoding="utf-8")
+_r = BK.rapor_oku("https://x.test", "e")
+chk("meta ok=True olsa da giriş hatalı/kanıtsız rapor ok=False → taze değil → otomatik yeniden keşif", _r and _r["ok"] is False and not BK.taze_mi(_r))
+
 print()
 if _hata:
     print(f"BFF KEŞFİ TESTLERİ BAŞARISIZ ({_hata} hata)")

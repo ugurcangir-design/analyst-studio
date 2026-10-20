@@ -168,6 +168,16 @@ chk("düzeltme hata verirse: sorular ön-dolu kalır (Q-T-002 listede), analiz k
 ui2 = Path(JG.__file__).parent.parent.joinpath("templates/index.html").read_text(encoding="utf-8")
 chk("UI: çözülen bölümü katlanmış gösterilir", "_jgCozulenBolumu" in ui2 and "analize işlendi" in ui2)
 
+chk("soru gözlem tur bütçesi soru sayısıyla ölçeklenir (1→45, 3→85, 10→110 tavan)",
+    SC.soru_tur_butcesi(1) == 45 and SC.soru_tur_butcesi(3) == 85 and SC.soru_tur_butcesi(10) == 110)
+_yak = {}
+_eski = SC._api_cagri
+SC._api_cagri = lambda s, m, **kw: _yak.update(kw) or "<gozlem_cozum>[]</gozlem_cozum>"
+SC._canli_hedef = lambda sg, k=None: "canlı blok"
+SC._gozlemle({"key": "X-1", "summary": "s"}, [({"id": "Q-T-001"}, {}), ({"id": "Q-T-002"}, {})])
+SC._api_cagri = _eski
+chk("_gozlemle: ölçekli max_turns + 1 devam + yardımcı katman", _yak.get("max_turns") == 65 and _yak.get("tur_devam") == 1 and _yak.get("katman") == "yardimci", _yak)
+
 print()
 if _hata:
     print(f"SORU ÇÖZÜMLEME TESTLERİ BAŞARISIZ ({_hata} hata)")

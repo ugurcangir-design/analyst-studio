@@ -326,18 +326,40 @@ def _canli_hedef(sorular_gozlem: list[tuple[dict, dict]], canli_kapsam: str | No
     return None
 
 
+def soru_tur_butcesi(soru_sayisi: int) -> int:
+    """Soru çözüm gözlemi tur tavanı: taban + soru×katsayı (env SORU_GOZLEM_TUR_TABAN/MADDE/TAVAN; vars. 25 + 20×n, ≤ 110)."""
+    def _e(ad, v):
+        try:
+            return int(os.getenv(ad, str(v)))
+        except (TypeError, ValueError):
+            return v
+    return max(_e("SORU_GOZLEM_TUR_TABAN", 25), min(_e("SORU_GOZLEM_TUR_TAVAN", 110), _e("SORU_GOZLEM_TUR_TABAN", 25) + _e("SORU_GOZLEM_TUR_MADDE", 20) * max(1, soru_sayisi)))
+
+
 def _gozlemle(gorev: dict, sorular_gozlem: list[tuple[dict, dict]], _ai=None, canli_kapsam: str | None = None) -> dict[str, dict]:
     canli = _canli_hedef(sorular_gozlem, canli_kapsam)
     if not canli:
         return {}
     sistem = ("Kıdemli analist/testçisin. Verilen uygulamada yalnız listelenen açık soruları kesinleştirmek için gözlem "
               "yaparsın; her soru için fiilen gördüğünü kanıtla raporlarsın. Analiz yazmazsın.")
+    n = max(1, len(sorular_gozlem))
     icerik = [{"type": "text", "text": canli},
-              {"type": "text", "text": f"### Task: {gorev.get('key', '')} — {gorev.get('summary', '')}"}]
+              {"type": "text", "text": f"### Task: {gorev.get('key', '')} — {gorev.get('summary', '')}"},
+              {"type": "text", "text": (
+                  f"### STRATEJİ (tur bütçesi: {soru_tur_butcesi(n)} tur, {n} soru)\n"
+                  "- Soruları SIRAYLA al; her soru için gerekli en kısa yolu izle, kanıtı alınca sonrakine geç.\n"
+                  "- 'Hangi alanlar gönderiliyor / payload ne' tipi sorularda: ilgili modalı aç, zararsız bir alanı değiştirip KAYDET, "
+                  "`browser_network_requests` → ilgili isteği `browser_network_request` ile aç, method/path + istek gövdesindeki ALAN ADLARINI "
+                  "aynen yaz (değerleri maskeleyebilirsin). Alanı hiç göndermeme/boş gönderme davranışı soruluyorsa ikinci bir kayıtla dene.\n"
+                  "- Aynı sayfanın snapshot'ını ikinci kez alma; menü gezmek yerine doğrudan URL'e git.\n"
+                  "- Bütçe dolmadan 'denenmedi' yazma; bir soru gerçekten erişilemiyorsa (yetki/veri yok) nedenini yaz ve sonrakine geç.")}]
     kapsam = _canli_kapsam_sec(canli_kapsam) or "surec"
     asama_ayarla("soru:gozlem")
+    # Bütçe soru sayısına göre (eskiden genel 40 tur: 3 soru × modal aç/kaydet/istek yakala sığmıyor, 'tur bütçesi doldu'
+    # ile boş dönüyordu — 2026-10-20). Tavana takılırsa 1 devam hakkı (aynı oturum kaldığı sorudan sürer).
     ai = _ai or (lambda s, m, k=kapsam: _api_cagri(s, m, max_tokens=MAX_TOKENS_COMBINED, thinking=False, onbellek=False,
-                                                  canli_uygulama_kapsami=k, katman="yardimci"))
+                                                  canli_uygulama_kapsami=k, katman="yardimci",
+                                                  max_turns=soru_tur_butcesi(n), tur_devam=1))
     yanit = _metin_sikistir(ai(sistem, [{"role": "user", "content": icerik}]))
     out: dict[str, dict] = {}
     for r in _json_dizi(yanit, "gozlem_cozum") or []:
