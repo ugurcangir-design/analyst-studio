@@ -2805,10 +2805,21 @@ def canli_uygulama_baglami_hazirla(gorev: bool = False, base_url_override: str =
     # Doğruluktan ödün YOK: bitiş koşulu, kritik gözlem TOPLANMADAN durmayı yasaklar.
     # Snapshot'lar (tam erişilebilirlik ağacı) çok büyük olduğu için token'ın çoğunu
     # yer; asıl kaldıraç gereksiz snapshot ve tekrar-gezmeyi kesmek.
+    # snapshot-mode=none iken araç yanıtları OTOMATİK ağaç EKLEMEZ → model ekranı görmek için AÇIKÇA snapshot almalı.
+    _snap_none = (os.getenv("LIVE_APP_SNAPSHOT_MODE", "full") or "full").strip().lower() == "none"
+    _snap_notu = ("- OTOMATİK SNAPSHOT KAPALI: araç yanıtları artık ekran ağacını kendiliğinden EKLEMİYOR. Yeni sayfa/route, "
+                  "yeni modal/drawer açıldığında ya da tab değiştiğinde EKRANI GÖRMEK için bir kez `browser_snapshot` ÇAĞIR; "
+                  "öğe ararken `browser_find`. Ekranı görmeden tıklama/yazma yapma (yanlış öğeye basma riski).\n"
+                  if _snap_none else "")
     verimlilik_kurallari = (
         "VERİMLİLİK — GEREKSİZ TUR/TEKRAR YAPMA (hız + token; doğruluktan ödün YOK):\n"
+        + _snap_notu +
         "- ÖNCE PLANLA, SONRA TEK GEÇİŞTE UYGULA: hedef akışı bir kez kavra, adımları planla, "
         "sırayla uygula. Aynı ekranı/aksiyonu tekrar tekrar gözlemleme, geri dönüp doğrulama.\n"
+        "- AYNI TURDA ÇOK ARAÇ (EN ÇOK TASARRUF): her tur önceki bağlamı yeniden okur → TUR SAYISINI azaltmak en büyük "
+        "kazançtır. BİRBİRİNDEN BAĞIMSIZ okuma/çağrıları TEK yanıtta BİRLİKTE çağır — örn. birden çok `browser_network_request` "
+        "(farklı istek no'ları), ya da bir snapshot + bir `browser_find`. Yalnız ÖNCEKİNİN SONUCUNA BAĞLI adımları (git→gör→tıkla) "
+        "ayrı turda yap. Tek isteğin detayı yetiyorsa birden çok tur harcama.\n"
         "- SNAPSHOT EKONOMİSİ: `browser_snapshot` (tam ağaç, PAHALI) yalnızca DOM ANLAMLI değiştiğinde "
         "al — yeni sayfa/route, yeni modal/drawer açıldı ya da tab değişti. Aynı görünümde ARDIŞIK "
         "snapshot ÇEKME. Belirli bir öğeyi (buton/alan/satır) bulmak için tam snapshot yerine "
@@ -3443,6 +3454,15 @@ def live_app_kilidi_temizle() -> None:
                 pass
 
 
+def _snapshot_mode_args() -> list[str]:
+    """Playwright MCP snapshot modu (kota). `full` (varsayılan): her araç yanıtına ekranın TAM erişilebilirlik ağacı
+    otomatik eklenir — geçmişte birikir, tur başına ~100k okumanın ana kalemi. `none`: otomatik snapshot KAPALI; model yalnız
+    `browser_snapshot` çağırdığında ağaç alır → tur başına bağlam ciddi düşer ama model ekranı görmek için açıkça snapshot
+    almalı (gözlem kalitesi ölçülmeli). `LIVE_APP_SNAPSHOT_MODE=none` ile açılır (vars. full = eski davranış)."""
+    m = (os.getenv("LIVE_APP_SNAPSHOT_MODE", "full") or "full").strip().lower()
+    return ["--snapshot-mode", "none"] if m == "none" else []
+
+
 def live_app_mcp_config_yaz(profil_dir: Path | None = None, config_yol: Path | None = None) -> Path | None:
     """Playwright MCP config'ini MUTLAK yollarla üretir (headless + kalıcı profil).
     npx yoksa None döner → canlı uygulama özelliği sessizce devre dışı kalır.
@@ -3466,6 +3486,7 @@ def live_app_mcp_config_yaz(profil_dir: Path | None = None, config_yol: Path | N
                     "--headless",
                     "--browser", "chrome",
                     "--user-data-dir", str(profil),
+                    *_snapshot_mode_args(),
                 ],
             }
         }
@@ -4392,7 +4413,7 @@ def cagri_ozeti(gun: int = 7) -> dict:
     from datetime import datetime, timedelta
     esik = (datetime.now() - timedelta(days=max(1, gun))).isoformat(timespec="seconds")
     grup: dict[tuple, dict] = {}
-    toplam = {"cagri": 0, "girdi": 0, "cikti": 0, "cache_yaz": 0, "cache_oku": 0, "sure_sn": 0, "tur": 0}
+    toplam = {"cagri": 0, "girdi": 0, "cikti": 0, "cache_yaz": 0, "cache_oku": 0, "sure_sn": 0, "tur": 0, "maliyet_usd": 0.0}
     try:
         if CAGRI_LOG.exists():
             for satir in CAGRI_LOG.read_text(encoding="utf-8").splitlines():
@@ -4404,7 +4425,10 @@ def cagri_ozeti(gun: int = 7) -> dict:
                     continue
                 k = (r.get("asama") or "?", r.get("model") or "?", bool(r.get("canli")))
                 g = grup.setdefault(k, {"asama": k[0], "model": k[1], "canli": k[2], "cagri": 0, "girdi": 0, "cikti": 0,
-                                        "cache_yaz": 0, "cache_oku": 0, "sure_sn": 0, "tur": 0, "tekrar": 0, "max_tur": 0})
+                                        "cache_yaz": 0, "cache_oku": 0, "sure_sn": 0, "tur": 0, "tekrar": 0, "max_tur": 0,
+                                        "maliyet_usd": 0.0})
+                g["maliyet_usd"] += float(r.get("maliyet_usd") or 0.0)
+                toplam["maliyet_usd"] += float(r.get("maliyet_usd") or 0.0)
                 for a in ("girdi", "cikti", "cache_yaz", "cache_oku", "sure_sn", "tur"):
                     v = int(r.get(a) or 0)
                     g[a] += v
@@ -4416,6 +4440,9 @@ def cagri_ozeti(gun: int = 7) -> dict:
     except Exception:
         pass
     satirlar = sorted(grup.values(), key=lambda g: -(g["girdi"] + g["cache_yaz"] + g["cache_oku"]))
+    toplam["maliyet_usd"] = round(toplam["maliyet_usd"], 2)
+    for g in satirlar:
+        g["maliyet_usd"] = round(g["maliyet_usd"], 2)
     return {"gun": gun, "toplam": toplam, "asamalar": satirlar}
 
 
@@ -4654,7 +4681,7 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
                           cikti=int(_u.get("output_tokens") or 0), cache_yaz=int(_u.get("cache_creation_input_tokens") or 0),
                           cache_oku=int(_u.get("cache_read_input_tokens") or 0), sure_sn=int(time.time() - _cagri_bas),
                           tekrar=int(_tekrar), max_tur_takildi=bool(_max_tur_takildi), prompt_kc=len(tam_prompt),
-                          basarisiz=bool(basarisiz))
+                          basarisiz=bool(basarisiz), maliyet_usd=round(float(_maliyet), 4))
         except Exception:
             pass
         return tur
