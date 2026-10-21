@@ -187,6 +187,15 @@ for _ in range(100):
     time.sleep(0.05)
 chk("editör boşsa (mevcut analiz yok) tam üretime düşer", d.get("durum") == "bitti" and cagri and cagri[-1][0] == "tam")
 
+# Deterministik yakınsama: cevaplanan soru ID'leri model bıraksa da düşer (owner 2026-10-21 — 'aynı soruyu tekrar çıkarıyor')
+_acik = "### Q-T-001: x?\n- Soru: a\n\n### Q-T-004: y?\n- Soru: b\n\n### Q-T-007: yeni?\n- Soru: c"
+_dus = jg._cevaplanan_sorulari_dus(_acik, "Q-T-001: cevap var\nQ-T-004: dev ekibi karar verir")
+chk("cevaplanan Q-T-001/004 düşer, cevaplanmayan Q-T-007 kalır",
+    "Q-T-001" not in _dus and "Q-T-004" not in _dus and "Q-T-007" in _dus)
+chk("hepsi cevaplanırsa 'tespit edilmedi'", "tespit edilmedi" in jg._cevaplanan_sorulari_dus("### Q-T-001: x\n- Soru: ?", "Q-T-001: a"))
+chk("ID normalize (QT1 == Q-T-001)", "Q-T-001" not in jg._cevaplanan_sorulari_dus("### Q-T-001: x\n- Soru: ?", "QT1: a"))
+chk("cevap boşsa açık sorular aynen kalır", jg._cevaplanan_sorulari_dus(_acik, "") == _acik)
+
 print()
 if HATA:
     print(f"FAIL — {HATA} kontrol başarısız")

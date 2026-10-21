@@ -1591,7 +1591,47 @@ def _gorev_acik_sorular_uret(teknik_metni: str, gorev: dict,
     # metnini özetler, hiçbir browsing talimatı içermez — canlı uygulama hiç açılmaz.
     yanit = _api_cagri(sistem, [{"role": "user", "content": icerik}],
                        model=MODEL_HAFIF, max_tokens=MAX_TOKENS_KISA, thinking=False)
-    return _xml_ayir(_metin_sikistir(yanit), "acik_sorular")
+    acik = _xml_ayir(_metin_sikistir(yanit), "acik_sorular")
+    # DETERMİNİSTİK YAKINSAMA (owner 2026-10-21: 'cevap girdim ama aynı soruyu tekrar çıkarıyor'):
+    # Analistin CEVAPLADIĞI soru ID'lerini model ne derse desin ELE — reworded olsa da aynı ID geri gelmesin.
+    return _cevaplanan_sorulari_dus(acik, cevaplar)
+
+
+_SORU_BASLIK = re.compile(r"(?mi)^#{1,4}\s*(Q-?T?-?\d+)\b")
+_CEVAP_ID = re.compile(r"(?mi)^\s*[-*•]?\s*\*{0,2}(Q-?T?-?\d+)\*{0,2}\s*[:\-–]")
+
+
+def _cevaplanan_sorulari_dus(acik: str, cevaplar: str) -> str:
+    """Analistin cevapladığı (cevaplar metninde `Q-T-00n:` ile başlayan, boş olmayan) soru ID'lerinin
+    `### <ID>:` bloklarını açık sorulardan çıkarır — model yakınsamada bırakmış olsa da. ID normalize edilir
+    (Q-T-1 == Q-T-001 == QT1) → reworded ama AYNI ID geri gelmez. Yeni ID'li gerçek yeni soru korunur."""
+    if not (acik or "").strip() or not (cevaplar or "").strip():
+        return acik
+
+    def _norm(i: str) -> str:
+        m = re.search(r"T?-?(\d+)", i.upper().replace(" ", ""))
+        t = "T" if "T" in i.upper() else ""
+        return f"Q{t}{int(m.group(1))}" if m else i.upper()
+
+    cevaplanan = {_norm(m.group(1)) for m in _CEVAP_ID.finditer(cevaplar)}
+    if not cevaplanan:
+        return acik
+    # Blokları `### <ID>:` başlıklarından böl; cevaplanan ID'li blokları at (başlıksız giriş metni korunur).
+    parcalar = re.split(r"(?mi)(^#{1,4}\s*Q-?T?-?\d+\b.*$)", acik)
+    if len(parcalar) < 3:
+        return acik
+    sonuc = [parcalar[0]]
+    i = 1
+    while i < len(parcalar):
+        baslik = parcalar[i]
+        govde = parcalar[i + 1] if i + 1 < len(parcalar) else ""
+        m = _SORU_BASLIK.match(baslik)
+        if not (m and _norm(m.group(1)) in cevaplanan):
+            sonuc.append(baslik + govde)
+        i += 2
+    birlesik = "".join(sonuc).strip()
+    # Hiç soru kalmadıysa parser'ın 'boş' sayması için net sinyal
+    return birlesik if re.search(r"(?mi)^#{1,4}\s*Q-?T?-?\d+\b", birlesik) else "Açık soru tespit edilmedi."
 
 
 # ─── Jira'ya Yaz (onaydan sonra) ─────────────────────────────────────────────
