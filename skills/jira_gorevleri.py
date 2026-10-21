@@ -1254,11 +1254,11 @@ def gorev_fe_be_task_olustur(key: str, be_markdown: str, fe_markdown: str,
     be_key = fe_key = None
     link_ok, link_uyari = False, ""
 
-    # 1) BE → orijinal task (başlık 'BE - ' önekli, idempotent). ORİJİNAL TALEP KORUNUR: gövde =
-    #    '## 📌 Orijinal Talep' + mevcut açıklama + '## 🤖 Teknik Analiz' (köprü ile aynı biçim) — eskiden analiz
-    #    açıklamanın üzerine yazılıp isteri siliniyordu.
+    # 1) BE → orijinal task (başlık 'BE - ' önekli, idempotent). Owner kararı 2026-10-21: task'a YALNIZ temiz
+    #    teknik analiz yazılır — '## 📌 Orijinal Talep' + '## 🤖 Teknik Analiz (Analyst Agent)' wrapper EKLENMEZ
+    #    (orijinal_koru=False). Agent iskelesi (Bu katmanda iş / Kaynak Görev) zaten jira_icin_temizle'de silinir.
     if "be" in kat:
-        gorev_jiraya_yaz(key, govde_birlestir(be_markdown, orig.get("description", "")), summary=_katman_prefix("be", ozet))
+        gorev_jiraya_yaz(key, be_markdown, summary=_katman_prefix("be", ozet), orijinal_koru=False)
         be_key = key
 
     # 2) FE → yeni Task (aynı temizlik: TL;DR + canlı gözlem + [K:] etiketleri çıkarılır)

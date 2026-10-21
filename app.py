@@ -5920,7 +5920,9 @@ def jira_gorev_guncelle():
     _bas = time.time()
     try:
         from skills.jira_gorevleri import gorev_jiraya_yaz
-        gorev_jiraya_yaz(key, markdown, summary=summary)
+        # Owner kararı 2026-10-21: 'Onayla ve Jira'da Güncelle' task'a YALNIZ temiz analiz yazar —
+        # '📌 Orijinal Talep' + '🤖 Teknik Analiz (Analyst Agent)' wrapper EKLENMEZ (orijinal_koru=False).
+        gorev_jiraya_yaz(key, markdown, summary=summary, orijinal_koru=False)
         # Jira'ya yazılan görev analizi = kaliteli örnek → ortak havuza (few-shot).
         _ornek_yakala_md("teknik", markdown, ozet=(summary or key.upper()),
                          proje=key.split("-")[0].upper(), jira_key=key.upper())

@@ -120,6 +120,11 @@ _st = B.jira_icin_temizle(_soru_md)
 chk("ZORUNLU sorular bölümü Jira gövdesinden silinir", "Cevap Bekleyen Zorunlu" not in _st and "Q-T-001" not in _st)
 chk("soru temizliğinde iş içeriği korunur (Amaç + Kabul Kriterleri)", "## 1. Amaç" in _st and "Kabul Kriterleri" in _st and "AC-1" in _st)
 chk("'## Açık Sorular' bölümü de silinir", "Açık Sorular" not in B.jira_icin_temizle("## 2. İş\nY\n\n## Açık Sorular\n- Q-1: ?\n"))
+# Agent iskele artıkları: FE+BE katman göstergesi + tekrarlı 'Kaynak Görev' başlıkları Jira'ya GİTMEZ (owner 2026-10-21)
+_isk = "**Bu katmanda iş:** VAR — bir şey\n\n### Kaynak Görev: MBS-1 — BE — özet\n### Kaynak Görev: MBS-1 — BE — özet\n\n## 1. Amaç\nGerçek iş."
+_it = B.jira_icin_temizle(_isk)
+chk("'Bu katmanda iş' satırı silinir", "Bu katmanda iş" not in _it)
+chk("tekrarlı '### Kaynak Görev:' başlıkları silinir, iş kalır", "Kaynak Görev" not in _it and "## 1. Amaç" in _it and "Gerçek iş" in _it)
 
 print()
 if _hata:

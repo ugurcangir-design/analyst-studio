@@ -2093,6 +2093,9 @@ def jira_icin_temizle(markdown: str) -> str:
     # Açık/ZORUNLU sorular Jira gövdesine GİTMEZ (owner kararı 2026-10-21). "Jira'dan içeriği çek" ile
     # eski gövde geri yüklenip tekrar yazılsa bile bu bölümler burada temizlenir (savunma; UI zaten eklemez).
     m = re.sub(r"(?ms)^#{1,3}\s*(?:❗\s*)?(?:Cevap Bekleyen Zorunlu Sorular|Açık Sorular)\b.*?(?=^#{1,2}\s|\Z)", "", m)
+    # Agent iskele artıkları Jira'ya GİTMEZ (owner 2026-10-21): FE+BE katman göstergesi + 'Kaynak Görev' başlıkları.
+    m = re.sub(r"(?mi)^\s*[-*•]?\s*\*{0,2}Bu katmanda iş\s*:?\*{0,2}.*$\n?", "", m)   # **Bu katmanda iş:** VAR|YOK …
+    m = re.sub(r"(?mi)^#{1,4}\s*Kaynak Görev\s*:.*$\n?", "", m)                        # ### Kaynak Görev: <key> — <özet> (tekrarlı)
     m = kanit_etiketlerini_temizle(m)   # ÖNCE etiketler: satır/cümle desenleri etiketsiz metne bakar
     m = _KAYNAK_MADDE.sub("", m)
     m = _KAYNAK_ALINTI.sub("", m)

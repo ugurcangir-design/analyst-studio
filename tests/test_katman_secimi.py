@@ -116,24 +116,29 @@ ui = Path(A.__file__).parent.joinpath("templates/index.html").read_text(encoding
 chk("UI: katman kutuları + etiket + yeni task katman seçimi + katmanlar gövdeye", all(x in ui for x in (
     'id="jg-kat-be"', 'id="jg-kat-fe"', "_jgKatmanEtiketGuncelle", 'name="jg-yt-katman"', "summary: be.summary || '', katmanlar })", "mode: ytMode")))
 
-print("5) BE'yi yaz → orijinal talep korunur; gorev_jiraya_yaz idempotent")
+print("5) BE'yi yaz → TEMİZ analiz (owner 2026-10-21: wrapper YOK); köprü yolu orijinali korur")
 yazilan: dict = {}
-JG.gorev_jiraya_yaz = lambda key, md, summary=None, orijinal_koru=True: yazilan.__setitem__(key, md) or True
+JG.gorev_jiraya_yaz = lambda key, md, summary=None, orijinal_koru=True: yazilan.__setitem__(key, (md, orijinal_koru)) or True
 JG.gorev_getir = lambda key: {"key": key, "summary": "Match Status filtresi", "description": "Müşteri isterisi: filtre eklensin."}
 JG.gorev_fe_be_task_olustur("MBS-365", "## 1. Amaç\nBE analizi `[K: Swagger]`", "", katmanlar=["be"])
-chk("BE yazımı '📌 Orijinal Talep' + isteri + '🤖 Teknik Analiz' + analiz (isteri silinmez)",
-    yazilan["MBS-365"].startswith("## 📌 Orijinal Talep\n\nMüşteri isterisi: filtre eklensin.") and "🤖 Teknik Analiz" in yazilan["MBS-365"]
-    and "BE analizi" in yazilan["MBS-365"], yazilan["MBS-365"][:160])
-chk("orijinal_talep_ayikla idempotent (ikinci yazımda isteri tekrar sarmalanmaz)",
-    JG.orijinal_talep_ayikla(yazilan["MBS-365"]) == "Müşteri isterisi: filtre eklensin.")
+chk("BE yazımı TEMİZ: '📌 Orijinal Talep'/'🤖 Teknik Analiz' wrapper YOK, orijinal_koru=False",
+    yazilan["MBS-365"][0].startswith("## 1. Amaç") and "📌 Orijinal Talep" not in yazilan["MBS-365"][0]
+    and "🤖 Teknik Analiz" not in yazilan["MBS-365"][0] and yazilan["MBS-365"][1] is False, yazilan["MBS-365"])
 _gercek_yaz = _ORJ_YAZ
 put: dict = {}
 JG.atlassian_put = lambda path, body, cloud_id: put.update({"path": path, "body": body}) or {}
 JG.markdown_to_adf = lambda md: [{"type": "paragraph", "md": md}]
-_gercek_yaz("MBS-365", "## 1. Amaç\nyeni analiz", summary="BE - x")
+# Güncelle endpoint artık orijinal_koru=False (temiz); AMA köprü orijinal_koru=True ile orijinali KORUR
+_gercek_yaz("MBS-365", "## 1. Amaç\nyeni analiz", summary="BE - x", orijinal_koru=True)
 md_put = put["body"]["fields"]["description"]["content"][0]["md"]
-chk("gorev_jiraya_yaz (Güncelle yolu): işaret yoksa mevcut açıklamayı okuyup orijinali korur", "Orijinal Talep" in md_put
+chk("köprü yolu (orijinal_koru=True): işaret yoksa mevcut açıklamayı okuyup orijinali korur", "Orijinal Talep" in md_put
     and "Müşteri isterisi" in md_put and "yeni analiz" in md_put and put["body"]["fields"]["summary"] == "BE - x", md_put[:160])
+# Güncelle endpoint yolu (orijinal_koru=False): wrapper EKLENMEZ, temiz analiz yazılır
+put.clear()
+_gercek_yaz("MBS-365", "## 1. Amaç\nyeni analiz", summary="BE - x", orijinal_koru=False)
+md_put2 = put["body"]["fields"]["description"]["content"][0]["md"]
+chk("Güncelle yolu (orijinal_koru=False): wrapper YOK, isteri EKLENMEZ", "Orijinal Talep" not in md_put2
+    and "Müşteri isterisi" not in md_put2 and "yeni analiz" in md_put2, md_put2[:160])
 okuma: list = []
 JG.gorev_getir = lambda key: okuma.append(key) or {"key": key, "description": "x"}
 _gercek_yaz("MBS-365", "## 📌 Orijinal Talep\n\nisteri\n\n---\n\n## 🤖 Teknik Analiz (Analyst Agent)\n\nanaliz")
