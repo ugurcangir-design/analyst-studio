@@ -943,6 +943,21 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
             print("  ⚠ Canlı gözlem yapılamadı — analiz gözlemsiz üretiliyor (rapor rozetinde görünür).")
             stable_bloklar.append({"type": "text", "text": _gz.gozlem_yok_blogu((gozlem_rapor or {}).get("neden", ""))})
 
+    # KAYITLI SERVİS SÖZLEŞMELERİ (owner 2026-10-21): task + canlı gözlemde geçen path/kaynaklarla eşleşen MEVCUT
+    # Swagger endpoint'lerini (method+path+şema) enjekte et → agent mevcut servisi GÖRÜR ve kullanır (ister dışı EKLEMEZ;
+    # yalnız task'a alakalı). FE katmanında atla (BE sözleşmesi zaten iliskili ile gelir). Hata/boşsa sessiz.
+    if katman != "fe":
+        try:
+            from . import servis_sozlesme as _ss
+            _gm = (gozlem_rapor or {}).get("md", "") if isinstance(gozlem_rapor, dict) else ""
+            _sb = _ss.endpoint_baglami(f"{gorev.get('summary','')} {gorev.get('description','') or ''}",
+                                       ek_metin=(_gm or "") + " " + (bff_rapor or ""))
+            if _sb:
+                print("  📑 Kayıtlı servis sözleşmeleri (Swagger) analize dahil ediliyor...")
+                stable_bloklar.append({"type": "text", "text": _sb})
+        except Exception as _e:
+            print(f"  ⚠ Servis sözleşmeleri dahil edilemedi: {_e}")
+
     if stable_bloklar:
         stable_bloklar[-1]["cache_control"] = {"type": "ephemeral"}
 
@@ -1566,6 +1581,11 @@ def _gorev_acik_sorular_uret(teknik_metni: str, gorev: dict,
         "GENEL KURALLAR:\n"
         "- Yalnız `[K: ❓ Belirsiz]`/`⚠ VARSAYIM` işaretli VE geliştirmeyi BLOKLAYAN konular soru olur; "
         "tercihe bağlı/kozmetik/küçük konu için SORU ÜRETME.\n"
+        "- ⛔ TEKNİK TASARIM/ENDPOINT SEÇİMİ SORU DEĞİLDİR: 'hangi endpoint kullanılacak', 'veri (a) listeden mi (b) "
+        "tek-market ucundan mı alınacak', 'bu uç var mı', 'veri nereden okunacak', 'hangi servis/yöntem' gibi soruları "
+        "ÜRETME — bunların kararı ANALİZİN kendisine aittir (Swagger'da ara → yoksa canlı gözlemle çıkar → o da yoksa "
+        "tasarla). Bu konular hâlâ belirsizse analiz EKSİK demektir; soru olarak analiste atma. Yalnız İŞ-KURALI/GEREKSİNİM "
+        "belirsizliği (ör. 'provider çakışınca hangi değer gösterilmeli' gibi ürün kararı) soru olur.\n"
         "- Önem: Kritik/Yüksek öncelikli; Orta/Düşük ancak gerçekten gerekiyorsa. **EN FAZLA 6 soru.**\n"
         "- Cevapsız kalırsa veri kaybı/bozulması, başka ekran/rapor/entegrasyonun kırılması ya da testin beklenen "
         "sonucunun bilinmemesi doğacaksa (özellikle veri değişikliği etkisi ve akışın tanımsız dalları) soruya `- Zorunlu: Evet` "

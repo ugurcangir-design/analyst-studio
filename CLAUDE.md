@@ -216,6 +216,20 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   definitionId yoktu + agent marketId↔hasAvailableMarket koşulu türetmişti. **NOT:** mevcut analizdeki yanlışı
   düzeltmek için 'Analiz Düzelt' (task'ı yeniden okumaz); 'Baştan üret' task BAŞLIĞINI yeniden okur (başlık hâlâ
   yanlışsa geri gelir → önce başlık/ister düzeltilmeli).
+- **SERVİS/ENDPOINT KARARI — agent punt etmez, mimari kararı verir (owner 2026-10-21: 'mevcut servis varsa kullan, yoksa yeni servisi request/response ile çıkar; analiste hangi uç diye sorma'):**
+  `skills/servis_sozlesme.py` (`endpoint_baglami(sorgu, ek_metin)`): kayıtlı Swagger'lardan (`reference/services/*.json`)
+  task+canlı gözlemde geçen path/kaynak adlarıyla alakalı MEVCUT endpoint'leri (method+path+request/response şeması,
+  `[K: Swagger:<servis>]`) çıkarır → `gorev_analiz_et` (katman≠fe) `stable_bloklar`'a enjekte eder. SORUN: task metni iç
+  servis adını (nebula, id-mapping) içermediğinden BM25 retrieval o uçları yüzeye çıkarmıyordu, agent canlı gözlemde
+  servisi görse de sözleşmeyi bağlamda bulamayıp analiste 'hangi uç / (a) mı (b) mi' diye soruyordu (MBSUATEAM-153
+  Q-T-001/002). Jenerik path segmentleri (`bff/api/service/external/id`) `_YOL_STOP` ile eşlemeden düşer (yoksa 'bff' herkesi
+  eşler). **Prompt (`gorev_teknik_analiz` '# SERVİS / ENDPOINT KARARI'):** 1) Swagger'da mevcut endpoint'i ara → varsa KULLAN;
+  2) Swagger şeması generic/eksik ya da yoksa canlı gözlemle (`browser_network_request` ile gerçek request/response alanları)
+  DOĞRULA; 3) hem Swagger'da hem gözlemde gerçekten yoksa YENİ endpoint TASARLA (`[K: 🔍 Türetilmiş — öneri, BE teyidi]`).
+  Analiste 'hangi endpoint/yaklaşım/var mı/nereden' TEKNİK TASARIM sorusu SORMA — karar analizin. **Açık soru üretimi
+  (`_gorev_acik_sorular_uret`):** teknik tasarım/endpoint seçimi SORU DEĞİL (yalnız iş-kuralı/ürün belirsizliği soru olur).
+  **Gözlem (`gozlem.py`):** kritik veri-çekme çağrılarının yanıt gövdesini `browser_network_request` ile açıp gerçek alan
+  adlarını rapora yazması istenir. Test: `tests/test_servis_sozlesme.py` (sentetik OpenAPI, 0 token).
 - **Kaynak-öncelik sırası (KANONİK, tek liste — `_ORTAK_EK_KURALLAR` + 4 rol promptu hizalı):**
   `Swagger > Canlı Uygulama Gözlemi > Confluence > BRD/Süreç > Jira > UI`. İlke: **gözlemlenen/doğrulanabilir
   gerçek veri (Swagger sözleşmesi + MCP canlı gözlem), tarif edilen istekten (BRD) ÜSTÜNDÜR** — BRD
@@ -465,6 +479,7 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   `test_jira_temizle.py` (Jira'ya giden task gövdesi temizliği — HTML yorumu/alıntı/meta-gerekçe/etiket/ardışık numaralama + tüm yazım yolları tek kapı; offline/0-token),
   `test_canli_tekrar.py` (canlı gözlem — prompt sonu zorunlu ilk-eylem direktifi, model araç çağırmazsa otomatik tekrar, neden alanı, kilit temizliği; CLI MOCK/0-token),
   `test_ekran_goruntu.py` (opt-in ekran görüntüsü — hedef yok/AI yok, PNG↔açıklama sıralı eşleşme, klasör temizliği, PNG yoksa ok False, güvenli ad, jiraya_ekle ayrı try; AI/attach MOCK/0-token),
+  `test_servis_sozlesme.py` (Swagger servis sözleşmesi enjeksiyonu — alakalı endpoint yüzeye çıkar, alakasız/jenerik girmez, şema çözümü, prompt kuralları SERVİS KARARI + açık-soru teknik-tasarım dışlaması; sentetik OpenAPI/0-token),
   `test_jira_hiyerarsi.py` (hiyerarşi oluşturma KISMİ HATA dayanıklılığı — bir issue reddedilse de kalanlar açılır + hatalar raporlanır; Jira MOCK/0-token).
 - **Faz 3.a — Kod kaynağı:** `skills/kod_kaynagi.py` salt-okuma yerel git/dosya arayüzü (yol repo köküne
   hapsedilir; yazma/komut yok). Config `reference/kod_kaynagi.json` (gitignore + `.example` seed, seed listesinde).

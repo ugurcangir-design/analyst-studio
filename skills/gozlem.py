@@ -108,6 +108,9 @@ _RAPOR_FORMAT = """
 | Aksiyon | İstek (method path + önemli query/payload alanları, maskeli) | Status | Yanıt alanları (özet) | Ekran sonucu |
 |---|---|---|---|---|
 (her satır `[K: Network:METHOD /path → status]` ile)
+- KRİTİK VERİ-ÇEKME çağrıları (liste/detay/eşleme okuma) için `browser_network_request` ile o isteğin TAM yanıt
+  gövdesini AÇ ve GERÇEK alan adlarını 'Yanıt alanları' sütununa YAZ (ör. `outcomes[].externalId`, `provider`,
+  `matchedInfo`). Alan adları geliştiriciye sözleşme olur — 'okunamadı' bırakma, mümkünse birkaç örnek alan ver.
 
 ## Validasyon ve Mesajlar
 - Hangi alan/aksiyonda hangi mesaj AYNEN · istek gitti mi · errorCode
