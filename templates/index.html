@@ -6826,6 +6826,12 @@ function _jgMockupKilit(kilitli) {
   ['jg-mockup-btn', 'jg-mockup-duzelt-btn'].forEach(id => {
     const b = document.getElementById(id); if (b) b.disabled = kilitli;
   });
+  // 'Oluştur' butonunda da görünür ilerleme — mockup üretildiği belli olsun (owner 2026-10-21)
+  const ub = document.getElementById('jg-mockup-btn');
+  if (ub) {
+    if (kilitli) { if (!ub.dataset.orj) ub.dataset.orj = ub.innerHTML; ub.innerHTML = '⏳ Üretiliyor…'; }
+    else if (ub.dataset.orj) { ub.innerHTML = ub.dataset.orj; delete ub.dataset.orj; }
+  }
 }
 
 let _jgMockupPending = null;   // üretim başlatılırken bağlam (başarıda tracking'e geçer)
@@ -6892,6 +6898,10 @@ async function _jgMockupPoll(isDuzelt) {
   if (!d.ok) { clearInterval(_jgMockupTimer); _jgMsg('jg-mockup-msg', d.error || 'İş bulunamadı', 'err'); _jgMockupKilit(false); return; }
   if (d.durum === 'calisiyor') {
     const sn = d.adim_gecen_sn || d.gecen_sn || 0;
+    // Canlı ilerleme: geçen süre + aşama ipucu — 'belli olmuyor' sorunu (owner 2026-10-21). Nokta animasyonu.
+    const nokta = '.'.repeat((Math.floor(sn / 2.5) % 3) + 1);
+    const asama = sn < 8 ? 'başlatılıyor' : sn < 30 ? 'canlı uygulama inceleniyor' : 'mockup HTML üretiliyor';
+    _jgMsg('jg-mockup-msg', `⏳ ${isDuzelt ? 'Mockup düzeltiliyor' : 'Ekran mockup\'ı üretiliyor'} — ${asama}${nokta} · ${sn}s`);
     const uy = document.getElementById('jg-mockup-uyari');
     if (uy) {
       if (sn >= _JG_STALL_SN) {

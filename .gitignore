@@ -110,4 +110,12 @@ output/.gozlem-durum.json
 /snapshot*.yml
 /*.snapshot.yml
 /expanded.yml
+# Agent'ın canlı gözlemde cwd'ye yazdığı snapshot/network dump'ları (ŞİRKET UI/veri; izlenmez)
+/*-snapshot.md
+/*snapshot*.md
+/*-body.json
+/list-body*.json
+/markets*.json
+/*-dump.json
+/*.observed.json
 /*.a11y.yml
