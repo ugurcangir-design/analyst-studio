@@ -125,6 +125,10 @@ chk("_temizle: RAG yorumu + Yönetici Özeti + Canlı Gözlem Kapsamı + [K:] et
     "<!-- RAG" not in tem and "Yönetici Özeti" not in tem and "Canlı Gözlem" not in tem and "uat.ornek.local" not in tem
     and "[K:" not in tem and "ödeme servisi endpoint" in tem, tem[:300])
 chk("_temizle: API anahtarı «sır» ile redakte", SIR not in tem and "«sır»" in tem)
+# Agent iskele artıkları few-shot'a girmez (owner 2026-10-21): FE+BE katman göstergesi + tekrarlı Kaynak Görev başlığı
+_isk = O._temizle("**Bu katmanda iş:** VAR — x\n\n### Kaynak Görev: MBS-1 — FE — özet\n\n## 1. Amaç\nGerçek iş metni.")
+chk("_temizle: 'Bu katmanda iş' + '### Kaynak Görev' silinir, iş kalır",
+    "Bu katmanda iş" not in _isk and "Kaynak Görev" not in _isk and "Gerçek iş metni" in _isk, _isk[:200])
 
 # Yerelde DAHA YENİ kayıt varsa çekilen eskisi onu ezmez
 yerel_yeni = {"id": "eeeeeeee5555", "tip": "teknik", "ts": "2026-10-09T10:00:00+03:00", "jira_key": "X-2", "icerik": GOVDE + "yerel\n"}

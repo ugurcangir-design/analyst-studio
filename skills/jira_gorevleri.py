@@ -1470,10 +1470,12 @@ def gorev_analiz_duzelt(gorev: dict, mevcut_markdown: str, talimat: str, asama: 
     mevcut = mevcut.strip()
     if not mevcut:
         raise ValueError("Düzeltilecek analiz yok.")
+    # NOT: girdi etiketleri markdown BAŞLIĞI (`### …`) OLMAMALI — model başlığı bir bölüm sanıp ÇIKTIYA kopyalıyordu
+    # (`### Kaynak Görev: …` her düzelt turunda birikiyordu, FE 2x/BE 4x). Düz etiket + 'çıktıya ekleme' notu.
     icerik = [
-        {"type": "text", "text": f"### Mevcut Teknik Analiz\n\n{mevcut}"},
-        {"type": "text", "text": f"### Kaynak Görev: {gorev.get('key','')} — {gorev.get('summary','')}"},
-        {"type": "text", "text": f"### Düzeltme Talimatı (yalnız bunu uygula)\n{talimat}"},
+        {"type": "text", "text": f"[MEVCUT TEKNİK ANALİZ — düzeltilecek metin]\n\n{mevcut}"},
+        {"type": "text", "text": f"[Kaynak görev bağlamı — SADECE BİLGİ, ÇIKTIYA YAZMA]: {gorev.get('key','')} — {gorev.get('summary','')}"},
+        {"type": "text", "text": f"[DÜZELTME TALİMATI — yalnız bunu uygula]\n{talimat}"},
     ]
     asama_ayarla(asama or "gorev:duzelt")
     yanit = _api_cagri(_GOREV_DUZELT_SISTEM, [{"role": "user", "content": icerik}],

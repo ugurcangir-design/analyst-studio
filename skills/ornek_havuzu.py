@@ -72,6 +72,10 @@ def _temizle(md: str) -> str:
     yorumu çıkar; sır/şifre redakte edilir. (Örnek stil referansıdır — etiket/meta/cevapsız-soru
     gürültüsü ve makineye özel gözlem kapsamı few-shot'a girmez.) Her adım bağımsız fail-safe."""
     md = re.sub(r"(?ms)^##\s*❗\s*Cevap Bekleyen Zorunlu Sorular.*?(?=^#{1,2}\s|\Z)", "", md or "")
+    # Agent iskele artıkları few-shot'a GİRMEZ — yoksa model stil olarak öğrenip üretir (feedback loop):
+    # FE+BE katman göstergesi + tekrarlı 'Kaynak Görev' başlıkları.
+    md = re.sub(r"(?mi)^\s*[-*•]?\s*\*{0,2}Bu katmanda iş\s*:?\*{0,2}.*$\n?", "", md)
+    md = re.sub(r"(?mi)^#{1,4}\s*Kaynak Görev\s*:.*$\n?", "", md)
     md = _RAG_YORUM.sub("", md)
     try:
         from .base import canli_gozlem_kapsamini_cikar, kanit_etiketlerini_temizle, yonetici_ozetini_cikar
@@ -538,7 +542,9 @@ def ornek_bloklari(sorgu_metni: str, tip: str | None = None, n: int = 2,
         kalan = butce
         for i in sirali_idx[:max(1, n)]:
             o = havuz[i]
-            icerik = o.get("icerik", "")
+            # Enjeksiyonda da temizle: fix'ten ÖNCE yakalanmış eski kirli örnekler (iskele artıklı) few-shot'a
+            # girmeden arınır → model artifact öğrenmez (idempotent; yeni yakalama + çekme zaten temiz).
+            icerik = _temizle(o.get("icerik", ""))
             pay = min(len(icerik), kalan, butce // max(1, n))
             if pay < 300:
                 break
