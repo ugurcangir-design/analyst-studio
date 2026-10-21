@@ -2090,6 +2090,9 @@ def jira_icin_temizle(markdown: str) -> str:
     m = yonetici_ozetini_cikar(markdown)
     m = canli_gozlem_kapsamini_cikar(m)
     m = _HTML_YORUM.sub("", m)
+    # Açık/ZORUNLU sorular Jira gövdesine GİTMEZ (owner kararı 2026-10-21). "Jira'dan içeriği çek" ile
+    # eski gövde geri yüklenip tekrar yazılsa bile bu bölümler burada temizlenir (savunma; UI zaten eklemez).
+    m = re.sub(r"(?ms)^#{1,3}\s*(?:❗\s*)?(?:Cevap Bekleyen Zorunlu Sorular|Açık Sorular)\b.*?(?=^#{1,2}\s|\Z)", "", m)
     m = kanit_etiketlerini_temizle(m)   # ÖNCE etiketler: satır/cümle desenleri etiketsiz metne bakar
     m = _KAYNAK_MADDE.sub("", m)
     m = _KAYNAK_ALINTI.sub("", m)

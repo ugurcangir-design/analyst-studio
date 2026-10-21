@@ -114,6 +114,13 @@ chk("köprü gövde yazımı → ortak govde_birlestir (jira_gorevleri) → jira
 chk("prompt: Jira task dili kuralı", "JİRA TASK DİLİ" in B.VARSAYILAN_PROMPTLAR["gorev_teknik_analiz"]["icerik"]
     and "KAYNAK ALINTISI YAZMA" in B.VARSAYILAN_PROMPTLAR["gorev_teknik_analiz"]["icerik"])
 
+# Açık/ZORUNLU sorular Jira gövdesine GİTMEZ (owner kararı 2026-10-21) — "Jira'dan çek" ile geri yüklense de temizlenir
+_soru_md = "## 1. Amaç\nX yapılacak.\n\n## 4. Kabul Kriterleri\n- AC-1\n\n## ❗ Cevap Bekleyen Zorunlu Sorular\n- **Q-T-001 — x:** soru?\n- **Q-T-002 — y:** soru?\n"
+_st = B.jira_icin_temizle(_soru_md)
+chk("ZORUNLU sorular bölümü Jira gövdesinden silinir", "Cevap Bekleyen Zorunlu" not in _st and "Q-T-001" not in _st)
+chk("soru temizliğinde iş içeriği korunur (Amaç + Kabul Kriterleri)", "## 1. Amaç" in _st and "Kabul Kriterleri" in _st and "AC-1" in _st)
+chk("'## Açık Sorular' bölümü de silinir", "Açık Sorular" not in B.jira_icin_temizle("## 2. İş\nY\n\n## Açık Sorular\n- Q-1: ?\n"))
+
 print()
 if _hata:
     print(f"JIRA TEMİZLİK TESTLERİ BAŞARISIZ ({_hata} hata)")

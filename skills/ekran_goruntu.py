@@ -27,18 +27,23 @@ _LOCK = threading.Lock()   # yakalama serileştirilir (paylaşılan output-dir; 
 _MAX_GORUNTU = 8           # task başına üst sınır (kota + Jira ek sayısı)
 
 
-def _png_listesi() -> list[Path]:
+def _png_listesi(sonra: float = 0.0) -> list[Path]:
+    """Çıktı klasöründeki PNG'ler (mtime sıralı). `sonra` verilirse yalnız o andan SONRA düşenler
+    (bu yakalamaya ait) — paylaşılan klasörde başka çağrının bıraktığı eski PNG'yi almaz."""
     try:
-        return sorted(EKRAN_GORUNTU_DIR.glob("*.png"), key=lambda p: p.stat().st_mtime)
+        return sorted((p for p in EKRAN_GORUNTU_DIR.glob("*.png") if p.stat().st_mtime >= sonra - 1),
+                      key=lambda p: p.stat().st_mtime)
     except Exception:
         return []
 
 
 def _klasor_temizle() -> None:
+    # PNG + .yml (canlı gözlem snapshot'ları — paylaşılan --output-dir yüzünden buraya düşer) temizlenir.
     try:
         EKRAN_GORUNTU_DIR.mkdir(parents=True, exist_ok=True)
-        for p in EKRAN_GORUNTU_DIR.glob("*.png"):
-            p.unlink(missing_ok=True)
+        for pat in ("*.png", "*.yml", "*.yaml", "*.jpeg", "*.jpg"):
+            for p in EKRAN_GORUNTU_DIR.glob(pat):
+                p.unlink(missing_ok=True)
     except Exception:
         pass
 
@@ -72,34 +77,40 @@ def yakala(analiz_md: str, canli: str, kapsam: str, _ai=None) -> dict:
     Dönen: {ok, goruntular:[{yol, ekran, aciklama}], neden}. Hata → {ok:False}. Serileştirilmiş (paylaşılan output-dir)."""
     if not (canli or "").strip():
         return {"ok": False, "goruntular": [], "neden": "Canlı uygulama hedefi tanımlı değil (Bağlam Filtresi → Task canlı hedefi)."}
+    import time
     with _LOCK:
         _klasor_temizle()
         asama_ayarla("ekran:goruntu")
+        t0 = time.time()
         icerik = [{"type": "text", "text": canli}, {"type": "text", "text": _yakala_talimati(analiz_md)}]
         ai = _ai or (lambda s, m: _api_cagri(s, m, max_tokens=MAX_TOKENS_KISA, thinking=False, onbellek=False,
                                              canli_uygulama_kapsami=kapsam, katman="yardimci",
                                              max_turns=max(10, _MAX_GORUNTU * 4), tur_devam=1))
+        yanit, kesildi = "", ""
         try:
             yanit = ai(_SISTEM, [{"role": "user", "content": icerik}])
         except Exception as e:
-            return {"ok": False, "goruntular": [], "neden": f"Yakalama çalıştırılamadı: {str(e)[:200]}"}
-        # Agent'ın bildirdiği sıra/açıklama + diske düşen gerçek PNG'ler
+            # Çağrı kesilse de (timeout/limit) o ana dek DISKE DÜŞEN görüntüleri KURTAR — kota boşa gitmesin.
+            kesildi = str(e)[:200]
+        # Agent'ın bildirdiği sıra/açıklama + diske düşen gerçek PNG'ler (yalnız bu yakalamaya ait)
         try:
             ham = json.loads(_xml_ayir(_metin_sikistir(yanit or ""), "ekran_goruntu") or "[]")
         except Exception:
             ham = []
         meta = [m for m in ham if isinstance(m, dict)][:_MAX_GORUNTU]
-        pngler = _png_listesi()[:_MAX_GORUNTU]
+        pngler = _png_listesi(sonra=t0)[:_MAX_GORUNTU]
         if not pngler:
             return {"ok": False, "goruntular": [],
-                    "neden": "Ekran görüntüsü alınamadı (tarayıcı aracı çalışmadı ya da ekranlara erişilemedi)."}
+                    "neden": (f"Çağrı kesildi ({kesildi}) ve hiç görüntü alınamadı." if kesildi
+                              else "Ekran görüntüsü alınamadı (tarayıcı aracı çalışmadı ya da ekranlara erişilemedi).")}
         goruntular = []
         for i, p in enumerate(pngler):
             m = meta[i] if i < len(meta) else {}
             goruntular.append({"yol": str(p), "dosya": p.name,
                                "ekran": str(m.get("ekran") or f"Ekran {i + 1}").strip()[:120],
                                "aciklama": str(m.get("aciklama") or "").strip()[:300]})
-        return {"ok": True, "goruntular": goruntular, "neden": ""}
+        return {"ok": True, "goruntular": goruntular,
+                "neden": (f"Çağrı kesildi ama {len(goruntular)} görüntü kurtarıldı ({kesildi})." if kesildi else "")}
 
 
 def _guvenli_ad(ekran: str, i: int) -> str:

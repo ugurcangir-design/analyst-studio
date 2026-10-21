@@ -3033,7 +3033,7 @@ function temaDegistir() {
           <textarea id="jg-preview-editor" class="jg-editor jg-editor-modal" spellcheck="false" placeholder="İçerik yükleniyor…"></textarea>
           <!-- Açık Sorular — CEVAPLANABİLİR: soruları oku, cevapla, "Cevapları İşle" ile analizi yeniden yazdır -->
           <div id="jg-preview-sorular-wrap" style="display:none">
-            <div class="jg-soru-yardim">Her soruyu altındaki kutuda cevaplayın; <b>Cevapları İşle</b> deyince cevaplarınız mevcut analizin ilgili bölümlerine işlenir (belirsizlikler çözülür; analiz baştan üretilmez, canlı gözlem tekrarlanmaz — hızlı ve düşük kota). Boş bıraktığınız sorular atlanır. Sorular ve cevaplar Jira'ya yazılmaz; yalnız <b>cevapsız ZORUNLU sorular</b> onayda task gövdesine eklenir.</div>
+            <div class="jg-soru-yardim">Her soruyu altındaki kutuda cevaplayın; <b>Cevapları İşle</b> deyince cevaplarınız mevcut analizin ilgili bölümlerine işlenir (belirsizlikler çözülür; analiz baştan üretilmez, canlı gözlem tekrarlanmaz — hızlı ve düşük kota). Boş bıraktığınız sorular atlanır. Sorular ve cevaplar (ZORUNLU dahil) Jira'ya <b>yazılmaz</b>; yalnız bu ekranda kalır.</div>
             <!-- Soru-bazlı cevap kartları — JS ile doldurulur (_jgSorulariRender) -->
             <div id="jg-sorular-liste"></div>
             <!-- Ayrıştırma başarısızsa ham metin yedeği -->
@@ -3177,7 +3177,7 @@ function temaDegistir() {
                 </button><span class="jg-ak-alt">isteğe bağlı: ilgili ekranların görüntüsünü task'a ekle</span>
               </div>
             </div>
-            <span class="jg-warn">Yönetici Özeti, kanıt etiketleri ve açık sorular Jira'ya yazılmaz — <b>cevapsız ZORUNLU sorular</b> ise onayda task gövdesine "Cevap Bekleyen Zorunlu Sorular" olarak EKLENİR.</span>
+            <span class="jg-warn">Yönetici Özeti, kanıt etiketleri ve açık sorular (ZORUNLU dahil) Jira'ya <b>yazılmaz</b> — sorular yalnız bu ekranda kalır. Cevapsız zorunlu soru varsa onayda <b>uyarılırsınız</b> ama task'a eklenmez.</span>
             <div id="jg-ekrangoruntu-sonuc" style="display:none; margin-top:10px; padding:10px 12px; border-radius:8px; border:1px solid var(--border-strong); background:var(--surface2); font-size:12.5px; line-height:1.55;"></div>
           </div>
           <div class="jg-ak-grup" id="jg-ak-sonra">
@@ -6266,22 +6266,17 @@ function _jgSorulariAyristir(md) {
   }
   return sorular;
 }
-// ZORUNLU açık sorular (Task) — yumuşak engel: Jira'ya yazmadan önce uyar; analist devam derse
-// sorular task gövdesine "Cevap Bekleyen Zorunlu Sorular" başlığıyla eklenir (test/geliştirici görsün).
+// ZORUNLU açık sorular (Task) — yumuşak engel: Jira'ya yazmadan önce UYARIR ama gövdeye YAZMAZ.
+// (owner kararı 2026-10-21: açık/zorunlu sorular Jira task'ına gitmesin; yalnız analiz UI'da kalsın.)
 function _jgZorunluSorular(acikMd) { return _jgSorulariAyristir(acikMd).filter(s => s.zorunlu); }
-function _jgZorunluEk(acikMd) {
-  const z = _jgZorunluSorular(acikMd);
-  if (!z.length) return '';
-  return '\n\n## ❗ Cevap Bekleyen Zorunlu Sorular\n'
-    + z.map(s => `- **${s.id}${s.baslik ? ' — ' + s.baslik : ''}:** ${s.soru || ''}`).join('\n') + '\n';
-}
+function _jgZorunluEk(acikMd) { return ''; }   // ARTIK gövdeye EKLEMEZ (açık sorular Jira'ya yazılmaz)
 function _jgZorunluKapi(acikMdList, eylem) {
   const z = acikMdList.flatMap(_jgZorunluSorular);
   if (!z.length) return true;
   return confirm(`⚠ ${z.length} ZORUNLU açık soru cevapsız:\n\n`
     + z.slice(0, 8).map(s => `• ${s.id}: ${s.baslik || s.soru}`).join('\n') + (z.length > 8 ? '\n…' : '')
-    + `\n\nBu sorular cevaplanmadan ${eylem}. Sorular task'a "Cevap Bekleyen Zorunlu Sorular" başlığıyla eklenecek `
-    + `(geliştirici/test ekibi görsün).\n\nYine de devam edilsin mi?`);
+    + `\n\nBu sorular cevaplanmadan ${eylem}. Sorular task'a YAZILMAYACAK — cevaplanmadan devam ediyorsunuz `
+    + `(önce "Cevapları İşle" ile cevaplamanız önerilir).\n\nYine de devam edilsin mi?`);
 }
 // DOM'daki açık soru cevaplarını {qid: cevap} haritasına topla (geçişte korumak için).
 // Tek-kutu yedek varsa __tek__ anahtarıyla saklanır.
@@ -6654,6 +6649,9 @@ async function jgEkranGoruntuEkle() {
     }
     if (g.length > ek.length && !hatalar.length) {
       html += `<div style="color:var(--text2); margin-top:6px">Not: ${g.length - ek.length} görüntü çekildi ama Jira'ya eklenmedi.</div>`;
+    }
+    if (d.neden) {
+      html += `<div style="color:var(--yellow, #ca8a04); margin-top:6px">ℹ ${escHtml(d.neden)}</div>`;
     }
     _jgEgSonuc(html, hatalar.length && !ek.length ? 'err' : 'ok');
     toast(`${g.length} ekran çekildi, ${ek.length} tanesi ${key}'e eklendi`, ek.length ? 'success' : 'info');
