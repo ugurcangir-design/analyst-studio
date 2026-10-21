@@ -1212,11 +1212,16 @@ def gorev_fe_be_analiz(gorev: dict, cevaplar: str = "", onceki_sorular: str = ""
                                          canli_kapsam=(kapsam if _canli else None))
     be_md = yonetici_ozeti_olustur(be_md, acik_sorular=acik) + be_md
     fe_md = yonetici_ozeti_olustur(fe_md, acik_sorular=acik) + fe_md
-    return {"be": {"markdown": be_md, "acik_sorular": acik, "is_var": katman_is_var_mi(be_md)},
-            "fe": {"markdown": fe_md, "acik_sorular": acik, "is_var": katman_is_var_mi(fe_md)}}
+    # is_var ÖNCE parse edilir (satır dururken); sonra '**Bu katmanda iş:**' göstergesi analist çıktısından ÇIKARILIR
+    # (owner 2026-10-21: bu alan analiz çıktısında olmamalı — UI katman ön-işareti için is_var alanı yeter).
+    be_is, fe_is = katman_is_var_mi(be_md), katman_is_var_mi(fe_md)
+    return {"be": {"markdown": katman_satiri_cikar(be_md), "acik_sorular": acik, "is_var": be_is},
+            "fe": {"markdown": katman_satiri_cikar(fe_md), "acik_sorular": acik, "is_var": fe_is}}
 
 
 _KATMAN_IS = re.compile(r"\*\*\s*Bu katmanda iş\s*:?\s*\*\*\s*:?\s*(VAR|YOK)\b", re.I)
+# Göstergeyi SATIR olarak çıkarır (önündeki yalnız '---' ayıracı ortada kalırsa onu da yut).
+_KATMAN_SATIR = re.compile(r"(?mi)^[ \t]*(?:---[ \t]*\n)?[ \t]*[-*•]?[ \t]*\*{0,2}Bu katmanda iş\s*:?\*{0,2}.*(?:\n|$)")
 
 
 def katman_is_var_mi(markdown: str):
@@ -1226,6 +1231,15 @@ def katman_is_var_mi(markdown: str):
     if not m:
         return None
     return m.group(1).upper() == "VAR"
+
+
+def katman_satiri_cikar(markdown: str) -> str:
+    """`**Bu katmanda iş:** VAR|YOK …` göstergesini analiz GÖVDESİNDEN çıkarır (owner 2026-10-21: analiz çıktısında
+    olmamalı). is_var ayrı alanda taşınır; UI katman ön-işareti ondan beslenir. Fazla boş satır toparlanır."""
+    if not markdown:
+        return markdown
+    m = _KATMAN_SATIR.sub("", markdown)
+    return re.sub(r"\n{3,}", "\n\n", m)
 
 
 def gorev_fe_be_task_olustur(key: str, be_markdown: str, fe_markdown: str,

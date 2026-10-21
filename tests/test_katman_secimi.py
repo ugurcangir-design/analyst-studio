@@ -171,6 +171,14 @@ chk("_ornek_kendisi_mi: '· MBS-365' / '· MBS-365::FE' etiketli örnek bu task'
     and JG._ornek_kendisi_mi({"text": "### ONAYLI ÖRNEK · MBS-365::FE\nx"}, "mbs-365")
     and not JG._ornek_kendisi_mi({"text": "### ONAYLI ÖRNEK · MBS-3650\nx"}, "MBS-365"))
 
+print("6) '**Bu katmanda iş:**' göstergesi analiz çıktısından çıkar (is_var ayrı taşınır)")
+_m = "## 📋 Yönetici Özeti\n- x\n\n---\n**Bu katmanda iş:** VAR — Market ID input.\n\n## 1. Amaç\nİş."
+chk("is_var çıkarmadan ÖNCE parse edilir (VAR)", JG.katman_is_var_mi(_m) is True)
+_ck = JG.katman_satiri_cikar(_m)
+chk("katman_satiri_cikar: gösterge + önündeki '---' çıkar, iş + özet kalır",
+    "Bu katmanda iş" not in _ck and "## 1. Amaç" in _ck and "Yönetici Özeti" in _ck, _ck)
+chk("YOK göstergesi de çıkar", "Bu katmanda iş" not in JG.katman_satiri_cikar("**Bu katmanda iş:** YOK — gerekçe\n\n## 1. Amaç\nx"))
+
 print()
 if _hata:
     print(f"KATMAN SEÇİMİ TESTLERİ BAŞARISIZ ({_hata} hata)")
