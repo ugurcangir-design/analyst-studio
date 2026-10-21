@@ -3178,6 +3178,7 @@ function temaDegistir() {
               </div>
             </div>
             <span class="jg-warn">Yönetici Özeti, kanıt etiketleri ve açık sorular Jira'ya yazılmaz — <b>cevapsız ZORUNLU sorular</b> ise onayda task gövdesine "Cevap Bekleyen Zorunlu Sorular" olarak EKLENİR.</span>
+            <div id="jg-ekrangoruntu-sonuc" style="display:none; margin-top:10px; padding:10px 12px; border-radius:8px; border:1px solid var(--border-strong); background:var(--surface2); font-size:12.5px; line-height:1.55;"></div>
           </div>
           <div class="jg-ak-grup" id="jg-ak-sonra">
             <div class="jg-ak-baslik"><b>3 · Sonrası</b><span>geliştirme bitince / kapanış</span></div>
@@ -6594,6 +6595,14 @@ function _jgYtFebeSet() {
   return { kaynak: s.feBeKaynak, be, fe };
 }
 
+function _jgEgSonuc(html, renk) {
+  const kap = document.getElementById('jg-ekrangoruntu-sonuc');
+  if (!kap) return;
+  kap.style.display = 'block';
+  kap.style.borderColor = renk === 'ok' ? 'var(--green, #16a34a)' : renk === 'err' ? 'var(--run, #dc2626)' : 'var(--border-strong)';
+  kap.innerHTML = html;
+}
+
 async function jgEkranGoruntuEkle() {
   const key = _jgGercekKey(_jgAktifAnalizKey);
   if (!key || /::/.test(key) || /^EKRAN-/.test(key)) { toast('Önce Jira\'da gerçek bir task gerekli (bu kaydın Jira karşılığı yok)', 'info'); return; }
@@ -6605,25 +6614,51 @@ async function jgEkranGoruntuEkle() {
   if (!onay) return;
   const btn = document.getElementById('jg-ekrangoruntu-btn');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Ekranlar yakalanıyor…'; }
+  _jgEgSonuc(`⏳ <b>${escHtml(key)}</b> için canlı ekranlar yakalanıyor… Bu işlem canlı gözlem gerektirir, 1-3 dk sürebilir.`, '');
   try {
     const r = await (await fetch('/api/jira/gorev/ekran-goruntu', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key, analiz: md, hedef_tarif: (_jgAnalizSeti[_jgAktifAnalizKey] || {}).summary || '', jira_ekle: true }) })).json();
-    if (!r.ok || !r.job_id) { toast(r.error || 'Başlatılamadı', 'error'); return; }
+    if (!r.ok || !r.job_id) { _jgEgSonuc(`⛔ Başlatılamadı: ${escHtml(r.error || 'bilinmeyen hata')}`, 'err'); toast(r.error || 'Başlatılamadı', 'error'); return; }
     // Polling (uzun — canlı gözlem)
     let d = {};
     for (let i = 0; i < 200; i++) {
       await new Promise(res => setTimeout(res, 4000));
       try { d = await (await fetch('/api/jira/gorev/ekran-goruntu/durum/' + r.job_id)).json(); } catch (e) { continue; }
       if (d.durum === 'bitti' || d.durum === 'hata') break;
-      if (btn) btn.textContent = `⏳ Ekranlar yakalanıyor… ${d.gecen_sn || 0}s`;
+      const sn = d.gecen_sn || 0;
+      if (btn) btn.textContent = `⏳ Ekranlar yakalanıyor… ${sn}s`;
+      _jgEgSonuc(`⏳ <b>${escHtml(key)}</b> için canlı ekranlar yakalanıyor… <b>${sn}s</b>${sn > 180 ? ' · beklenenden uzun sürüyor (VPN/giriş kontrol edin), iş arka planda sürüyor' : ''}`, '');
     }
-    if (d.durum === 'hata' || !d.ok) { toast(d.hata || d.neden || 'Ekran görüntüsü alınamadı', 'error'); return; }
-    const g = d.goruntular || [], ek = (d.jira || {}).eklenen || [];
-    if (!g.length) { toast(d.neden || 'Ekran görüntüsü alınamadı (ekranlara erişilemedi)', 'error'); return; }
-    toast(`${g.length} ekran görüntüsü alındı, ${ek.length} tanesi ${key}'e eklendi`, ek.length ? 'success' : 'info');
-    const kap = document.getElementById('jg-preview-msg-akis') || document.getElementById('jg-preview-msg');
-    if (kap) kap.innerHTML = `<div style="color:var(--text2);font-size:12px;margin-top:6px">🖼 Ekran görüntüleri: ${ek.map(e => escHtml(e.dosya)).join(', ') || '—'} → ${escHtml(key)} ekinde (Jira'da Attachments)</div>`;
+    if (d.durum === 'hata') {
+      _jgEgSonuc(`⛔ <b>Hata:</b> ${escHtml(d.hata || 'ekran görüntüsü işi başarısız')}`, 'err');
+      toast('Ekran görüntüsü işi başarısız', 'error'); return;
+    }
+    const g = d.goruntular || [], jira = d.jira || {}, ek = jira.eklenen || [], hatalar = jira.hatalar || [];
+    if (!d.ok || !g.length) {
+      _jgEgSonuc(`⛔ <b>Ekran görüntüsü alınamadı.</b><br>${escHtml(d.neden || 'Agent ekranlara erişemedi ya da tarayıcı aracı çalışmadı.')}`
+        + `<div style="color:var(--text2);margin-top:6px">Kontrol edin: (1) Bağlam Filtresi → Task canlı uygulama hedefi (URL) girili mi, (2) "Girişi Doğrula" ile giriş başarılı mı, (3) analiz metni somut ekran/menü adları içeriyor mu. Sonra tekrar deneyin.</div>`, 'err');
+      toast('Ekran görüntüsü alınamadı', 'error'); return;
+    }
+    // Başarı — kalıcı özet
+    const browseUrl = d.jira_url || '';
+    const keyLink = browseUrl ? `<a href="${browseUrl}" target="_blank">${escHtml(key)}</a>` : `<b>${escHtml(key)}</b>`;
+    let html = `✅ <b>${g.length}</b> ekran görüntüsü alındı · <b>${ek.length}</b> tanesi ${keyLink} task'ına eklendi`
+      + ' <span style="color:var(--text2)">(Jira → Attachments)</span>';
+    if (ek.length) {
+      html += '<ul style="margin:6px 0 0; padding-left:18px">'
+        + ek.map(e => `<li><code>${escHtml(e.dosya)}</code>${e.ekran ? ' — ' + escHtml(e.ekran) : ''}</li>`).join('')
+        + '</ul>';
+    }
+    if (hatalar.length) {
+      html += `<div style="color:var(--run, #dc2626); margin-top:6px">⚠ ${hatalar.length} görüntü eklenemedi: ${escHtml(hatalar.join(' · '))}</div>`;
+    }
+    if (g.length > ek.length && !hatalar.length) {
+      html += `<div style="color:var(--text2); margin-top:6px">Not: ${g.length - ek.length} görüntü çekildi ama Jira'ya eklenmedi.</div>`;
+    }
+    _jgEgSonuc(html, hatalar.length && !ek.length ? 'err' : 'ok');
+    toast(`${g.length} ekran çekildi, ${ek.length} tanesi ${key}'e eklendi`, ek.length ? 'success' : 'info');
   } catch (e) {
+    _jgEgSonuc(`⛔ <b>Hata:</b> ${escHtml(e.message)}`, 'err');
     toast('Ekran görüntüsü hatası: ' + e.message, 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = '<svg class="ico"><use href="#i-monitor"/></svg> Ekran Görüntüsü Ekle'; }

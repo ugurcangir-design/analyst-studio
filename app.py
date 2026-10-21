@@ -6759,9 +6759,16 @@ def _ekran_goruntu_calistir(job_id: str) -> None:
         else:
             canli, kapsam = None, "gorev"
         r = eg.yakala(job.get("analiz", ""), canli or "", kapsam)
-        sonuc = {"ok": r.get("ok"), "goruntular": r.get("goruntular", []), "neden": r.get("neden", "")}
-        # Jira'ya ek (key verildiyse ve görüntü alındıysa)
         key = str(job.get("key") or "").strip()
+        sonuc = {"ok": r.get("ok"), "goruntular": r.get("goruntular", []), "neden": r.get("neden", "")}
+        try:
+            from skills.atlassian import jira_site_url
+            site = jira_site_url()
+            if site and key:
+                sonuc["jira_url"] = f"{site}/browse/{key}"
+        except Exception:
+            pass
+        # Jira'ya ek (key verildiyse ve görüntü alındıysa)
         if r.get("ok") and key and job.get("jira_ekle"):
             try:
                 from skills.jira_gorevleri import _cloud_id
