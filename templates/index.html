@@ -5595,7 +5595,12 @@ const _JG_SET_KEY = 'jg-analiz-seti';
 let _jgSetYuklendi = false;
 function _jgSetKaydet() {
   try {
-    if (!Object.keys(_jgAnalizSeti).length) { localStorage.removeItem(_JG_SET_KEY); return; }
+    const anahtarlar = Object.keys(_jgAnalizSeti);
+    if (!anahtarlar.length) { localStorage.removeItem(_JG_SET_KEY); return; }
+    // Jira'ya yazımı TAMAMLANMIŞ set KALICILAŞTIRILMAZ → yenileme/reattach'te bitmiş analiz geri gelmez
+    // (owner 2026-10-21: task açma/güncelleme tamamlandıysa ekrandan kaldırma). Her giriş tamamlandı/yazıldı ise atla.
+    const hepsiBitti = anahtarlar.every(k => { const s = _jgAnalizSeti[k] || {}; return s.tamamlandi || (s.jiraYazildi && (s.jiraYazildi.be || s.jiraYazildi.fe)); });
+    if (hepsiBitti) { localStorage.removeItem(_JG_SET_KEY); return; }
     localStorage.setItem(_JG_SET_KEY, JSON.stringify({ set: _jgAnalizSeti, aktif: _jgAktifAnalizKey, ts: Date.now() }));
   } catch (e) {}   // kota/erişim hatası — sessiz
 }
@@ -6039,12 +6044,26 @@ async function _jgIsBaslat(adimlar, procBaslik, gosterKey, temizle) {
     return true;
   } finally {
     _jgBasliyor = false;
-    if (!basladi) _jgOncekiAnaliziGeriGetir();   // engellenen giriş / başlatma hatası → mevcut analiz görünür kalsın
+    // engellenen giriş / başlatma hatası → analizi geri göster; ANCAK yeni/FARKLI bir task başlatıldıysa eski task'ı değil
+    if (!basladi) _jgOncekiAnaliziGeriGetir(gosterKey || (adimlar[0] && adimlar[0].key) || null, temizle);
   }
 }
 // Başlatma başarısız/engellendiyse aktif analizi yeniden göster; panel mesajı (neden) KORUNUR.
-function _jgOncekiAnaliziGeriGetir() {
+// `yeniHedef` + `temizle`: FRESH başlatma (temizle) FARKLI bir task için bloklandıysa eski (farklı) task analizini
+// GERİ GETİRME — stale set temizlenir, panel kapanır (owner 2026-10-21: yeni task başlatınca eski task ekranda kalmasın).
+function _jgOncekiAnaliziGeriGetir(yeniHedef, temizle) {
   const k = _jgAktifAnalizKey;
+  if (temizle && k && yeniHedef && _jgGercekKey(k) !== _jgGercekKey(yeniHedef)) {
+    const msg = document.getElementById('jg-preview-msg');
+    const neden = msg ? (msg.textContent || '').trim() : '';
+    _jgAnalizSeti = {}; _jgAktifAnalizKey = null; _jgSetKaydet();   // stale seti bellekten + localStorage'dan sil
+    const ed = document.getElementById('jg-preview-editor'); if (ed) ed.value = '';
+    const sor = document.getElementById('jg-preview-sorular'); if (sor) sor.value = '';
+    const sw = document.getElementById('jg-analiz-switcher'); if (sw) sw.style.display = 'none';
+    _jgPanelGizle(); jgYeniTaskKapat(); jgMockupKapat(); document.body.style.overflow = '';
+    if (neden) toast(neden, 'info');   // iptal/engel nedenini toast'ta göster (panel kapanıyor)
+    return;
+  }
   if (!k || !_jgAnalizSeti[k] || _jgMesgul()) return;
   const m = document.getElementById('jg-preview-msg');
   const html = m ? m.innerHTML : '', cls = m ? m.className : '';
@@ -6476,6 +6495,8 @@ async function jgJiraGuncelle() {
     if (!d.ok) { _jgMsg('jg-preview-msg', d.error || 'Hata', 'err'); btn.disabled = false; return; }
     _jgMsg('jg-preview-msg', `✓ ${d.key} Jira'da güncellendi.`, 'ok');
     toast(`${d.key} güncellendi`, 'success');
+    // Tamamlandı → yenileme/reattach'te bu bitmiş analiz geri gelmesin (owner 2026-10-21)
+    try { const s = _jgAnalizSeti[_jgAktifAnalizKey] || _jgAnalizSeti[_jgCurrent.key]; if (s) s.tamamlandi = true; _jgSetKaydet(); } catch (e) {}
   } catch (e) {
     _jgMsg('jg-preview-msg', _jgHataMetni(e), 'err');
     btn.disabled = false;
