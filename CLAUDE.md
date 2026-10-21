@@ -204,6 +204,18 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   TEK revizyon → Revizyon'dan Geri Al. Özet `output/.akis-kapatma.json` → `/api/pano.akis_kapatma` → onay kapısı
   "N boşluk kapatıldı · M soru açıldı". Task Analizi'nde **"Akışı Kapat"** butonu (iş modu `akis-kapat`, istemci
   Geri Al). `AKIS_KAPATMA=false`/`HIZLI_MOD` kapatır. Test: `tests/test_akis_kapatma.py` (AI enjekte, 0 token).
+- **KAPSAM = İSTER — ister dışına çıkma (owner 2026-10-21: 'isterde olmayan parametre/koşulu analize ekleme'):**
+  `gorev_teknik_analiz` promptu + `_ORTAK_EK_KURALLAR` (süreç/teknik/görev hepsine akar): analiz kapsamını
+  YALNIZ görevin istediği (açıklama/ister) belirler. (1) İsterde İSTENMEYEN parametre/alan/filtre/koşul, SADECE
+  **başlıkta (summary)** geçtiği ya da **Swagger/canlı uygulamada MEVCUT** olduğu için analize GİRMEZ — gözlem
+  istenen şeyin NASIL çalıştığını netleştirir, YENİ iş eklemez. (2) **Parametreler/filtreler BAĞIMSIZDIR** (marketId,
+  eventId gibi tek başına): ister AÇIKÇA 'birlikte/şu koşulla/bağımlı' demedikçe parametreler arası koşul/eşleme/
+  bağımlılık/AND/validasyon kuralı UYDURMA ('marketId verilince hasAvailableMarket de gerekir' gibi türetme YAZMA).
+  (3) Başlık↔ister çelişir ya da başlıktaki şey isterde tarif edilmemişse → `[K: ❓ Belirsiz]` (açık soru), dış
+  kaynaktan türetip tam spesifiye etme. Bulgu: MBSTRADE-1250 başlığı 'definitionId ve marketId' diyordu, ister'de
+  definitionId yoktu + agent marketId↔hasAvailableMarket koşulu türetmişti. **NOT:** mevcut analizdeki yanlışı
+  düzeltmek için 'Analiz Düzelt' (task'ı yeniden okumaz); 'Baştan üret' task BAŞLIĞINI yeniden okur (başlık hâlâ
+  yanlışsa geri gelir → önce başlık/ister düzeltilmeli).
 - **Kaynak-öncelik sırası (KANONİK, tek liste — `_ORTAK_EK_KURALLAR` + 4 rol promptu hizalı):**
   `Swagger > Canlı Uygulama Gözlemi > Confluence > BRD/Süreç > Jira > UI`. İlke: **gözlemlenen/doğrulanabilir
   gerçek veri (Swagger sözleşmesi + MCP canlı gözlem), tarif edilen istekten (BRD) ÜSTÜNDÜR** — BRD
