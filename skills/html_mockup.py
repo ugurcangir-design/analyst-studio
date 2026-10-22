@@ -91,6 +91,9 @@ davranış (butonlar/formlar/sekme geçişleri) AYNEN korunmalı.
 - Talimat belirsizse en makul yorumu uygula; prototipi bozma.
 - İKON: emoji ikon (👁 ✏ 🔍 🔔 ⚙ 🗑 vb.) EKLEME/KULLANMA — mevcut prototipin ikon stilini (SVG/kütüphane) koru; \
   talimat 'ikon düzelt' derse emojiyi inline SVG (stroke/line ikon) ile değiştir, yeni emoji koyma.
+- TAM EKRAN: talimat 'tam ekran yap / yarım görünüyor / geniş yap' derse ana layout'u önizleme alanının TAM \
+  genişlik+yüksekliğini dolduracak şekilde düzelt (`html,body{margin:0}`, ana container `width:100%; min-height:100vh`, \
+  dar `max-width`/ortalama kolonu kaldır); diğer içeriğe dokunma.
 - İstenen değişiklik birden çok yeri ilgilendiriyorsa (ör. hem edit hem detail) HEPSİNE tutarlı uygula.
 - Yalnızca HTML içeriğini ver — başka açıklama ekleme, kod bloğu (```) işareti kullanma."""
 
@@ -138,9 +141,18 @@ HTML ekran mockup'ı üret.
 
 Kurallar:
 - Tek HTML dosyası (CSS ve JS gömülü); dış CDN kullanabilirsin.
+- TAM EKRAN — DAR KOLONA SIKIŞTIRMA: `html,body{margin:0}` ve ana layout önizleme alanının TAM \
+GENİŞLİĞİNİ ve yüksekliğini (`width:100%; min-height:100vh`) doldursun. Gözlemlenen uygulama geniş \
+bir admin düzeni (sol menü + tam-genişlik içerik) kullanıyorsa onu BİREBİR uygula; içeriği ortada dar bir \
+kolona (`max-width:800px; margin:0 auto` gibi) HAPSETME — aksi halde mockup 'yarım ekran' görünür. Tablolar \
+mevcut ekrandaki gibi kullanılabilir genişliği kullansın.
 - MEVCUT EKRAN TASARIMINI BİREBİR KORU: gözlemlenen canlı uygulamanın renk paleti, tipografi, \
 buton/form/tablo component'leri, boşluk ve yerleşim dilini AYNEN kullan — yeni ekran mevcut \
 ürünün bir PARÇASI gibi görünsün, kopuk/jenerik durmasın. (Canlı gözlem yoksa tasarım rehberine uy.)
+- GERÇEKÇİ VERİ ÇEŞİTLİLİĞİ: örnek satır/kayıtları canlı ekrandaki GERÇEK çeşitliliği yansıtsın — \
+hepsini tek-tip dolu gösterme. Hem veri DOLU kayıtlar (ör. birden çok provider/outcome eşleşmesi olan satır: \
+çok sütun dolu, '2 Providers') hem BOŞ/az kayıtlar (hiç eşleşmesi olmayan: '—', '0 Providers') karışık olsun. \
+Canlı gözlemde bu iki durumu da incele ve örnek veride ikisini de göster.
 - YENİ İSTE'yi eksiksiz ve İSTENEN HER YERDE karşıla: iste birden çok ekran/konum belirtiyorsa (ör. 'edit VE detail \
 butonu', 'liste ve modal') çözümü/formatı HEPSİNE AYNI ŞEKİLDE uygula — birinde tam, diğerinde eksik/farklı format \
 bırakma. İstenen asıl değişiklik (ör. 'provider karşılıklarını SÜTUN olarak göster') her ilgili yerde BİREBİR aynı olsun.
@@ -151,7 +163,10 @@ görünümle AYNI olsun, emoji değil.
 - Türkçe UI metinleri, profesyonel görünüm. Tıklanabilir butonlar çalışsın; formlar submit'te sonuç göstersin.
 - CANLI GÖZLEM (hedef verildiyse) — ısrarcı ol: önce `browser_navigate` ile hedef ekranı AÇ; `TimeoutError`/ağ hatası \
 alırsan BİR KEZ daha dene ve `browser_wait_for` ile sayfa yüklenene kadar BEKLE. Açıldıysa renk/tipografi/component/ \
-yerleşimi `browser_snapshot` ile incele ve BİREBİR uygula. Ekranı GERÇEKTEN açamazsan jenerik tasarıma düş; o durumda \
+yerleşimi `browser_snapshot` ile incele ve BİREBİR uygula. Listede GERÇEK kayıtların çeşitliliğini de gözle: \
+hem veri dolu (çok provider/outcome eşleşmesi olan) hem boş (0 eşleşme) kayıtlara bak; detail/edit gibi \
+modalleri AÇ ve içindeki gerçek alan/sütun düzenini gör — mockup'ı bu gerçek varyasyona göre kur. \
+Ekranı GERÇEKTEN açamazsan jenerik tasarıma düş; o durumda \
 çıktının EN BAŞINA `<!-- Canlı Gözlem: alınamadı — <kısa neden>; jenerik tasarım kullanıldı -->` yorumu bırak (zorunlu, \
 analist bunu görüp tekrar deneyebilsin). Ekranı açtıysan böyle bir 'alınamadı' yorumu YAZMA.
 {ui_hint}
