@@ -141,7 +141,7 @@ HTML ekran mockup'ı üret.
 
 Kurallar:
 - Tek HTML dosyası (CSS ve JS gömülü); dış CDN kullanabilirsin.
-- TAM EKRAN — DAR KOLONA SIKIŞTIRMA: `html,body{margin:0}` ve ana layout önizleme alanının TAM \
+- TAM EKRAN — DAR KOLONA SIKIŞTIRMA: `html,body{{margin:0}}` ve ana layout önizleme alanının TAM \
 GENİŞLİĞİNİ ve yüksekliğini (`width:100%; min-height:100vh`) doldursun. Gözlemlenen uygulama geniş \
 bir admin düzeni (sol menü + tam-genişlik içerik) kullanıyorsa onu BİREBİR uygula; içeriği ortada dar bir \
 kolona (`max-width:800px; margin:0 auto` gibi) HAPSETME — aksi halde mockup 'yarım ekran' görünür. Tablolar \
