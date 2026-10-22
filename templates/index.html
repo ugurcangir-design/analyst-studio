@@ -5631,12 +5631,24 @@ function _jgEditorKaydet(key) {
   }
   if (v.trim() || !((s.markdown || '').trim())) s.markdown = v;
 }
+// Cevapları entry'ye yaz. FE+BE AYRI'da sorular PAYLAŞILIR (tek `acik` set) → cevaplar da PAYLAŞILMALI:
+// BE'de yazılan cevap FE entry'sinde de görünsün (owner 2026-10-21: 'BE'de yanıtladığım sorular FE'de de çıkmış').
+function _jgCevapYaz(key) {
+  const s = _jgAnalizSeti[key]; if (!s || s.hata) return;
+  const cev = _jgCevaplariTopla();
+  s.cevaplar = cev;
+  if (s.feBeKaynak) {   // bu bir FE+BE çifti → iki entry'e de yaz
+    const be = _jgAnalizSeti[s.feBeKaynak], fe = _jgAnalizSeti[s.feBeKaynak + '::FE'];
+    if (be) be.cevaplar = cev;
+    if (fe) fe.cevaplar = cev;
+  }
+}
 // Aktif entry'nin ekrandaki (DOM) editör + cevaplarını sete yaz (yenileme/kapanış öncesi).
 function _jgAktifDomKaydet() {
   const k = _jgAktifAnalizKey;
   if (!k || !_jgAnalizSeti[k] || _jgAnalizSeti[k].hata) return;
   _jgEditorKaydet(k);
-  _jgAnalizSeti[k].cevaplar = _jgCevaplariTopla();
+  _jgCevapYaz(k);
 }
 // Chip "Göster": paneli aç + kayıtlı aktif analizi doldur (yenileme sonrası).
 function _jgChipGoster() {
@@ -5717,7 +5729,7 @@ function _jgSonucGoster(key) {
   // Geçiş öncesi mevcut editör içeriğini aktif entry'e GÜVENLİ KAYDET (boş, doluyu ezmez)
   if (_jgAktifAnalizKey && _jgAnalizSeti[_jgAktifAnalizKey] && !_jgAnalizSeti[_jgAktifAnalizKey].hata) {
     _jgEditorKaydet(_jgAktifAnalizKey);
-    _jgAnalizSeti[_jgAktifAnalizKey].cevaplar = _jgCevaplariTopla();
+    _jgCevapYaz(_jgAktifAnalizKey);   // FE+BE: cevaplar iki entry'e de yazılır (sorular paylaşıldığı için)
   }
   const s = _jgAnalizSeti[key] || {};
   _jgAktifAnalizKey = key;
