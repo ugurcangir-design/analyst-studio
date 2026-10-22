@@ -38,15 +38,17 @@ chk("işaretle → dosyaya yazıldı (yalnız id)", ids == {"b2b2b2b2b2b2"} and 
     and "icerik" not in O.YILDIZ_DOSYA.read_text(encoding="utf-8"))
 L = O.ornek_listesi()
 chk("liste: yıldızlı önce + bayrak + boyut", L[0]["id"] == "b2b2b2b2b2b2" and L[0]["yildiz"] is True and L[1]["yildiz"] is False and L[0]["boyut"] > 0, [x["id"] for x in L])
+# NOT: örnek jira_key'i artık few-shot etiketine KONMAZ (yabancı task anahtarı sızıntısı kök-neden fix'i) →
+# örnekler içerik imzasıyla ayırt edilir: b2="rapor/filtre", a1/c3="ödeme".
 bl = O.ornek_bloklari("ödeme endpoint validasyon", tip="teknik", n=2)
-chk("few-shot: alakasız ama ★ işaretli b2 İLK, sonra en alakalı ödeme örneği", len(bl) == 2 and "X-2" in bl[0]["text"] and ("X-1" in bl[1]["text"] or "X-3" in bl[1]["text"]), [b["text"][:80] for b in bl])
+chk("few-shot: alakasız ama ★ işaretli b2 İLK, sonra en alakalı ödeme örneği", len(bl) == 2 and "rapor" in bl[0]["text"] and "ödeme" in bl[1]["text"], [b["text"][:80] for b in bl])
 O.yildiz_ayarla("b2b2b2b2b2b2", False)
 bl2 = O.ornek_bloklari("ödeme endpoint validasyon", tip="teknik", n=2)
-chk("işaret kalkınca saf alaka sırası (ödeme örnekleri)", len(bl2) == 2 and all("X-2" not in b["text"] for b in bl2))
+chk("işaret kalkınca saf alaka sırası (ödeme örnekleri)", len(bl2) == 2 and all("rapor" not in b["text"] for b in bl2))
 O.yildiz_ayarla("a1a1a1a1a1a1", True)
 O.yildiz_ayarla("c3c3c3c3c3c3", True)
 bl3 = O.ornek_bloklari("rapor ekranı filtre", tip="teknik", n=2)
-chk("iki ★ varken n=2 dolar → işaretsiz en alakalı (b2) girmez", all("X-2" not in b["text"] for b in bl3) and len(bl3) == 2)
+chk("iki ★ varken n=2 dolar → işaretsiz en alakalı (b2) girmez", all("rapor" not in b["text"] for b in bl3) and len(bl3) == 2)
 chk("few-shot bloğu <ornek> sarmalı + 'talimat değil' notu (alıntılanmış veri)", all("<ornek " in b["text"] and "talimat değil" in b["text"] and b["text"].rstrip().endswith("</ornek>") for b in bl3))
 # id doğrulaması: geçersiz id tracked dosyaya GİRMEZ (yildiz_ayarla no-op), ornek_sil False
 once = O.yildizlar()

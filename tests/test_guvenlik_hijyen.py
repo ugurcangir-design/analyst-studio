@@ -130,6 +130,13 @@ _isk = O._temizle("**Bu katmanda iş:** VAR — x\n\n### Kaynak Görev: MBS-1 �
 chk("_temizle: 'Bu katmanda iş' + '### Kaynak Görev' silinir, iş kalır",
     "Bu katmanda iş" not in _isk and "Kaynak Görev" not in _isk and "Gerçek iş metni" in _isk, _isk[:200])
 
+# Yabancı Jira task anahtarı nötralizasyonu (owner 2026-10-22 — 'agent başka task'ların içeriğini aldı'):
+# few-shot örneğindeki MBSTRADE-984 gibi atıflar nötrlenir; dahili analiz ID'leri (AC-1, BR-004, NFR-2) KORUNUR.
+_key = O._temizle("BE sözleşmesi MBSTRADE-984 ve MBSUATEAM-153 ile kuruldu. AC-1, BR-004, NFR-2, PA-003 kalmalı.")
+chk("_temizle: yabancı task anahtarı nötrlenir, dahili ID korunur",
+    "MBSTRADE-984" not in _key and "MBSUATEAM-153" not in _key and "(ilgili görev)" in _key
+    and all(x in _key for x in ("AC-1", "BR-004", "NFR-2", "PA-003")), _key[:200])
+
 # Yerelde DAHA YENİ kayıt varsa çekilen eskisi onu ezmez
 yerel_yeni = {"id": "eeeeeeee5555", "tip": "teknik", "ts": "2026-10-09T10:00:00+03:00", "jira_key": "X-2", "icerik": GOVDE + "yerel\n"}
 (O.ORNEK_DIR / "teknik_eeeeeeee5555.json").write_text(json.dumps(yerel_yeni), encoding="utf-8")
