@@ -140,8 +140,13 @@ buton/form/tablo component'leri, boşluk ve yerleşim dilini AYNEN kullan — ye
 ürünün bir PARÇASI gibi görünsün, kopuk/jenerik durmasın. (Canlı gözlem yoksa tasarım rehberine uy.)
 - YENİ İSTE'yi eksiksiz karşıla: ilgili form alanları, butonlar, tablo/liste, durumlar, örnek veri.
 - Türkçe UI metinleri, profesyonel görünüm. Tıklanabilir butonlar çalışsın; formlar submit'te sonuç göstersin.
+- CANLI GÖZLEM (hedef verildiyse) — ısrarcı ol: önce `browser_navigate` ile hedef ekranı AÇ; `TimeoutError`/ağ hatası \
+alırsan BİR KEZ daha dene ve `browser_wait_for` ile sayfa yüklenene kadar BEKLE. Açıldıysa renk/tipografi/component/ \
+yerleşimi `browser_snapshot` ile incele ve BİREBİR uygula. Ekranı GERÇEKTEN açamazsan jenerik tasarıma düş; o durumda \
+çıktının EN BAŞINA `<!-- Canlı Gözlem: alınamadı — <kısa neden>; jenerik tasarım kullanıldı -->` yorumu bırak (zorunlu, \
+analist bunu görüp tekrar deneyebilsin). Ekranı açtıysan böyle bir 'alınamadı' yorumu YAZMA.
 {ui_hint}
-Yalnızca HTML içeriğini ver — başka açıklama ekleme, kod bloğu (```) işareti kullanma."""
+Yalnızca HTML içeriğini ver (gerekliyse en başta tek satır canlı-gözlem durum yorumu) — başka açıklama ekleme, kod bloğu (```) işareti kullanma."""
 
 
 def _html_fence_soyut(yanit: str) -> str:
@@ -190,8 +195,27 @@ def gorev_mockup_uret(analiz_md: str, iste_metni: str, baslik: str = "",
                        onbellek=not kapsam)
     yanit = _html_fence_soyut(yanit)
     yol = _kaydet(GOREV_MOCKUP_DOSYA, yanit)
+    # tasarim_kaynagi DÜRÜST olmalı (owner 2026-10-22): hedef URL tanımlı diye 'canli' demek YANILTICI —
+    # agent navigasyon timeout/ağ hatası alıp JENERİK tasarıma düşmüş olabilir. Agent'ın çıktısındaki fallback
+    # işaretini + makine-doğrulanmış gözlem durumunu birlikte değerlendir.
+    kaynak, gozlem_neden = "jenerik", ""
+    if kapsam:
+        _bas = (yanit[:2500] or "").lower()
+        _jenerik = any(s in _bas for s in (
+            "jenerik admin", "canlı ekrandan alınamadı", "canli ekrandan alinamadi", "gezilemedi",
+            "tasarım rehberine göre jenerik", "tasarim rehberine gore jenerik", "tasarım dili canlı ekrandan"))
+        try:
+            from .base import gozlem_durum_oku as _gdo
+            _d = _gdo() or {}
+        except Exception:
+            _d = {}
+        if _d.get("yapildi") and not _jenerik:
+            kaynak = "canli"
+        else:
+            kaynak = "canli_basarisiz"   # hedef vardı ama gerçek tasarım alınamadı → analist bilmeli (tekrar dene)
+            gozlem_neden = _d.get("neden") or ("navigasyon/ağ hatası — canlı ekran gezilemedi" if _jenerik else "canlı gözlem doğrulanamadı")
     return {"dosya": yol.name, "html": yanit, "boyut": yol.stat().st_size,
-            "tasarim_kaynagi": "canli" if kapsam else "jenerik"}
+            "tasarim_kaynagi": kaynak, "gozlem_neden": gozlem_neden}
 
 
 def gorev_mockup_duzelt(talimat: str) -> dict:

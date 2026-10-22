@@ -6943,10 +6943,16 @@ async function _jgMockupPoll(isDuzelt) {
   if (staleEl) staleEl.style.display = _jgMockupStale ? '' : 'none';
   document.getElementById('jg-mockup-sonuc').style.display = '';
   document.getElementById('jg-mockup-geri-btn').style.display = d.geri_al ? '' : 'none';
-  const kaynak = d.tasarim_kaynagi === 'canli' ? '🌐 canlı tasarım baz alındı' : '⚠ jenerik tasarım (canlı hedef yok)';
+  // tasarim_kaynagi: canli (gerçek gözlem) · canli_basarisiz (hedef vardı ama gezilemedi → jenerik) · jenerik (hedef yok)
+  const kaynak = d.tasarim_kaynagi === 'canli' ? '🌐 canlı tasarım baz alındı'
+    : d.tasarim_kaynagi === 'canli_basarisiz' ? '⚠ canlı gözlem BAŞARISIZ — jenerik tasarım (gerçek ekran gezilemedi)'
+    : '⚠ jenerik tasarım (canlı hedef yok)';
   document.getElementById('jg-mockup-kaynak').textContent = kaynak;
   const boyutKb = d.boyut ? (d.boyut / 1024).toFixed(0) + ' KB' : '';
-  _jgMsg('jg-mockup-msg', `✓ Mockup hazır${boyutKb ? ' · ' + boyutKb : ''}${d.tasarim_kaynagi === 'jenerik' ? ' · mevcut tasarımla eşleşme için Bağlam Filtresi → Task canlı uygulama hedefini girin' : ''}`, 'ok');
+  const ekMesaj = d.tasarim_kaynagi === 'canli_basarisiz'
+    ? ` · ⚠ canlı ekran gezilemedi${d.gozlem_neden ? ' (' + escHtml(d.gozlem_neden) + ')' : ''} → gerçek tasarım için VPN/ağ ve Bağlam Filtresi → Task canlı uygulama hedefini kontrol edip <b>tekrar üretin</b>`
+    : d.tasarim_kaynagi === 'jenerik' ? ' · mevcut tasarımla eşleşme için Bağlam Filtresi → Task canlı uygulama hedefini girin' : '';
+  _jgMsg('jg-mockup-msg', `✓ Mockup hazır${boyutKb ? ' · ' + boyutKb : ''}${ekMesaj}`, d.tasarim_kaynagi === 'canli_basarisiz' ? 'warn' : 'ok');
   if (!isDuzelt) jgMockupAc();   // ilk üretimde önizlemeyi aç
   else { const f = document.getElementById('gorev-mockup-iframe'); if (f && document.getElementById('gorev-mockup-modal').classList.contains('visible')) f.srcdoc = _jgMockupHtml; }
 }
