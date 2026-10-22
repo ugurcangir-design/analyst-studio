@@ -89,6 +89,9 @@ davranış (butonlar/formlar/sekme geçişleri) AYNEN korunmalı.
 - Tek HTML dosyası (CSS ve JS gömülü); dış CDN kullanabilirsin. Türkçe UI metinleri.
 - Tıklanabilir butonlar çalışsın; formlar submit'te sonuç göstersin.
 - Talimat belirsizse en makul yorumu uygula; prototipi bozma.
+- İKON: emoji ikon (👁 ✏ 🔍 🔔 ⚙ 🗑 vb.) EKLEME/KULLANMA — mevcut prototipin ikon stilini (SVG/kütüphane) koru; \
+  talimat 'ikon düzelt' derse emojiyi inline SVG (stroke/line ikon) ile değiştir, yeni emoji koyma.
+- İstenen değişiklik birden çok yeri ilgilendiriyorsa (ör. hem edit hem detail) HEPSİNE tutarlı uygula.
 - Yalnızca HTML içeriğini ver — başka açıklama ekleme, kod bloğu (```) işareti kullanma."""
 
 
@@ -138,7 +141,13 @@ Kurallar:
 - MEVCUT EKRAN TASARIMINI BİREBİR KORU: gözlemlenen canlı uygulamanın renk paleti, tipografi, \
 buton/form/tablo component'leri, boşluk ve yerleşim dilini AYNEN kullan — yeni ekran mevcut \
 ürünün bir PARÇASI gibi görünsün, kopuk/jenerik durmasın. (Canlı gözlem yoksa tasarım rehberine uy.)
-- YENİ İSTE'yi eksiksiz karşıla: ilgili form alanları, butonlar, tablo/liste, durumlar, örnek veri.
+- YENİ İSTE'yi eksiksiz ve İSTENEN HER YERDE karşıla: iste birden çok ekran/konum belirtiyorsa (ör. 'edit VE detail \
+butonu', 'liste ve modal') çözümü/formatı HEPSİNE AYNI ŞEKİLDE uygula — birinde tam, diğerinde eksik/farklı format \
+bırakma. İstenen asıl değişiklik (ör. 'provider karşılıklarını SÜTUN olarak göster') her ilgili yerde BİREBİR aynı olsun.
+- İKONLAR — EMOJİ KULLANMA: gerçek üründe emoji ikon (👁 ✏ 🔍 🔔 ⚙ 🗑 ↻ ➕ gibi) YOKTUR; emoji kullanırsan mockup \
+gerçek ekrana benzemez. Gözlemlenen ekrandaki ikon stilini kullan — aynı ikon kütüphanesini/SVG'yi ya da sade inline \
+SVG (stroke/line ikon) ile eşleştir. Buton/aksiyon ikonları (detail=göz, edit=kalem, sil=çöp vb.) gerçek ekrandaki \
+görünümle AYNI olsun, emoji değil.
 - Türkçe UI metinleri, profesyonel görünüm. Tıklanabilir butonlar çalışsın; formlar submit'te sonuç göstersin.
 - CANLI GÖZLEM (hedef verildiyse) — ısrarcı ol: önce `browser_navigate` ile hedef ekranı AÇ; `TimeoutError`/ağ hatası \
 alırsan BİR KEZ daha dene ve `browser_wait_for` ile sayfa yüklenene kadar BEKLE. Açıldıysa renk/tipografi/component/ \
