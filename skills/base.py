@@ -2013,6 +2013,34 @@ def canli_gozlem_kapsamini_cikar(markdown: str) -> str:
 _KANIT_ETIKET = re.compile(r"[ \t]*`?\[K:[^\]\n]*\]`?")   # model etiketi bazen `…` içinde yazar → boş `` kalmasın
 
 
+_ARAC_CAGRI_DESENLERI = [
+    re.compile(r"(?is)<\s*(?:antml:)?function_calls\s*>.*?<\s*/\s*(?:antml:)?function_calls\s*>\s*"),
+    re.compile(r"(?is)<\s*(?:antml:)?invoke\b.*?<\s*/\s*(?:antml:)?invoke\s*>\s*"),
+    re.compile(r"(?is)<\s*(?:antml:)?parameter\b.*?<\s*/\s*(?:antml:)?parameter\s*>\s*"),
+    # Kapanmamış / tek kalmış açılış-kapanış etiketi kalıntıları (model bloğu yarıda kesilmiş olabilir)
+    re.compile(r"(?im)^\s*<\s*/?\s*(?:antml:)?(?:function_calls|invoke|parameter)\b[^>]*>\s*$\n?"),
+]
+# Araç çağrısına giren ajan ara-sözü (1. tekil, gelecek/şimdiki): "… arıyorum/bakıyorum, sonra … işleyeceğim."
+# Analiz metni kişisel değildir (emir/ü.ç. kipi) → bu satırlar güvenle silinir.
+_AJAN_ARA_SOZ = re.compile(
+    r"(?im)^\s*(?:şimdi\s+|önce\s+)?[^\n]{0,200}?\b(?:ar[ıi]yorum|bak[ıi]yorum|inceliyorum|kontrol\s+ediyorum|"
+    r"çağ[ıi]r[ıi]yorum|işleyece[ğg]im|üretece[ğg]im|yazaca[ğg]im|ekleyece[ğg]im|arayaca[ğg]im)\b[^\n]*\.?\s*$\n?")
+
+
+def arac_cagri_temizle(markdown: str) -> str:
+    """Model çıktısına METİN olarak sızan araç-çağrısı iskelesini (`<invoke>/<parameter>/<function_calls>`,
+    `antml:` önekli varyantları dahil) + bunlara giren 1. tekil ajan ara-sözünü siler. CLI `--tools ""`
+    modunda model bazen Grep/Read çağrısını metin olarak yazıp analiz yerine koyuyordu (bulgu: MBSUATEAM-362
+    FE çıktısında ham `<invoke name="Grep">` blokları). Tüm analiz çıkış yolları (görev/teknik/düzelt) +
+    Jira yazımı + few-shot bu fonksiyondan geçer. Fail-safe."""
+    md = markdown or ""
+    for d in _ARAC_CAGRI_DESENLERI:
+        md = d.sub("", md)
+    if "<invoke" in markdown or "function_calls" in markdown:   # yalnız sızıntı varsa ara-sözü de ele (yan etki önlemi)
+        md = _AJAN_ARA_SOZ.sub("", md)
+    return re.sub(r"\n{3,}", "\n\n", md).strip()
+
+
 def kanit_etiketlerini_temizle(markdown: str) -> str:
     """`[K: kaynak]` kanıt/izlenebilirlik etiketlerini metinden siler.
 
@@ -2126,7 +2154,8 @@ def jira_icin_temizle(markdown: str) -> str:
     boş kalan madde satırları → bölüm numaraları ardışık (`[K:]` etiketleri HTML yorumundan hemen sonra silinir)."""
     if not markdown:
         return markdown
-    m = yonetici_ozetini_cikar(markdown)
+    m = arac_cagri_temizle(markdown)   # araç-çağrısı iskelesi sızmışsa Jira'ya ASLA gitmez (savunma)
+    m = yonetici_ozetini_cikar(m)
     m = canli_gozlem_kapsamini_cikar(m)
     m = _HTML_YORUM.sub("", m)
     # Açık/ZORUNLU sorular Jira gövdesine GİTMEZ (owner kararı 2026-10-21). "Jira'dan içeriği çek" ile

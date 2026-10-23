@@ -113,10 +113,11 @@ def _temizle(md: str) -> str:
     # içeriğini aldı'). Örnek yalnız STİL/DERİNLİK referansıdır — anahtarlar gürültü → nötr metne çevrilir.
     md = _JIRA_KEY_DESEN.sub("(ilgili görev)", md)
     try:
-        from .base import canli_gozlem_kapsamini_cikar, kanit_etiketlerini_temizle, yonetici_ozetini_cikar
+        from .base import canli_gozlem_kapsamini_cikar, kanit_etiketlerini_temizle, yonetici_ozetini_cikar, arac_cagri_temizle
         # Yönetici Özeti örneğe GİRMEZ: girince model stil olarak kopyalayıp kendi özetini yazıyor
         # → analizde çift özet (regresyon). Özet zaten deterministik, kod tarafında üretilir.
-        md = kanit_etiketlerini_temizle(canli_gozlem_kapsamini_cikar(yonetici_ozetini_cikar(md)))
+        # arac_cagri_temizle: ham araç-çağrısı iskelesi sızmış eski örnek few-shot'a girmesin.
+        md = arac_cagri_temizle(kanit_etiketlerini_temizle(canli_gozlem_kapsamini_cikar(yonetici_ozetini_cikar(md))))
     except Exception:
         pass
     return _redakte(md).strip()

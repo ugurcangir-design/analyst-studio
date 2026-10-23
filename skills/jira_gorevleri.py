@@ -23,7 +23,7 @@ from .base import (
     referans_dosyalari_hazirla, _ref_bloklari_olustur, load_context_filter,
     canli_uygulama_baglami_hazirla,
     yonetici_ozeti_olustur, yonetici_ozetini_cikar, jira_icin_temizle,
-    ai_ara_sozleri_temizle,
+    ai_ara_sozleri_temizle, arac_cagri_temizle,
     MAX_TOKENS_KISA, MAX_TOKENS_COMBINED, MAX_TOKENS_UZUN,
 )
 
@@ -52,6 +52,7 @@ def _meta_notlari_temizle(metin: str) -> str:
     Bunlar promptta yasak olmasına rağmen bazen çıkıyor; Jira description'a
     gitmeden burada kesilir. Birden çok arka arkaya boş satır da sıkıştırılır.
     AI'ın süreç anlatımı ara sözleri ("Şimdi raporu yazıyorum." vb.) de temizlenir."""
+    metin = arac_cagri_temizle(metin)   # araç-çağrısı XML'i sızmışsa (CLI --tools "" → model Grep'i metin yazar) temizle
     for desen in _META_NOT_DESENLERI:
         metin = desen.sub("", metin)
     metin = ai_ara_sozleri_temizle(metin)
@@ -1456,6 +1457,9 @@ _GOREV_DUZELT_SISTEM = (
     "verilecek. Talimatın istediği kısmı düzelt; DOKUNULMAYAN bölümleri AYNEN koru — yeniden yazma, "
     "kısaltma, başlık değiştirme. Aynı Markdown biçimini, bölüm başlıklarını ve ID şemasını koru. "
     "Doğruluk, gözlemlenebilirlik ve spekülasyon-yasağı kurallarını GEVŞETME (gözleyemediğini uydurma). "
+    "ARAÇ YOK: hiçbir aracı çağırma, `<invoke>`/`<function_calls>`/`<parameter>` YAZMA, referans/dosya "
+    "aramaya KALKMA, 'arıyorum/bakıyorum/işleyeceğim' gibi niyet cümlesi yazma — gereken TÜM bağlam bu "
+    "mesajda verildi; doğrudan güncellenmiş analizi üret. "
     "Tüm (güncellenmiş) analizi eksiksiz olarak <teknik_analiz>…</teknik_analiz> içinde dön."
 )
 

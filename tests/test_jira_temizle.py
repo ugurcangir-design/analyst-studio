@@ -126,6 +126,18 @@ _it = B.jira_icin_temizle(_isk)
 chk("'Bu katmanda iş' satırı silinir", "Bu katmanda iş" not in _it)
 chk("tekrarlı '### Kaynak Görev:' başlıkları silinir, iş kalır", "Kaynak Görev" not in _it and "## 1. Amaç" in _it and "Gerçek iş" in _it)
 
+# Araç-çağrısı iskelesi (owner 2026-10-23: MBSUATEAM-362 FE çıktısında ham <invoke> sızmıştı) — hem doğrudan
+# arac_cagri_temizle hem jira_icin_temizle elemeli; gerçek içerik korunmalı, sızıntı yokken metin değişmemeli.
+_AC = ("## 3. Teknik Gereksinimler\nAnalistin işaret ettiği fault_catalog bilgisini referanslarda arıyorum, sonra işleyeceğim.\n\n"
+       "<invoke name=\"Grep\">\n<parameter name=\"pattern\">fault_catalog</parameter>\n</invoke>\n\nGerçek analiz içeriği.")
+_act = B.arac_cagri_temizle(_AC)
+chk("arac_cagri_temizle: <invoke>/<parameter> + ajan ara-sözü silinir, içerik kalır",
+    "<invoke" not in _act and "<parameter" not in _act and "arıyorum" not in _act
+    and "Gerçek analiz içeriği." in _act and "## 3. Teknik Gereksinimler" in _act, _act[:160])
+chk("sızıntı yokken metin değişmez (yan etki yok)",
+    B.arac_cagri_temizle("## Amaç\nServisi çağırıyor.") == "## Amaç\nServisi çağırıyor.")
+chk("jira_icin_temizle de <invoke> eler", "<invoke" not in B.jira_icin_temizle(_AC) and "Gerçek analiz içeriği." in B.jira_icin_temizle(_AC))
+
 print()
 if _hata:
     print(f"JIRA TEMİZLİK TESTLERİ BAŞARISIZ ({_hata} hata)")
