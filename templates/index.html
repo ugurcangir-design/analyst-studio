@@ -3323,6 +3323,13 @@ function temaDegistir() {
       .ku-card .k{font-size:11px;color:var(--text3);font-weight:500}
       .ku-card.vurgu{border-color:var(--accent-soft);background:linear-gradient(180deg,var(--accent-soft),var(--surface2))}
       .ku-card.vurgu .n{color:var(--accent)}
+      /* Segment: Ekip Kullanımı | Ölçüm & Teşhis (owner 2026-10-23 — teşhis tabloları ana rapordan ayrı sekmede) */
+      .ku-seg{display:inline-flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-bottom:16px}
+      .ku-seg-btn{background:var(--surface);border:0;color:var(--text2);font-size:12.5px;padding:7px 15px;cursor:pointer;font-family:inherit}
+      .ku-seg-btn + .ku-seg-btn{border-left:1px solid var(--border)}
+      .ku-seg-btn.aktif{background:var(--accent);color:#fff;font-weight:600}
+      #page-kullanim[data-ku-view="ekip"] [data-kuview="olcum"]{display:none!important}
+      #page-kullanim[data-ku-view="olcum"] [data-kuview="ekip"]{display:none!important}
       /* Kompakt tablo (kota ölçümü · kalite vekilleri · örnek havuzu) */
       .ku-tablo{width:100%;border-collapse:collapse;font-size:12.5px}
       .ku-tablo th{font-weight:600;text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);color:var(--text2);white-space:nowrap}
@@ -3341,7 +3348,7 @@ function temaDegistir() {
       .ku-col.bugun .cb{background:linear-gradient(180deg,#fbbf24,#f59e0b)}
       .spin-sm{display:inline-block;width:12px;height:12px;border:2px solid rgba(45,212,191,.3);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;vertical-align:-1px}
     </style>
-    <div class="page" id="page-kullanim">
+    <div class="page" id="page-kullanim" data-ku-view="ekip">
       <div class="panel">
         <div class="panel-head">
           <div class="panel-title">Kullanım Raporu</div>
@@ -3354,7 +3361,13 @@ function temaDegistir() {
           <button class="btn btn-ghost btn-sm" onclick="kullanimYukle()">Yenile</button>
         </div>
         <div class="panel-body">
-          <!-- Few-shot ortak eğitim havuzu durumu (agent'ın analiz kalitesinden öğrenmesi) -->
+          <!-- Segment: günlük ekip kullanımı (varsayılan) vs owner ölçüm/teşhis tabloları (owner 2026-10-23) -->
+          <div class="ku-seg">
+            <button class="ku-seg-btn aktif" id="ku-seg-ekip" onclick="kuView('ekip')">Ekip Kullanımı</button>
+            <button class="ku-seg-btn" id="ku-seg-olcum" onclick="kuView('olcum')" title="Owner teşhis: aşama bazlı tüketim, kota ölçümü, analiz kalitesi">Ölçüm &amp; Teşhis</button>
+          </div>
+          <!-- ÖLÇÜM & TEŞHİS görünümü (owner): aşama tüketim + token/kota/kalite tabloları -->
+          <div id="ku-view-olcum" data-kuview="olcum">
           <div id="ku-cagri-panel" style="margin-bottom:14px;padding:11px 14px;border:1px solid var(--border);background:var(--surface2);border-radius:9px;font-size:12.5px">
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
               <b>Aşama bazlı tüketim</b> <span style="color:var(--text3)">(bu makine · son <select id="ku-cagri-gun" onchange="kuCagriOzetYukle()" style="font-size:12px"><option value="1">1 gün</option><option value="7" selected>7 gün</option><option value="30">30 gün</option></select>)</span>
@@ -3362,6 +3375,11 @@ function temaDegistir() {
             </div>
             <div id="ku-cagri-tablo" style="margin-top:8px;overflow:auto"></div>
           </div>
+          <!-- Token/Maliyet + Kota ölçümü + Analiz kalitesi tabloları (kullanimYukle buraya yazar) -->
+          <div id="ku-ozet-olcum" class="ku-ozet-wrap" style="margin-bottom:20px"></div>
+          </div><!-- /ku-view-olcum -->
+          <!-- EKİP KULLANIMI görünümü (varsayılan): aktivite, roster, trend, eğitim havuzu -->
+          <div id="ku-view-ekip" data-kuview="ekip">
           <div id="ku-ornek-panel" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px;padding:11px 14px;border:1px solid var(--border);background:var(--surface2);border-radius:9px;font-size:12.5px">
             <svg class="ico" style="width:16px;height:16px;color:var(--accent);flex-shrink:0"><use href="#i-zap"/></svg>
             <div style="flex:1;min-width:220px">
@@ -3439,6 +3457,7 @@ function temaDegistir() {
           <div class="panel-section-label" style="margin-top:18px">Son Task İşlemleri</div>
           <div id="ku-tasklar"></div>
           <div id="ku-legend" style="margin-top:16px;font-size:11.5px;color:var(--text3);line-height:1.7"></div>
+          </div><!-- /ku-view-ekip -->
         </div>
       </div>
     </div>
@@ -4383,21 +4402,32 @@ async function kullanimYukle() {
     const tk = d.token_ozet || {};
     // Kota ölçümü: güncelleme öncesi/sonrası olay bazında ortalama tüketim (ekip verisi gömülü token'la gelir)
     const ks = d.karsilastirma || {}; const ksO = ks.olaylar || {};
+    // Sade tablo (owner 2026-10-23): "Önce" verisi hiç yoksa öncesi/sonrası sütunları GİZLE (hepsi boş kolon gürültü).
+    const varOnce = Object.keys(ksO).some(k => (ksO[k].once && ksO[k].once.n));
     const ksSatir = Object.keys(ksO).filter(k => (ksO[k].once || ksO[k].sonra)).sort().map(k => { const o = ksO[k].once || {}, s = ksO[k].sonra || {}; const dp = ksO[k].degisim_okuma_pct;
-      return `<tr><td>${escHtml(k)}</td><td>${o.n || 0}</td><td>${o.n ? tokFmt(o.ort_okuma) : '·'}</td><td>${o.n ? Math.round(o.ort_sure_sn / 60) + ' dk' : '·'}</td><td>${s.n || 0}</td><td><b>${s.n ? tokFmt(s.ort_okuma) : '·'}</b></td><td>${s.n ? Math.round(s.ort_sure_sn / 60) + ' dk' : '·'}</td><td style="color:${dp == null ? 'var(--text2)' : (dp < 0 ? 'var(--green)' : 'var(--red)')}">${dp == null ? '·' : (dp > 0 ? '+' : '') + dp + '%'}</td></tr>`; }).join('');
-    const karsGrubu = ksSatir ? `<div class="ku-grup ku-grup-genis"><div class="ku-grup-lbl" title="Olay başına ortalama okuma (girdi + cache okuma). Kesim: ${escHtml(ks.esik || '')} (KOTA_OLCUM_BASLANGIC). Ekip verisi 'Uzaktan Çek' ile gelir; güncellemeyi alan analistlerin işleri 'sonra' kovasına düşer.">Kota ölçümü — güncelleme öncesi / sonrası (olay başına ortalama)</div><div style="overflow:auto"><table class="ku-tablo"><thead><tr><th>Olay</th><th>Önce n</th><th>Önce okuma</th><th>Önce süre</th><th>Sonra n</th><th>Sonra okuma</th><th>Sonra süre</th><th>Δ okuma</th></tr></thead><tbody>${ksSatir}</tbody></table></div></div>` : '';
-    // Analiz kalitesi vekilleri (haftalık): açık soru ort., zorunlu ort., düzeltme/cevap oranı — azalış = iyileşme
+      const onceC = varOnce ? `<td>${o.n || 0}</td><td>${o.n ? tokFmt(o.ort_okuma) : '·'}</td><td>${o.n ? Math.round(o.ort_sure_sn / 60) + ' dk' : '·'}</td>` : '';
+      const dC = varOnce ? `<td style="color:${dp == null ? 'var(--text2)' : (dp < 0 ? 'var(--green)' : 'var(--red)')}">${dp == null ? '·' : (dp > 0 ? '+' : '') + dp + '%'}</td>` : '';
+      return `<tr><td>${escHtml(k)}</td>${onceC}<td>${s.n || 0}</td><td><b>${s.n ? tokFmt(s.ort_okuma) : '·'}</b></td><td>${s.n ? Math.round(s.ort_sure_sn / 60) + ' dk' : '·'}</td>${dC}</tr>`; }).join('');
+    const ksBaslik = varOnce ? 'Kota ölçümü — güncelleme öncesi / sonrası (olay başına ortalama)' : 'Kota ölçümü — olay başına ortalama okuma';
+    const ksHead = varOnce ? '<th>Olay</th><th>Önce n</th><th>Önce okuma</th><th>Önce süre</th><th>Sonra n</th><th>Sonra okuma</th><th>Sonra süre</th><th>Δ okuma</th>' : '<th>Olay</th><th>n</th><th>Okuma</th><th>Süre</th>';
+    const karsGrubu = ksSatir ? `<div class="ku-grup ku-grup-genis"><div class="ku-grup-lbl" title="Olay başına ortalama okuma (girdi + cache okuma). Kesim: ${escHtml(ks.esik || '')} (KOTA_OLCUM_BASLANGIC). Ekip verisi 'Uzaktan Çek' ile gelir; güncellemeyi alan analistlerin işleri 'sonra' kovasına düşer.">${ksBaslik}</div><div style="overflow:auto"><table class="ku-tablo"><thead><tr>${ksHead}</tr></thead><tbody>${ksSatir}</tbody></table></div></div>` : '';
+    // Analiz kalitesi vekilleri (haftalık): açık soru ort., zorunlu ort., düzeltme/cevap oranı — azalış = iyileşme.
+    // Sade tablo: tüm haftalarda açık/zorunlu boşsa (eski sürüm olayları) o iki sütunu GİZLE.
     const kh = ((d.kalite || {}).haftalar || []).slice(-24);
-    const kalSatir = kh.map(h => `<tr><td>${escHtml(h.hafta)}</td><td>${escHtml(h.olay)}</td><td>${h.analiz}</td><td>${h.ort_acik_soru == null ? '·' : h.ort_acik_soru}</td><td>${h.ort_zorunlu == null ? '·' : h.ort_zorunlu}</td><td>${h.duzeltme}</td><td>${h.duzeltme_orani == null ? '·' : Math.round(h.duzeltme_orani * 100) + '%'}</td></tr>`).join('');
-    const kaliteGrubu = kalSatir ? `<div class="ku-grup ku-grup-genis"><div class="ku-grup-lbl" title="Vekil göstergeler: analiz başına ortalama açık soru / zorunlu soru (yeni sürüm olaylarından) ve analistin Düzelt / Cevapları İşle kullanma oranı. Haftalar içinde AZALMA = analiz kalitesinde iyileşme sinyali.">Analiz kalitesi — haftalık vekil göstergeler</div><div style="overflow:auto"><table class="ku-tablo"><thead><tr><th>Hafta</th><th>Olay</th><th>Analiz</th><th>Ort. açık soru</th><th>Ort. zorunlu</th><th>Düzelt/Cevap</th><th>Düzeltme oranı</th></tr></thead><tbody>${kalSatir}</tbody></table></div></div>` : '';
-    // Kart grupları önce, geniş tablo grupları (kota karşılaştırma · kalite) kendi satırlarında sonra
+    const varSoru = kh.some(h => h.ort_acik_soru != null || h.ort_zorunlu != null);
+    const kalSatir = kh.map(h => { const sC = varSoru ? `<td>${h.ort_acik_soru == null ? '·' : h.ort_acik_soru}</td><td>${h.ort_zorunlu == null ? '·' : h.ort_zorunlu}</td>` : '';
+      return `<tr><td>${escHtml(h.hafta)}</td><td>${escHtml(h.olay)}</td><td>${h.analiz}</td>${sC}<td>${h.duzeltme}</td><td>${h.duzeltme_orani == null ? '·' : Math.round(h.duzeltme_orani * 100) + '%'}</td></tr>`; }).join('');
+    const kalHead = varSoru ? '<th>Hafta</th><th>Olay</th><th>Analiz</th><th>Ort. açık soru</th><th>Ort. zorunlu</th><th>Düzelt/Cevap</th><th>Düzeltme oranı</th>' : '<th>Hafta</th><th>Olay</th><th>Analiz</th><th>Düzelt/Cevap</th><th>Düzeltme oranı</th>';
+    const kaliteGrubu = kalSatir ? `<div class="ku-grup ku-grup-genis"><div class="ku-grup-lbl" title="Vekil göstergeler: analiz başına ortalama açık soru / zorunlu soru (yeni sürüm olaylarından) ve analistin Düzelt / Cevapları İşle kullanma oranı. Haftalar içinde AZALMA = analiz kalitesinde iyileşme sinyali.">Analiz kalitesi — haftalık vekil göstergeler</div><div style="overflow:auto"><table class="ku-tablo"><thead><tr>${kalHead}</tr></thead><tbody>${kalSatir}</tbody></table></div></div>` : '';
+    // Token/Maliyet + kota + kalite → "Ölçüm & Teşhis" segmentine (ku-ozet-olcum); ekip kartları ku-ozet'te kalır.
     const tokenGrubu = ((tk.cagri || tk.girdi || tk.cikti)
       ? `<div class="ku-grup"><div class="ku-grup-lbl" title="AI çağrılarında harcanan token ve tahmini maliyet (CLI JSON usage + API usage). Cache okuma girdiden düşülür.">Token / Maliyet</div><div class="ku-cards">${kart(tokFmt(tk.girdi), 'Girdi Token')}${kart(tokFmt(tk.cikti), 'Çıktı Token')}${kart(tokFmt(tk.cache_oku), 'Cache Okuma', true)}${kart(usdFmt(tk.maliyet_usd), 'Tahmini Maliyet')}</div></div>`
       : '') + karsGrubu + kaliteGrubu;
     document.getElementById('ku-ozet').innerHTML =
       `<div class="ku-grup"><div class="ku-grup-lbl">Aktivite (kümülatif)</div><div class="ku-cards">${kart(oz.bugun || 0, 'Bugün', true)}${kart(oz.bu_hafta || 0, 'Bu Hafta', true)}${kart(oz.bu_ay || 0, 'Bu Ay', true)}</div></div>` +
-      `<div class="ku-grup"><div class="ku-grup-lbl">Seçili Aralık Toplamı</div><div class="ku-cards">${kart(d.toplam_analiz, 'Toplam İşlem')}${kart(d.toplam_jira_task, 'Açılan Task')}${kart(d.analist_sayisi, 'Analist')}</div></div>` +
-      tokenGrubu;
+      `<div class="ku-grup"><div class="ku-grup-lbl">Seçili Aralık Toplamı</div><div class="ku-cards">${kart(d.toplam_analiz, 'Toplam İşlem')}${kart(d.toplam_jira_task, 'Açılan Task')}${kart(d.analist_sayisi, 'Analist')}</div></div>`;
+    const _olcumEl = document.getElementById('ku-ozet-olcum');
+    if (_olcumEl) _olcumEl.innerHTML = tokenGrubu || '<span style="color:var(--text3)">Bu aralıkta ölçüm verisi yok.</span>';
     // Zaman trendi — dikey bar chart, okunur tarih etiketleri, TIKLANABİLİR (drill-down)
     const trend = d.trend || []; const maxv = Math.max(1, ...trend.map(t => t.adet));
     const bugunKey = new Date().toISOString().slice(0, 10);
@@ -4475,6 +4505,19 @@ function kullanimExcel() {
 }
 // Few-shot ortak eğitim havuzu durumu (owner görünürlüğü)
 // Faz 0 ölçüm — aşama bazlı AI tüketimi (logs/usage/cagri.jsonl)
+// Kullanım Raporu segmenti (owner 2026-10-23): 'ekip' (varsayılan, günlük kullanım) / 'olcum' (owner teşhis
+// tabloları). CSS `#page-kullanim[data-ku-view]` karşı görünümü gizler; buton aktifliği + olcum'a geçişte
+// aşama tablosunu tazele. localStorage'da hatırlanır.
+function kuView(v) {
+  v = (v === 'olcum') ? 'olcum' : 'ekip';
+  const p = document.getElementById('page-kullanim'); if (!p) return;
+  p.setAttribute('data-ku-view', v);
+  const be = document.getElementById('ku-seg-ekip'), bo = document.getElementById('ku-seg-olcum');
+  if (be) be.classList.toggle('aktif', v === 'ekip');
+  if (bo) bo.classList.toggle('aktif', v === 'olcum');
+  try { localStorage.setItem('ku-view', v); } catch (e) {}
+  if (v === 'olcum') kuCagriOzetYukle();   // aşama tablosu yalnız bu sekmede görünür → açılınca tazele
+}
 async function kuCagriOzetYukle() {
   const kap = document.getElementById('ku-cagri-tablo'); if (!kap) return;
   const gun = (document.getElementById('ku-cagri-gun') || {}).value || 7;
@@ -4489,13 +4532,22 @@ async function kuCagriOzetYukle() {
     if (!(d.asamalar || []).length) { kap.innerHTML = '<span style="color:var(--text3)">Henüz kayıt yok — ölçüm bu sürümle başladı; ilk analizden sonra dolar.</span>'; return; }
     const _malBaslik = d.cli_modu ? 'API-eşd.*' : '~Maliyet';
     const _malTitle = d.cli_modu ? 'CLI/abonelik modunda GERÇEK ücret DEĞİL — aynı iş API&apos;de yapılsaydı ki tahmini tutar; yalnız modeller arası göreli kota ağırlığı için.' : 'API modunda tahmini ücret.';
+    // Sade tablo (owner 2026-10-23): gürültü satırlarını at — tümü-sıfır olanları ELE, etiketsiz/'?' aşamayı
+    // '(etiketsiz)' yap; en çok cache okuyan üstte (kota ağırlığına göre sırala).
+    const _asamalar = (d.asamalar || [])
+      .filter(a => (a.cagri || a.tur || a.girdi || a.cikti || a.cache_oku || a.cache_yaz))
+      .map(a => { const ad = (a.asama || '').trim(); return Object.assign({}, a, { asama: (!ad || ad === '?') ? '(etiketsiz)' : ad }); })
+      .sort((x, y) => (y.cache_oku || 0) - (x.cache_oku || 0));
+    if (!_asamalar.length) { kap.innerHTML = '<span style="color:var(--text3)">Bu aralıkta ölçülebilir çağrı yok.</span>'; return; }
     kap.innerHTML = `<table class="ku-table" style="width:100%;font-size:12px"><thead><tr><th>Aşama</th><th>Model</th><th>Canlı</th><th>Çağrı</th><th>Tur</th><th>Girdi</th><th>Çıktı</th><th>Cache yaz</th><th>Cache oku</th><th title="${_malTitle}">${_malBaslik}</th><th>Süre</th><th>Tekrar/Tavan</th></tr></thead><tbody>`
-      + d.asamalar.map(a => `<tr><td>${escHtml(a.asama)}</td><td>${escHtml(String(a.model).replace('claude-', ''))}</td><td>${a.canli ? '🌐' : ''}</td><td>${f(a.cagri)}</td><td>${f(a.tur)}</td><td>${f(a.girdi)}</td><td>${f(a.cikti)}</td><td>${f(a.cache_yaz)}</td><td><b>${f(a.cache_oku)}</b></td><td>${a.maliyet_usd ? '$' + a.maliyet_usd.toFixed(2) : '·'}</td><td>${Math.round((a.sure_sn || 0) / 60)} dk</td><td>${a.tekrar || 0} / ${a.max_tur || 0}</td></tr>`).join('')
+      + _asamalar.map(a => `<tr><td>${escHtml(a.asama)}</td><td>${escHtml(String(a.model).replace('claude-', ''))}</td><td>${a.canli ? '🌐' : ''}</td><td>${f(a.cagri)}</td><td>${f(a.tur)}</td><td>${f(a.girdi)}</td><td>${f(a.cikti)}</td><td>${f(a.cache_yaz)}</td><td><b>${f(a.cache_oku)}</b></td><td>${a.maliyet_usd ? '$' + a.maliyet_usd.toFixed(2) : '·'}</td><td>${Math.round((a.sure_sn || 0) / 60)} dk</td><td>${a.tekrar || 0} / ${a.max_tur || 0}</td></tr>`).join('')
       + '</tbody></table><div style="color:var(--text3);margin-top:4px">' + (d.cli_modu ? '<b>API-eşd.*</b> = CLI/abonelik modunda token başına ÜCRET YOK; bu sütun aynı işin API fiyatıyla tahminidir, yalnızca hangi modelin kotayı daha ağır tükettiğini KARŞILAŞTIRMAK için. Gerçek ölçü: cache oku + tur. ' : '') + 'Cache oku = agentik döngüde her turda yeniden okunan bağlam; kota tüketiminin ana kalemi. Gözlem fazı (aşama "gozlem") ile analiz ("gorev:analiz" vb.) artık ayrı ölçülür.</div>';
   } catch (e) { kap.innerHTML = ''; }
 }
 async function ornekDurumYukle() {
-  kuCagriOzetYukle();
+  // Segmenti kayıtlı tercihten uygula (kuView olcum ise aşama tablosunu da tazeler → ayrıca çağırmaya gerek yok)
+  let _kv = 'ekip'; try { _kv = localStorage.getItem('ku-view') || 'ekip'; } catch (e) {}
+  kuView(_kv);
   const el = document.getElementById('ku-ornek-ozet');
   if (!el) return;
   try {
