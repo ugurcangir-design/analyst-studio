@@ -103,9 +103,9 @@ class _Yanit:
 
 
 _sahte = [
-    {"id": "aaaaaaaa1111", "tip": "teknik", "ts": "2026-10-01T10:00:00Z", "jira_key": "X-1", "icerik": HAM},
-    {"id": "bbbbbbbb2222", "tip": "teknik", "ts": "2026-10-05T10:00:00Z", "jira_key": "X-1", "icerik": GOVDE + "yeni sürüm\n"},  # aynı key, daha yeni → bu kalır
-    {"id": "../kotu*id", "tip": "teknik", "ts": "2026-10-06T10:00:00Z", "jira_key": "X-9", "icerik": GOVDE},             # geçersiz id → atlanır
+    {"id": "aaaaaaaa1111", "tip": "teknik", "ts": "2026-10-01T10:00:00Z", "jira_key": "MBSTRADE-1", "icerik": HAM},
+    {"id": "bbbbbbbb2222", "tip": "teknik", "ts": "2026-10-05T10:00:00Z", "jira_key": "MBSTRADE-1", "icerik": GOVDE + "yeni sürüm\n"},  # aynı key, daha yeni → bu kalır
+    {"id": "../kotu*id", "tip": "teknik", "ts": "2026-10-06T10:00:00Z", "jira_key": "MBSTRADE-9", "icerik": GOVDE},             # geçersiz id → atlanır
     {"id": "cccccccc3333", "tip": "surec", "ts": "2026-10-02T10:00:00Z", "jira_key": "", "icerik": UZUN},                 # > 45k → kırpılır
     {"id": "dddddddd4444", "tip": "teknik", "ts": "2026-10-03T10:00:00Z", "jira_key": "", "icerik": "kısa"},               # < 300 → atlanır
     "çöp",
@@ -113,7 +113,7 @@ _sahte = [
 requests.get = lambda url, *a, **k: _Yanit(_sahte)
 ok, msg = O.ornekleri_cek()
 dosyalar = sorted(p.name for p in O.ORNEK_DIR.glob("*.json") if not p.name.startswith("."))
-chk("çekim: 2 örnek yazıldı (X-1 en yeni + kırpılmış süreç), geçersiz id + kısa + çöp atlandı",
+chk("çekim: 2 örnek yazıldı (MBSTRADE-1 en yeni + kırpılmış süreç), geçersiz id + kısa + çöp atlandı",
     ok and dosyalar == ["surec_cccccccc3333.json", "teknik_bbbbbbbb2222.json"], (msg, dosyalar))
 kir = json.loads((O.ORNEK_DIR / "surec_cccccccc3333.json").read_text(encoding="utf-8"))
 chk("çekim: 45k tavanı + 'kırpıldı' işareti", len(kir["icerik"]) <= O._MAX_ICERIK + 40 and kir["icerik"].endswith("…(örnek kırpıldı)"))
@@ -138,13 +138,13 @@ chk("_temizle: yabancı task anahtarı nötrlenir, dahili ID korunur",
     and all(x in _key for x in ("AC-1", "BR-004", "NFR-2", "PA-003")), _key[:200])
 
 # Yerelde DAHA YENİ kayıt varsa çekilen eskisi onu ezmez
-yerel_yeni = {"id": "eeeeeeee5555", "tip": "teknik", "ts": "2026-10-09T10:00:00+03:00", "jira_key": "X-2", "icerik": GOVDE + "yerel\n"}
+yerel_yeni = {"id": "eeeeeeee5555", "tip": "teknik", "ts": "2026-10-09T10:00:00+03:00", "jira_key": "MBSTRADE-2", "icerik": GOVDE + "yerel\n"}
 (O.ORNEK_DIR / "teknik_eeeeeeee5555.json").write_text(json.dumps(yerel_yeni), encoding="utf-8")
-requests.get = lambda url, *a, **k: _Yanit([{"id": "ffffffff6666", "tip": "teknik", "ts": "2026-10-07T10:00:00Z", "jira_key": "X-2", "icerik": GOVDE}])
+requests.get = lambda url, *a, **k: _Yanit([{"id": "ffffffff6666", "tip": "teknik", "ts": "2026-10-07T10:00:00Z", "jira_key": "MBSTRADE-2", "icerik": GOVDE}])
 O.ornekleri_cek()
 chk("çekim: aynı jira_key'in yereldeki DAHA YENİ kaydı korunur, eski çekilen yazılmaz",
     (O.ORNEK_DIR / "teknik_eeeeeeee5555.json").exists() and not (O.ORNEK_DIR / "teknik_ffffffff6666.json").exists())
-requests.get = lambda url, *a, **k: _Yanit([{"id": "ffffffff7777", "tip": "teknik", "ts": "2026-10-12T10:00:00Z", "jira_key": "X-2", "icerik": GOVDE}])
+requests.get = lambda url, *a, **k: _Yanit([{"id": "ffffffff7777", "tip": "teknik", "ts": "2026-10-12T10:00:00Z", "jira_key": "MBSTRADE-2", "icerik": GOVDE}])
 O.ornekleri_cek()
 chk("çekim: daha yeni çekilen → eski yerel silinir, yeni yazılır",
     not (O.ORNEK_DIR / "teknik_eeeeeeee5555.json").exists() and (O.ORNEK_DIR / "teknik_ffffffff7777.json").exists())
@@ -152,7 +152,7 @@ chk("çekim: daha yeni çekilen → eski yerel silinir, yeni yazılır",
 # ornek_kaydet de aynı hijyenden geçer (push gövdesi temiz)
 _pushlar.clear()
 chk("ornek_kaydet: içerik temiz + redakte, push gövdesinde sır yok",
-    O.ornek_kaydet("teknik", HAM, jira_key="X-3") is True and _pushlar and SIR not in _pushlar[-1]["icerik"]
+    O.ornek_kaydet("teknik", HAM, jira_key="MBSTRADE-3") is True and _pushlar and SIR not in _pushlar[-1]["icerik"]
     and "<!-- RAG" not in _pushlar[-1]["icerik"] and "Canlı Gözlem" not in _pushlar[-1]["icerik"])
 
 # ★ korumalı + ts-bazlı budama

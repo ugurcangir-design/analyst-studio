@@ -37,6 +37,32 @@ _RAG_YORUM = re.compile(r"<!--\s*RAG:.*?-->\s*", re.S)   # analiz başındaki `<
 # (AC-1, BR-004, NFR-2, PA-003, FR-12 — en çok 3 harf) KORUNUR, bozulmaz.
 _JIRA_KEY_DESEN = re.compile(r"\b[A-Z]{4,}[A-Z0-9]*-\d+\b")
 
+# EĞİTİM HAVUZU BOARD KAPISI (owner 2026-10-23: 'UAT board tasklarını dahil etme; trade/ops analiz+taskları dahil et').
+# Yalnız bu projelerin KEYLİ örnekleri (Task analizi / FE+BE / köprü) havuza girer; UAT (MBSUATEAM) gibi diğer
+# board'lar DIŞLANIR. Keysiz (doküman süreç/teknik) örnekler board'suz olduğundan dahil EDİLİR.
+# `.env` `EGITIM_DAHIL_PROJELER` (virgülle) ile ezilebilir.
+def _egitim_dahil_projeler() -> set[str]:
+    try:
+        from .base import env_oku
+        ham = (env_oku("EGITIM_DAHIL_PROJELER") or "").strip()
+    except Exception:
+        ham = ""
+    if ham:
+        return {p.strip().upper() for p in ham.replace(";", ",").split(",") if p.strip()}
+    return {"MBSTRADE", "MBSOPS"}
+
+
+def _egitime_uygun_mu(jira_key: str) -> bool:
+    """KEYLİ örnek yalnız izinli board'dansa (trade/ops) kabul; UAT vb. reddedilir. Keysiz (doküman) → kabul.
+    Sentetik FE anahtarı (`KEY::FE`) gerçek projesine, `EKRAN-n` zaten havuza girmez."""
+    jk = (jira_key or "").strip()
+    if not jk:
+        return True   # doküman analizi — board'suz, dahil
+    proje = jk.split("-", 1)[0].strip().upper()
+    if not proje or proje == "EKRAN":
+        return True   # anahtar değil / sentetik ekran kaydı (başka yerde zaten elenir)
+    return proje in _egitim_dahil_projeler()
+
 
 def _id_gecerli(ornek_id: str | None) -> bool:
     return bool(_ID_DESEN.fullmatch(str(ornek_id or "").strip()))
@@ -214,6 +240,9 @@ def ornek_kaydet(tip: str, cikti_md: str, girdi_ozeti: str = "",
     """Onaylı analizi örnek olarak yereli+sink'e kaydeder. tip: 'surec'|'teknik'. Fail-safe."""
     try:
         tip = (tip or "").strip().lower()
+        # Board kapısı (owner 2026-10-23): UAT board task'ları eğitim havuzuna GİRMEZ (yalnız trade/ops + doküman).
+        if not _egitime_uygun_mu(jira_key):
+            return False
         # _temizle: etiket/özet/gözlem kapsamı/RAG yorumu çıkar + sır/şifre redakte (merkeze gidecek)
         icerik = _temizle(cikti_md or "").strip()
         if tip not in ("surec", "teknik") or len(icerik) < 300:
@@ -292,6 +321,9 @@ def ornekleri_cek() -> tuple[bool, str]:
                 if not isinstance(o, dict):
                     continue
                 tip = (o.get("tip") or "").strip().lower()
+                # Board kapısı: başka analistlerin push'ladığı UAT örneklerini de ÇEKMEDE ele (owner 2026-10-23)
+                if not _egitime_uygun_mu(o.get("jira_key") or ""):
+                    continue
                 icerik = _icerik_kirp(_temizle(o.get("icerik") or ""))
                 if tip not in ("surec", "teknik") or len(icerik) < 300:
                     continue
@@ -526,7 +558,9 @@ def ornek_bloklari(sorgu_metni: str, tip: str | None = None, n: int = 2,
     """Few-shot: mevcut girdiye (sorgu_metni) EN ALAKALI n örneği BM25 ile seçip prompt
     içerik bloğu listesi döndürür. Örnek yoksa/alaka yoksa boş liste. Fail-safe (asla patlamaz)."""
     try:
-        havuz = [o for o in _oku_hepsi() if not tip or o.get("tip") == tip]
+        # Board kapısı (owner 2026-10-23): fix öncesi yakalanmış UAT örnekleri havuzda kalmış olabilir →
+        # enjeksiyonda da ele (dosyadan silmeye gerek yok, few-shot'a girmez).
+        havuz = [o for o in _oku_hepsi() if (not tip or o.get("tip") == tip) and _egitime_uygun_mu(o.get("jira_key") or "")]
         if not havuz or not (sorgu_metni or "").strip():
             return []
         # BM25 sıralama (retrieval hazır; yoksa basit örtüşme).

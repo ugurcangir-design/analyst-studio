@@ -26,9 +26,9 @@ def chk(ad, kosul, ek=""):
 tmp = Path(tempfile.mkdtemp())
 O.YILDIZ_DOSYA = tmp / "ornek_yildiz.json"
 havuz = [
-    {"id": "a1a1a1a1a1a1", "tip": "teknik", "ts": "2026-10-01T00:00:00", "icerik": "ödeme servisi endpoint validasyon " * 40, "jira_key": "X-1"},
-    {"id": "b2b2b2b2b2b2", "tip": "teknik", "ts": "2026-10-05T00:00:00", "icerik": "rapor ekranı filtre tablo " * 40, "jira_key": "X-2"},
-    {"id": "c3c3c3c3c3c3", "tip": "teknik", "ts": "2026-10-03T00:00:00", "icerik": "ödeme iade akışı endpoint " * 40, "jira_key": "X-3"},
+    {"id": "a1a1a1a1a1a1", "tip": "teknik", "ts": "2026-10-01T00:00:00", "icerik": "ödeme servisi endpoint validasyon " * 40, "jira_key": "MBSTRADE-1"},
+    {"id": "b2b2b2b2b2b2", "tip": "teknik", "ts": "2026-10-05T00:00:00", "icerik": "rapor ekranı filtre tablo " * 40, "jira_key": "MBSTRADE-2"},
+    {"id": "c3c3c3c3c3c3", "tip": "teknik", "ts": "2026-10-03T00:00:00", "icerik": "ödeme iade akışı endpoint " * 40, "jira_key": "MBSTRADE-3"},
 ]
 O._oku_hepsi = lambda: [dict(o) for o in havuz]
 
