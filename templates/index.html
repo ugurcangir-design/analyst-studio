@@ -1930,13 +1930,27 @@ html[data-theme="light"] .suspend-overlay { background: rgba(245,247,250,.92); }
 .jg-modal-body { padding: 16px 22px; flex: 1; overflow: auto; min-height: 0; }
 .jg-modal-aksiyon { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 22px; border-top: 1px solid var(--border); background: var(--surface2); }
 .jg-aksiyon-gruplu { display: grid; grid-template-columns: 1fr; gap: 10px; align-items: stretch; }
-.jg-ak-grup { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.jg-ak-grup { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); transition: opacity .15s; }
 .jg-ak-grup.jg-ak-jira { border-color: var(--accent); }
+/* Adım-bazlı vurgu (owner 2026-10-23): adımı GELMEYEN grup sönük + katlı durur (buton yine çalışır,
+   yalnız görsel olarak geri plana iner → "şu an bu adım değil" hissi). Aktif grup tam opak. */
+.jg-ak-grup.jg-ak-sonuk { opacity: .45; }
+.jg-ak-grup.jg-ak-sonuk:hover, .jg-ak-grup.jg-ak-sonuk:focus-within { opacity: 1; }
+.jg-ak-grup.jg-ak-aktif { box-shadow: 0 0 0 2px var(--accent-weak, rgba(99,102,241,.25)); }
 .jg-ak-baslik { display: flex; align-items: baseline; gap: 10px; font-size: 12px; color: var(--text); }
 .jg-ak-baslik span { font-size: 11.5px; color: var(--text3); }
 .jg-ak-satir { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
-.jg-ak-btn { display: inline-flex; flex-direction: column; gap: 3px; }
-.jg-ak-alt { font-size: 11px; color: var(--text3); line-height: 1.3; max-width: 190px; }
+.jg-ak-btn { display: inline-flex; flex-direction: column; gap: 3px; position: relative; }
+/* Alt açıklamalar artık KALICI değil — yalnız o düğmeye gelince/odaklanınca görünür (owner 2026-10-23:
+   11 düğme × kalıcı gri metin görsel gürültü yapıyordu). Layout kaymasın diye absolute balon. */
+.jg-ak-alt { font-size: 11px; color: var(--text3); line-height: 1.3; max-width: 200px;
+  display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; z-index: 5;
+  padding: 5px 8px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.18); }
+.jg-ak-btn:hover .jg-ak-alt, .jg-ak-btn:focus-within .jg-ak-alt { display: block; }
+/* "Ek olarak" ikincil satır — Mockup / Ekran Görüntüsü birincil Jira aksiyonlarının altında, küçük/soluk */
+.jg-ak-ek { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border); }
+.jg-ak-ek-lbl { font-size: 11.5px; color: var(--text3); }
+.jg-ak-ek .btn { font-size: 12px; padding: 5px 9px; }
 .jg-aksiyon-gruplu .jg-duzelt-row { flex: 1 1 100%; }
 .jg-aksiyon-gruplu .jg-warn { flex: none; }
 /* Görev analizi — JARVIS işlem paneli (üretim/düzeltme sırasında modal içi) */
@@ -3149,7 +3163,7 @@ function temaDegistir() {
             </div>
           </div>
           <div class="jg-ak-grup jg-ak-jira" id="jg-ak-jira">
-            <div class="jg-ak-baslik"><b>2 · Jira'ya aktar</b><span>analiz hazır olunca — ikisinden birini seçin</span></div>
+            <div class="jg-ak-baslik"><b>2 · Jira'ya aktar</b><span>birincil: ikisinden birini seçin</span></div>
             <div class="jg-ak-satir">
               <span class="jg-katman-sec" id="jg-katman-sec" style="display:none" title="FE+BE ayrı analiz: hangi katman(lar) Jira'ya yazılsın? Bazen yalnız FE ya da yalnız BE işi vardır.">
                 <label><input type="checkbox" id="jg-kat-be" onchange="_jgKatmanEtiketGuncelle()"> BE → <span id="jg-kat-be-hedef">kaynak task</span>'a yaz</label>
@@ -3166,15 +3180,19 @@ function temaDegistir() {
                   <svg class="ico"><use href="#i-plus"/></svg> Yeni Task Aç
                 </button><span class="jg-ak-alt">bu task'a dokunmaz, <b>yeni</b> task açar</span>
               </div>
+            </div>
+            <!-- İkincil (opsiyonel) ek'ler — birincil Jira aksiyonunun altında, görsel olarak geri planda -->
+            <div class="jg-ak-ek">
+              <span class="jg-ak-ek-lbl">Ek olarak (opsiyonel):</span>
               <div class="jg-ak-btn">
-                <button class="btn btn-outline" id="jg-mockup-panel-btn" onclick="jgMockupPanelAc()" title="Analiz edilen göreve EK yeni bir isteye göre, mevcut uygulama tasarımını baz alan HTML ekran mockup'ı üretir.">
+                <button class="btn btn-outline btn-sm" id="jg-mockup-panel-btn" onclick="jgMockupPanelAc()" title="Analiz edilen göreve EK yeni bir isteye göre, mevcut uygulama tasarımını baz alan HTML ekran mockup'ı üretir.">
                   <svg class="ico"><use href="#i-zap"/></svg> Ekran Mockup'ı
-                </button><span class="jg-ak-alt">isteğe bağlı: task'a ekran taslağı ekle</span>
+                </button><span class="jg-ak-alt">task'a ekran taslağı ekle</span>
               </div>
               <div class="jg-ak-btn">
-                <button class="btn btn-outline" id="jg-ekrangoruntu-btn" onclick="jgEkranGoruntuEkle()" title="Analizin adlandırdığı canlı ekranların görüntüsünü alır ve bu task'a EK olarak yükler (Jira'da görünür). Canlı iç uygulama görüntüsüdür — hassas veri içerebilir.">
+                <button class="btn btn-outline btn-sm" id="jg-ekrangoruntu-btn" onclick="jgEkranGoruntuEkle()" title="Analizin adlandırdığı canlı ekranların görüntüsünü alır ve bu task'a EK olarak yükler (Jira'da görünür). Canlı iç uygulama görüntüsüdür — hassas veri içerebilir.">
                   <svg class="ico"><use href="#i-monitor"/></svg> Ekran Görüntüsü Ekle
-                </button><span class="jg-ak-alt">isteğe bağlı: ilgili ekranların görüntüsünü task'a ekle</span>
+                </button><span class="jg-ak-alt">ilgili ekranların görüntüsünü task'a ekle</span>
               </div>
             </div>
             <span class="jg-warn">Yönetici Özeti, kanıt etiketleri ve açık sorular (ZORUNLU dahil) Jira'ya <b>yazılmaz</b> — sorular yalnız bu ekranda kalır. Cevapsız zorunlu soru varsa onayda <b>uyarılırsınız</b> ama task'a eklenmez.</span>
@@ -5781,7 +5799,29 @@ function _jgSonucGoster(key) {
   } else { _jgSorulariRender('', s.cevaplar); tab.style.display = 'none'; }
   jgModalTab('ana');
   _jgSwitcherRender();
+  _jgAdimVurgu(key, s);   // adım-bazlı: analiz durumuna göre grupları vurgula/sönükleştir
   _jgSetKaydet();   // yenilemeye dayanıklı: güncel set + aktif key'i sakla
+}
+// Adım-bazlı vurgu (owner 2026-10-23: "hangi adımdayım belli değil"): hangi aksiyon grubu ŞU AN
+// anlamlıysa onu öne çıkar, adımı gelmeyeni sönükleştir (buton yine çalışır — yalnız görsel geri plan).
+//   • kabul-only (rapor): yalnız '3 · Sonrası' anlamlı → 1 ve 2 sönük.
+//   • taslak (analiz var, Jira'ya yazılmamış): '2 · Jira'ya aktar' birincil; '3 · Sonrası' sönük.
+//   • Jira'ya yazıldı/tamamlandı: '1 · İyileştir' sönük, '3 · Sonrası' öne çıkar.
+//   • hata/boş içerik: yalnız '1 · İyileştir' (düzelt) anlamlı → 2 ve 3 sönük.
+function _jgAdimVurgu(key, s) {
+  s = s || {};
+  const g1 = document.getElementById('jg-ak-iyilestir');
+  const g2 = document.getElementById('jg-ak-jira');
+  const g3 = document.getElementById('jg-ak-sonra');
+  if (!g1 || !g2 || !g3) return;
+  const set = (el, sonuk, aktif) => { el.classList.toggle('jg-ak-sonuk', !!sonuk); el.classList.toggle('jg-ak-aktif', !!aktif); };
+  const kabulOnly = !!s.kabulOnly && !!s.kabul;
+  const dolu = !!((s.markdown || '').trim());
+  const yazildi = !!s.tamamlandi || !!(s.jiraYazildi && (s.jiraYazildi.be || s.jiraYazildi.fe));
+  if (kabulOnly)      { set(g1, true, false);  set(g2, true, false);  set(g3, false, true);  }
+  else if (s.hata || !dolu) { set(g1, false, true); set(g2, true, false);  set(g3, true, false);  }
+  else if (yazildi)   { set(g1, true, false);  set(g2, false, false); set(g3, false, true);  }
+  else                { set(g1, false, false); set(g2, false, true);  set(g3, true, false);  }
 }
 // Kurtarma: içerik bellekten gittiyse ÖNCE sunucu deposundan (tam analiz + açık sorular),
 // yoksa Jira açıklamasından geri yükle.
