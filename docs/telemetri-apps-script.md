@@ -165,6 +165,36 @@ olarak prompt'a enjekte eder. Havuz ≤80 (en yeni), örnek ≤45k (Sheet hücre
 - Kötü/eski örnek: Kullanım Raporu → Ortak Eğitim Havuzu → (yerel) Sil; merkezden kalıcı silmek için
   'Ornekler' sekmesinden satırı sil.
 
+### UAT / izin-dışı board örneklerini merkezden temizle (owner 2026-10-23)
+Uygulama tarafı artık UAT (`MBSUATEAM`) ve trade/ops dışı board örneklerini few-shot havuzuna SOKMUYOR
+(yakalama + çekme + enjeksiyonda elenir — `ornek_havuzu._egitime_uygun_mu`), bu yüzden Sheet'teki eski satırlar
+ZARARSIZ. Yine de kalıcı temizlemek istersen: Apps Script editöründe aşağıdaki fonksiyonu bir kez **Run** et
+(web deploy GEREKMEZ; `jira_key` projesi izin listesinde olmayan satırları — keysiz/doküman satırlarını KORUYARAK — siler):
+
+```javascript
+// Tek seferlik bakım — 'Ornekler' sekmesinden izin-dışı board (UAT vb.) örneklerini siler.
+// İzinli: MBSTRADE, MBSOPS + keysiz (doküman). Çalıştır: editörde seç → Run. Geri alınamaz (önce File → Make a copy önerilir).
+function temizleUatOrnekleri() {
+  var IZINLI = ['MBSTRADE', 'MBSOPS'];           // trade + ops; gerekirse ekle
+  var osh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Ornekler');
+  if (!osh || osh.getLastRow() < 2) { Logger.log('Ornekler boş'); return; }
+  var basliklar = osh.getRange(1, 1, 1, osh.getLastColumn()).getValues()[0];
+  var kol = basliklar.indexOf('jira_key');        // G sütunu (0-tabanlı index)
+  if (kol < 0) { Logger.log('jira_key sütunu yok'); return; }
+  var veri = osh.getRange(2, 1, osh.getLastRow() - 1, osh.getLastColumn()).getValues();
+  var silinecek = 0;
+  for (var i = veri.length - 1; i >= 0; i--) {     // alttan yukarı → satır indeksleri kaymaz
+    var jk = (veri[i][kol] || '').toString().trim();
+    if (!jk) continue;                             // keysiz (doküman) → KORU
+    var proje = jk.split('-')[0].toUpperCase();
+    if (proje === 'EKRAN') continue;               // sentetik → zaten girmez, dokunma
+    if (IZINLI.indexOf(proje) === -1) { osh.deleteRow(i + 2); silinecek++; }
+  }
+  Logger.log('Silinen izin-dışı örnek: ' + silinecek);
+}
+```
+Hızlı alternatif (manuel): 'Ornekler' sekmesi → `jira_key` (G) sütununa filtre → `MBSUATEAM`/`CORE`… satırlarını seç → sil.
+
 ## Token tüketimi ekip verisinde (2026-10-19) — script değişikliği GEREKMEZ
 Script yalnız yukarıdaki sütunları sakladığından `token` alanı düşüyordu (ekip verisinde token hep boştu). Uygulama artık
 token özetini `dokuman` sütununa `⟨tok g=…,c=…,cy=…,co=…,n=…,usd=…⟩` olarak gömer; Uzaktan Çek bunu geri ayrıştırıp
