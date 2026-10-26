@@ -160,8 +160,6 @@ def _katman_tahmin(metin: str) -> str:
     return "belirsiz"
 
 
-# Hata/bug + basit-iş sinyalleri → çıktı KISA-NET tutulur (gereksiz servis/DB/öneri dökümü YOK).
-_HATA_TIP_DESEN = re.compile(r"(bug|hata|sorun|defect|problem|ar[ıi]za)", re.IGNORECASE)
 # Yalnız BUG İFADESİ sayılır ('çalışmıyor', 'hata alıyor', 'fix:'); çıplak 'hata'/'eksik'/'çalışm' DEĞİL —
 # 'Hata mesajlarının gösterilmesi', 'Çalışma saatleri', 'Eksik alanların eklenmesi' özellik işidir (kısa moda düşmemeli).
 _HATA_KELIME_DESEN = re.compile(
@@ -174,13 +172,12 @@ _HATA_KELIME_DESEN = re.compile(
 
 
 def _hata_gorev_mi(gorev: dict) -> bool:
-    """Görev bir HATA/BUG ya da küçük düzeltme mi? issuetype veya başlık sinyaliyle.
-    True → analiz çıktısı KISA-NET tutulur (bug modu). Yalnızca ipucu; içeriği AI değerlendirir."""
-    tip = str(gorev.get("type") or gorev.get("issuetype") or "")
-    baslik = (gorev.get("summary") or "")
-    if _HATA_TIP_DESEN.search(tip):
-        return True
-    return bool(_HATA_KELIME_DESEN.search(baslik))
+    """Görev GERÇEKTEN küçük bir HATA/BUG mı? → çıktı KISA-NET (Sorun+Çözüm). Yalnızca ipucu; içeriği AI değerlendirir.
+    **Owner 2026-10-26 (MBSUATEAM-362):** issuetype TEK BAŞINA sinyal DEĞİL — bu UAT board'unda geliştirme/iyileştirme
+    işleri de varsayılan 'Hata' tipiyle açılıyor; issuetype'a bakınca doğrulama/özellik taskları yanlışça kısa moda
+    düşüp standart şablonu kaybediyordu. Kısa mod artık yalnız BAŞLIKTA bariz bir hata/çökme ifadesi varsa
+    (`çalışmıyor`, `hata alıyor`, `fix:`, `bozuk`…); yoksa standart şablon (ilgili başlıklar dolu, gereksizler atlanmış)."""
+    return bool(_HATA_KELIME_DESEN.search(gorev.get("summary") or ""))
 
 
 def _issuelink_ayikla(issuelinks: list) -> list[dict]:

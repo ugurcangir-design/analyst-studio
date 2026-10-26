@@ -158,9 +158,14 @@ r = JG.gorev_yeni_task_olustur("MBS", mode="tek", markdown="## x", baslik="Ekran
 chk("gorev_yeni_task_olustur: 'EKRAN-n' sentetik kaynak açıkça yok sayılır (Relates kurulmaz)", not any(o[0] == "relates" and o[2] == "EKRAN-3" for o in olay))
 chk("_hata_gorev_mi: özellik işi ('Hata mesajlarının gösterilmesi', 'Çalışma saatleri', 'Eksik alanların eklenmesi') BUG DEĞİL",
     not any(JG._hata_gorev_mi({"summary": s}) for s in ("Hata mesajlarının gösterilmesi", "Çalışma saatleri ekranı", "Eksik alanların eklenmesi")))
-chk("_hata_gorev_mi: bug ifadesi ('çalışmıyor', 'hata alıyor', 'açılmıyor', 'fix:', 'Hata: … silinemiyor') ya da tip Bug → kısa mod",
+chk("_hata_gorev_mi: başlıkta bariz hata ifadesi ('çalışmıyor', 'hata alıyor', 'açılmıyor', 'fix:', 'Hata: … silinemiyor') → kısa mod",
     all(JG._hata_gorev_mi(g) for g in ({"summary": "Filtre çalışmıyor"}, {"summary": "Kaydet'te hata alıyor"}, {"summary": "Rapor açılmıyor"},
-                                       {"summary": "fix: login"}, {"summary": "Hata: kayıt silinemiyor"}, {"summary": "Export eklensin", "issuetype": "Bug"})))
+                                       {"summary": "fix: login"}, {"summary": "Hata: kayıt silinemiyor"})))
+# owner 2026-10-26 (MBSUATEAM-362): issuetype TEK BAŞINA kısa moda düşürmez — UAT board'unda geliştirme işleri de
+# 'Hata' tipiyle açılıyor; başlık nötrse standart şablon kullanılmalı (ilgili başlıklar dolu, gereksizler atlanmış).
+chk("_hata_gorev_mi: 'Hata'/'Bug' tipli ama başlık nötr geliştirme → kısa mod DEĞİL (standart şablon)",
+    not any(JG._hata_gorev_mi(g) for g in ({"summary": 'Event Mapping Data> Events "ID kontrolü"', "issuetype": "Hata"},
+                                           {"summary": "Export eklensin", "issuetype": "Bug"})))
 ys = JG._yapisal_skor({"summary": "x", "description": "Bu değişiklik için amaç: hız. acceptance test sonra.\n" + "y" * 150})
 chk("_yapisal_skor: gövde içi 'değişiklik'/'amaç:'/'acceptance' başlık sayılmaz (çapalı)", not ys["bolumler"]["degisiklik"] and not ys["bolumler"]["amac"]
     and not ys["bolumler"]["kabul"], ys)
