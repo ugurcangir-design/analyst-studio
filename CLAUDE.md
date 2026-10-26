@@ -230,6 +230,18 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   (`_gorev_acik_sorular_uret`):** teknik tasarım/endpoint seçimi SORU DEĞİL (yalnız iş-kuralı/ürün belirsizliği soru olur).
   **Gözlem (`gozlem.py`):** kritik veri-çekme çağrılarının yanıt gövdesini `browser_network_request` ile açıp gerçek alan
   adlarını rapora yazması istenir. Test: `tests/test_servis_sozlesme.py` (sentetik OpenAPI, 0 token).
+  **HATA KODU + ÖZEL KURAL YOKSA → KARAR+NOT, SORU DEĞİL (owner 2026-10-26, MBSUATEAM-362):** analiz, kaynaktan
+  türetilebilir noktaları açık soru yapıyordu (hata kodu/errorCode, tolerans/karşılaştırma kuralı, bozuk kayıt temizlik
+  yöntemi, hata mesajı boş/uzun davranışı, diyalog). Bulgu: Fault Catalog (`B-Hata-Kodu-Referansı-Fault-Catalog`),
+  `DB-nebula-…`, `Servis-nebula-…`, `F1-…El-Kitabı` referans corpus'ta **ZATEN VAR** — eksik referans değil, kullanım/
+  sınıflama sorunuydu (agent çözüp "kısmen" deyip soruya çeviriyordu). Merkezî fault_catalog (horizon; 27 kod =
+  nova 15103 + sky-panel 10101) nebula event-mapping kodu İÇERMEZ → nebula kendi `INVALID_MAPPING_REQUEST`'ini döner;
+  doğru cevap = mevcut kodu kullan + `message` ile ayır + 'spesifik kod gerekiyorsa BE/katalog' NOTU. Düzeltme (hepsi
+  kaynak kodda → git ile dağıtılır): (1) `gorev_teknik_analiz` promptu — 'HATA KODU → Fault Catalog + gözlenen kodu
+  kullan, soru açma' + 'ÖZEL KURAL YOKSA → gözlenen davranış + Not, soru değil'. (2) `_gorev_acik_sorular_uret` —
+  'KAYNAKTAN TÜRETİLEBİLİR SORU ÜRETME' (hata kodu/tolerans/temizlik/mesaj/diyalog → karar+not). (3) `soru_cozumleme`
+  sınıflandırıcı — bu kategoriler `cevaplandi` (karar+not olarak analize işlenir), `kismi`/`karar_gerekli` değil; yalnız
+  ürün NİYETİ (kapsam/model seçimi) `karar_gerekli` kalır. Test: `tests/test_servis_sozlesme.py` (prompt+sınıflandırıcı kuralları).
 - **Kaynak-öncelik sırası (KANONİK, tek liste — `_ORTAK_EK_KURALLAR` + 4 rol promptu hizalı):**
   `Swagger > Canlı Uygulama Gözlemi > Confluence > BRD/Süreç > Jira > UI`. İlke: **gözlemlenen/doğrulanabilir
   gerçek veri (Swagger sözleşmesi + MCP canlı gözlem), tarif edilen istekten (BRD) ÜSTÜNDÜR** — BRD

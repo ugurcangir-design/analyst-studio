@@ -250,6 +250,15 @@ Her soru için toplanmış KANITLAR (Swagger/Confluence/Jira/canlı-app referans
 # GÖREV — her soru için karar ver
 - `cevaplandi`: kanıt soruyu NET cevaplıyor → `cevap` (kısa, emir kipinde; geliştiricinin uygulayacağı biçimde) + `kanit`
   (`[K: Swagger:<dosya>]` / `[K: Confluence:<sayfa>]` / `[K: Jira:KEY]` / `[K: Kod:<yol>]`).
+  ✅ KAYNAKTAN TÜRETİLEBİLİR SORULAR `cevaplandi` sayılır — ürün/BE kararına BIRAKMA (owner 2026-10-26):
+    • Hata kodu / errorCode: Fault Catalog (`B-Hata-Kodu-Referansı`) + servisin gözlenen hata zarfından ver. Katalogda
+      o servis/durum için ÖZEL kod yoksa, GÖZLENEN mevcut kodu (ör. `INVALID_MAPPING_REQUEST`) kullan + durum ayrımını
+      `message` ile yap. Cevabı böyle yaz; "hangi kod dönmeli" diye SORU açma.
+    • Karşılaştırma/tolerans kuralı, temizlik/bakım yöntemi, hata mesajı gösterimi (boş/çok uzun), diyalog davranışı:
+      DB-<servis> / Servis-<servis> / API-Konvansiyonları + canlı gözlemden mevcut davranışı ver.
+    • Kaynak/gözlem ÖZEL kural göstermiyorsa: mevcut gözlenen davranışı yaz + cevabın sonuna TEK '— Not: özel kural
+      tanımlı değil; <mevcut davranış> korunur / daha spesifik X istenirse ürün/BE kararı' cümlesi. Bu `cevaplandi`'dır,
+      `kismi`/`karar_gerekli` DEĞİL. Yalnız iş-kuralı/ürün NİYETİ (hangi kapsam/model seçilecek) `karar_gerekli` kalır.
 - `kismi`: kanıt daraltıyor ama kesin değil → `cevap` = kanıta dayalı en olası yanıt + hangi parça belirsiz.
 - `karar_gerekli`: ürün/iş kararı, kanıtla kapanmaz (ör. "boş kümede baseline mi verilsin?") → `cevap` = kararı kolaylaştıran
   özet (seçenekler + kanıtın işaret ettiği taraf), kısa.
