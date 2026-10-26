@@ -216,6 +216,14 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   definitionId yoktu + agent marketId↔hasAvailableMarket koşulu türetmişti. **NOT:** mevcut analizdeki yanlışı
   düzeltmek için 'Analiz Düzelt' (task'ı yeniden okumaz); 'Baştan üret' task BAŞLIĞINI yeniden okur (başlık hâlâ
   yanlışsa geri gelir → önce başlık/ister düzeltilmeli).
+  **ÇOK EKRANLI KAPSAM (owner 2026-10-26, MBSUATEAM-353):** görev/analist notu BİRDEN ÇOK ekran adlandırıyorsa
+  (ör. Prematch + Live + Outright Program) analiz yalnız tek ekranı (canlı hedefteki) detaylandırıp diğerleri için
+  "aynı kural uygulanır `[K: Analist cevabı]`" tek satırıyla geçiyordu — oysa ekranlar farklı uç/filtre kullanabilir.
+  Düzeltme (kaynak kodda → dağıtılır): (1) `gozlem.py` `_RAPOR_FORMAT` — "ÇOK EKRAN: her adlandırılan ekrana menü/rota
+  ile git, her birini AYRI gözlemle (rota + liste ucu + filtre davranışı); 'diğerleri aynı' deme; gidemediğini
+  'Gezilemeyen'e yaz". (2) `gorev_teknik_analiz` promptu — "ÇOK EKRANLI KAPSAM: her ekranı §3/§7'de adıyla ayrı ele al
+  (rota+uç+değişiklik), Kabul Kriterleri her ekranı kapsasın; gözlemlenemeyen ekran `[K: ❓ Belirsiz]`/'⚠ gözlemlenemedi'".
+  Test: `tests/test_servis_sozlesme.py`.
 - **SERVİS/ENDPOINT KARARI — agent punt etmez, mimari kararı verir (owner 2026-10-21: 'mevcut servis varsa kullan, yoksa yeni servisi request/response ile çıkar; analiste hangi uç diye sorma'):**
   `skills/servis_sozlesme.py` (`endpoint_baglami(sorgu, ek_metin)`): kayıtlı Swagger'lardan (`reference/services/*.json`)
   task+canlı gözlemde geçen path/kaynak adlarıyla alakalı MEVCUT endpoint'leri (method+path+request/response şeması,

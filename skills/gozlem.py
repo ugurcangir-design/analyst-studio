@@ -99,6 +99,10 @@ _RAPOR_FORMAT = """
 <gozlem_raporu>
 ## Ekran ve Navigasyon
 - Route/başlık · menü yolu · giriş durumu · kapsamdaki ekranın yerleşimi (tablo/filtre/aksiyon alanları) `[K: Canlı UI:/route]`
+- **ÇOK EKRAN:** Görev/özet BİRDEN ÇOK ekran adlandırıyorsa (ör. "Prematch + Live + Outright Program"), HER adlandırılan
+  ekrana menü/rota ile GİT ve her birini AYRI gözlemle — rotası, liste/istek ucu, filtre/alan davranışı. Ekranlar arasında
+  uç/alan/filtre FARKI olabilir; birini gözleyip "diğerleri aynı" DEME. Her ekran için ayrı `[K: Canlı UI:/route]` +
+  `[K: Network:…]` ver. Gidemediğin ekranı 'Gezilemeyen'e yaz (neden); varsayma.
 
 ## Alanlar ve Bileşenler
 | Alan/Bileşen | Tip | Zorunlu | Varsayılan / Seçenekler | Davranış (disabled, bağımlılık) |

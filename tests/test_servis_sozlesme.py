@@ -77,6 +77,10 @@ chk("açık soru promptu: teknik tasarım/endpoint seçimi SORU DEĞİL", "TEKN�
 # owner 2026-10-26: hata kodu / özel kural yoksa → karar+not, soru değil (Fault Catalog'dan çöz)
 chk("prompt: HATA KODU → Fault Catalog + mevcut kodu kullan, soru açma", "HATA KODU / errorCode" in gtp and "B-Hata-Kodu-Referansı" in gtp)
 chk("prompt: ÖZEL KURAL YOKSA → NOT, soru değil", "ÖZEL KURAL YOKSA → NOT" in gtp)
+# owner 2026-10-26: çok ekranlı görevde her ekran ayrı analiz edilmeli, 'diğerleri aynı' yetersiz
+chk("prompt: ÇOK EKRANLI KAPSAM — her ekran ayrı ele alınır", "ÇOK EKRANLI KAPSAM" in gtp)
+import skills.gozlem as GZ  # noqa: E402
+chk("gözlem: ÇOK EKRAN — her adlandırılan ekrana git", "ÇOK EKRAN" in GZ._RAPOR_FORMAT)
 chk("açık soru promptu: kaynaktan türetilebilir soru üretme", "KAYNAKTAN TÜRETİLEBİLİR SORU ÜRETME" in sq)
 import skills.soru_cozumleme as SC  # noqa: E402
 chk("öz-çözümleme: kaynaktan türetilebilir → cevaplandi", "KAYNAKTAN TÜRETİLEBİLİR SORULAR `cevaplandi`" in SC._SISTEM if hasattr(SC, "_SISTEM") else "KAYNAKTAN TÜRETİLEBİLİR" in inspect.getsource(SC))
