@@ -5663,6 +5663,27 @@ function _jgGorevCoz(key) {
 // key localStorage'a yazılır; boot'ta geri yüklenir, "Göster" chip'iyle sunulur.
 const _JG_SET_KEY = 'jg-analiz-seti';
 let _jgSetYuklendi = false;
+let _jgEditorDirty = false;   // editör elle düzenlendi mi? (depo tazelemesi düzenlemeyi ezmesin)
+// Sunucu deposu = kaynak-doğruluk (owner 2026-10-26): ekran bayat localStorage'dan açılabiliyor (başka
+// oturumda/benzeri yeniden analiz yapılınca). Analiz gösterilince depoda DAHA YENİ sürüm varsa (ts_epoch) ve
+// editör elle düzenlenmemişse onu yükleyip yeniden çiz. Gerçek Jira anahtarları + sentetik `::FE` için çalışır.
+async function _jgDepodanTazele(key) {
+  try {
+    if (!/^[A-Z][A-Z0-9]+-\d+(::FE)?$/.test(key || '')) return;      // yalnız gerçek/sentetik-FE task
+    const s = _jgAnalizSeti[key]; if (!s || s.hata || s.kabulOnly) return;
+    if (_jgEditorDirty) return;                                       // elle düzenleme var → EZME
+    const d = await (await fetch('/api/jira/gorev/analiz-kayit?key=' + encodeURIComponent(key))).json();
+    if (!d || !d.ok || !d.var || !(d.markdown || '').trim()) return;
+    if (_jgEditorDirty || _jgAktifAnalizKey !== key) return;          // fetch sırasında düzenlendi/entry değişti → EZME
+    const depoTs = d.ts_epoch || 0, entryTs = s.tsEpoch || 0;
+    if (depoTs <= entryTs) return;                                    // depo daha yeni değil → dokunma
+    if ((d.markdown || '') === (s.markdown || '') && (d.acik_sorular || '') === (s.acik_sorular || '')) { s.tsEpoch = depoTs; return; }
+    s.markdown = d.markdown; s.acik_sorular = d.acik_sorular || ''; s.tsEpoch = depoTs;
+    if (d.summary) s.summary = d.summary; if (d.katman) s.katman = d.katman;
+    if (_jgAktifAnalizKey === key && !_jgMesgul()) { _jgAktifAnalizKey = null; _jgSonucGoster(key); }   // aktifse yeniden çiz (tsEpoch eşit → döngü yok)
+    _jgSetKaydet();
+  } catch (e) {}
+}
 function _jgSetKaydet() {
   try {
     const anahtarlar = Object.keys(_jgAnalizSeti);
@@ -5803,6 +5824,7 @@ function _jgSonucGoster(key) {
   }
   const s = _jgAnalizSeti[key] || {};
   _jgAktifAnalizKey = key;
+  _jgEditorDirty = false;   // yeni içerik yükleniyor → düzenlenmemiş say (depo tazelemesi serbest)
   _jgCurrent = { key: key, summary: s.summary || '' };
   document.querySelector('.jg-modal-aksiyon').style.display = '';
   document.getElementById('jg-secim').style.display = 'none';
@@ -5853,6 +5875,7 @@ function _jgSonucGoster(key) {
   _jgSwitcherRender();
   _jgAdimVurgu(key, s);   // adım-bazlı: analiz durumuna göre grupları vurgula/sönükleştir
   _jgSetKaydet();   // yenilemeye dayanıklı: güncel set + aktif key'i sakla
+  _jgDepodanTazele(key);   // sunucu deposunda DAHA YENİ sürüm varsa yükle (bayat localStorage'ı geçersiz kıl)
 }
 // Adım-bazlı vurgu (owner 2026-10-23: "hangi adımdayım belli değil"): hangi aksiyon grubu ŞU AN
 // anlamlıysa onu öne çıkar, adımı gelmeyeni sönükleştir (buton yine çalışır — yalnız görsel geri plan).
@@ -7161,6 +7184,7 @@ async function jgMockupEkTekrar(key) {
 (function () {
   const ed = document.getElementById('jg-preview-editor');
   if (ed) ed.addEventListener('input', () => {
+    _jgEditorDirty = true;   // elle düzenleme → depo tazelemesi bu entry'yi EZMEZ
     if (_jgAktifAnalizKey && _jgAktifAnalizKey === _jgMockupEntryKey) _jgMockupStaleKontrol(_jgAktifAnalizKey, ed.value);
   });
 })();
