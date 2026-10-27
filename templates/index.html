@@ -5725,7 +5725,19 @@ function _jgSecimGoster(key) {
   document.getElementById('jg-duzelt-row').style.display = 'none';
   document.querySelector('.jg-modal-aksiyon').style.display = 'none';
   const bagli = (g.baglantililar || []).filter(b => b.key);
-  const satir = (b, birincil) => `
+  // Hikaye/Story/Epic KAPSAYICI tiptir — analiz edilmez (owner 2026-10-27). Bağlı böyle bir task
+  // seçilemez; checkbox/katman yerine salt-BİLGİ satırı olarak gösterilir (jgIliskiliAnalizBaslat
+  // yalnız işaretli checkbox'ları toplar → otomatik dışarıda kalır).
+  const _bilgiTip = (t) => /hikaye|story|epic/i.test(t || '');
+  const satir = (b, birincil) => {
+    if (!birincil && _bilgiTip(b.type)) return `
+    <div class="jg-secim-satir jg-ss-bilgi" style="opacity:.75">
+      <span class="jg-ss-rol" style="background:var(--surface);color:var(--text3);border:1px solid var(--border)">BİLGİ</span>
+      <span class="jg-ss-key">${escHtml(b.key)}</span>
+      <span class="jg-ss-sum">${escHtml(b.summary || '')}</span>
+      <span style="font-size:11.5px;color:var(--text3);white-space:nowrap">${escHtml(b.type || 'Hikaye')} — analiz edilmez</span>
+    </div>`;
+    return `
     <div class="jg-secim-satir ${birincil ? 'birincil' : ''}">
       ${birincil ? '<span class="jg-ss-rol">ANALİZ</span>'
                  : `<input type="checkbox" class="jg-ss-chk" data-key="${escHtml(b.key)}" checked>`}
@@ -5733,6 +5745,7 @@ function _jgSecimGoster(key) {
       <span class="jg-ss-sum">${escHtml(b.summary || '')}</span>
       ${_jgKatSelect('jg-kat-' + b.key, birincil ? _jgKatmanTahmin((g.summary || '') + ' ' + (g.type || '')) : (b.katman || 'belirsiz'))}
     </div>`;
+  };
   document.getElementById('jg-secim-liste').innerHTML =
     satir({ key: key, summary: g.summary }, true) + bagli.map(b => satir(b, false)).join('');
   document.getElementById('jg-secim').style.display = '';
