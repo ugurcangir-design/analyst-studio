@@ -1461,6 +1461,10 @@ _GOREV_DUZELT_SISTEM = (
     "ARAÇ YOK: hiçbir aracı çağırma, `<invoke>`/`<function_calls>`/`<parameter>` YAZMA, referans/dosya "
     "aramaya KALKMA, 'arıyorum/bakıyorum/işleyeceğim' gibi niyet cümlesi yazma — gereken TÜM bağlam bu "
     "mesajda verildi; doğrudan güncellenmiş analizi üret. "
+    "TASK DİLİ: NE YAPILMAYACAĞINI anlatan negatif kapsam-dışı cümle ('… temizlenmez', '… yapılmayacaktır', "
+    "'… dokunulmaz') ÜRETME ve varsa düzelt — geliştiriciye ne YAPACAĞINI yaz; sınır gerekiyorsa `## Kapsam Dışı` "
+    "altında TEK kısa madde, aynı şeyi iki kez söyleme. Ortama özgü somut kayıt ID'si ('UAT'taki ID 17/18/19', "
+    "'dev'deki id 181/182') YAZMA — kuralı genel ifade et (tek tek ID sayma). "
     "Tüm (güncellenmiş) analizi eksiksiz olarak <teknik_analiz>…</teknik_analiz> içinde dön."
 )
 
@@ -1533,6 +1537,9 @@ _CEVAP_TALIMAT = (
     "- Sorunun ilgilendirdiği bölümü bul; oradaki `[K: ❓ Belirsiz]` / `⚠ VARSAYIM` / 'netleştirilmeli' ifadelerini kaldır ve "
     "analistin cevabını KESİN bilgi olarak, `[K: Analist cevabı]` etiketiyle yaz (endpoint/alan/kural/akış etkisi dahil).\n"
     "- Cevabın gerektirdiği küçük tutarlılık düzeltmelerini (kabul kriteri, akış adımı, hata durumu) AYNI bölümlerde yap.\n"
+    "- Cevabı analize İŞLERKEN: NE YAPILMAYACAĞINI anlatan negatif cümleye ('… temizlenmez / yapılmayacaktır') ÇEVİRME — "
+    "ne YAPILACAĞINI yaz; sınır gerekiyorsa tek kısa madde, tekrar etme. Cevapta geçse bile ortama özgü somut kayıt "
+    "ID'lerini ('UAT ID 17/18/19', 'dev id 181/182') analize yazma — kuralı genel ifade et.\n"
     "- Açık Sorular bölümü varsa cevaplanan soruları oradan ÇIKAR; kalanları aynen bırak.\n"
     "- Cevapla ilgisiz hiçbir bölüme, başlığa, numaralandırmaya DOKUNMA; analizi kısaltma/genişletme; yeniden yazma.\n\n"
     "### ANALİSTİN CEVAPLARI\n")

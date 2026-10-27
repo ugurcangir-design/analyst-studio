@@ -1555,6 +1555,13 @@ added / updated / removed olabilir."""
             "veya RAG'den gelir, SENİN görevinin parçası DEĞİLDİR. Bir yetenek/servis referansını task anahtarıyla değil "
             "SERVİS ADIYLA ver ('nebula id-mapping-service'ten …', `[K: Swagger:<servis>]`). Geliştiricinin gerçekten "
             "bakması gereken BAĞLI bir task varsa (yalnız issuelinks'te olan) `## 10` altında tek satır 'Bağlı task: KEY — neden'.\n"
+            "- NEGATİF KAPSAM-DIŞI CÜMLE YAZMA: 'bu düzeltmeyle temizlenmez', '… yapılmayacaktır', '… dokunulmaz' gibi "
+            "NE YAPILMAYACAĞINI anlatan cümleler task gövdesine girmez — geliştiriciye ne YAPACAĞINI yaz. Gerçekten bir "
+            "sınır belirtmen gerekiyorsa `## Kapsam Dışı` altında TEK kısa madde yeter; aynı şeyi iki kez söyleme "
+            "('temizlenmez … temizlik yapılmayacaktır' gibi tekrar YASAK).\n"
+            "- ORTAMA ÖZGÜ SOMUT KAYIT ID'Sİ YAZMA: 'UAT'taki ID 17/18/19', 'dev'deki id 181/182' gibi belirli ortamdaki "
+            "gerçek kayıt numaralarını analize/task'a YAZMA (ortam-bağımlı, kısa ömürlü gürültü). Kuralı GENEL ifade et: "
+            "'mevcut yetim kayıtlar bu iş kapsamında temizlenmez' yeterli — tek tek ID sayma.\n"
             "- Her cümle geliştiriciye bir iş/kural söylemeli: açıklayıcı arka plan, 'analist şunu istedi' aktarımı, "
             "'hedef: analist elle aramasın' tarzı motivasyon cümlesi YAZMA (Amaç bölümünde tek cümle yeter).\n\n"
             "# ÇIKTI BİÇİMİ\n"
@@ -2115,6 +2122,22 @@ _META_GEREKCE = re.compile(r"[^.\n|]*(?:" + _META_ISARET + r")[^.\n|]*\.?[ \t]*"
 _GOZLEM_NOTU = re.compile(
     r"(?mis)^[ \t]*(?:>[ \t]*)?[-*•]?[ \t]*\*{0,2}\s*(?:🔎|🌐|👁|⚠️?|ℹ️?|📝)?\s*"
     r"G[öo]zlem notu\b.*?(?:\n[ \t]*\n|\n(?=[ \t]*#{1,6}\s)|\Z)")
+# Negatif kapsam-dışı cümle + ortama özgü somut kayıt ID listesi AYNI satırdaysa Jira'ya GİTMEZ (owner 2026-10-27):
+# ör. "- Mevcut yetim kayıtlar: UAT'taki ID 17/18/19 ve dev'deki id 181/182 … temizlenmez; … yapılmayacaktır".
+# ÜÇ koşul da gerekli (güvenli daraltma) → meşru "ne yapılacak" satırı ya da tek başına ID listesi/negasyon KORUNUR.
+_KAPSAM_NEG = re.compile(r"(?i)yap[ıi]lmayacak|yap[ıi]lmaz\b|temizlenmez|dokunulmaz|silinmez|de[ğg]i[şs]tirilmez|kald[ıi]r[ıi]lmaz")
+_ORTAM_KEY = re.compile(r"(?i)\b(?:UAT|DEV|TEST|PROD|PRE-?PROD|STAGING|canl[ıi])\b")
+_KAYIT_ID_LISTE = re.compile(r"(?i)\b[iı]d\b[^.\n]{0,20}?\d+\s*[/,]\s*\d+")
+
+
+def _ortam_id_kapsam_sil(markdown: str) -> str:
+    """Negatif kapsam-dışı + ortama özgü somut kayıt ID enumerasyonu bir arada olan satırı siler."""
+    def _satir(m):
+        s = m.group(0)
+        if _KAPSAM_NEG.search(s) and _ORTAM_KEY.search(s) and _KAYIT_ID_LISTE.search(s):
+            return ""
+        return s
+    return re.sub(r"(?m)^.*(?:\n|$)", _satir, markdown)
 _KOD_CITI = re.compile(r"(```.*?```|~~~.*?~~~)", re.S)
 
 
@@ -2194,6 +2217,7 @@ def jira_icin_temizle(markdown: str) -> str:
     m = re.sub(r"(?mi)^\s*[-*•]?\s*\*{0,2}Bu katmanda iş\s*:?\*{0,2}.*$\n?", "", m)   # **Bu katmanda iş:** VAR|YOK …
     m = re.sub(r"(?mi)^#{1,4}\s*Kaynak Görev\s*:.*$\n?", "", m)                        # ### Kaynak Görev: <key> — <özet> (tekrarlı)
     m = _GOZLEM_NOTU.sub("", m)         # "Gözlem notu: bu turda canlı gözlem yapılamadı…" meta notu (owner 2026-10-27)
+    m = _kod_citi_disinda(m, _ortam_id_kapsam_sil)  # negatif kapsam-dışı + ortam kayıt ID listesi satırı (owner 2026-10-27)
     m = kanit_etiketlerini_temizle(m)   # ÖNCE etiketler: satır/cümle desenleri etiketsiz metne bakar
     m = _KAYNAK_MADDE.sub("", m)
     m = _KAYNAK_ALINTI.sub("", m)

@@ -145,6 +145,20 @@ chk("Gözlem notu (blockquote) silinir", "Gözlem notu" not in _gno and "Gerçek
 chk("Gözlem notu (düz paragraf + emoji) silinir",
     "Gözlem notu" not in B.jira_icin_temizle("## A\nX.\n\n🔎 Gözlem notu: gözlenemedi, UAT.\n\n## B\nY.") )
 
+# Negatif kapsam-dışı + ortama özgü somut kayıt ID listesi aynı satırdaysa Jira'ya GİTMEZ (owner 2026-10-27);
+# ÜÇ koşul da gerekli → meşru ID listesi ya da tek başına negasyon KORUNUR.
+_ni = ("## 1. Çözüm\nServisi çağır.\n\n"
+       "- **Mevcut yetim kayıtlar:** UAT'taki ID 17/18/19 ve dev'deki id 181/182 bu düzeltmeyle temizlenmez; "
+       "bu kayıtlar için test ve dev ortamlarında temizlik işlemi yapılmayacaktır.\n\n## 2. Kabul\nTamam.")
+_nit = B.jira_icin_temizle(_ni)
+chk("negatif kapsam-dışı + ortam kayıt ID satırı silinir",
+    "temizlenmez" not in _nit and "17/18/19" not in _nit and "Servisi çağır." in _nit and "Tamam." in _nit)
+# Yalnız ID listesi (negasyon/ortam yok) → KORUNUR; yalnız negasyon (ID yok) → KORUNUR.
+chk("tek başına ID listesi korunur",
+    "22/23" in B.jira_icin_temizle("## 1. İş\n- Etkilenen kayıtlar: id 22/23 güncellenecek.\n"))
+chk("tek başına negatif cümle korunur",
+    "yapılmaz" in B.jira_icin_temizle("## 1. İş\n- Bu akışta soft-delete yapılmaz; hard-delete uygulanır.\n"))
+
 print()
 if _hata:
     print(f"JIRA TEMİZLİK TESTLERİ BAŞARISIZ ({_hata} hata)")
