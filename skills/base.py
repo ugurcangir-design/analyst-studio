@@ -2110,6 +2110,11 @@ _META_ISARET = (r"yaklaşımına kıyasla|alternatif(?:ler)?e kıyasla|en doğru
 _META_PARANTEZ = re.compile(r"[ \t]*\((?:[^()\n]|\([^()\n]*\))*(?:" + _META_ISARET + r")(?:[^()\n]|\([^()\n]*\))*\)[ \t]*\.?", re.I)
 # `|` sınıf dışı: tablo hücresindeki meta cümle silinirken satırın diğer hücreleri/ayraçları KORUNUR (satır yaşar).
 _META_GEREKCE = re.compile(r"[^.\n|]*(?:" + _META_ISARET + r")[^.\n|]*\.?[ \t]*", re.I)
+# "Gözlem notu: …" — agent'ın gözlem yapamadığına/sürecine dair META not. Jira'ya GİTMEZ (owner 2026-10-27):
+# geliştirici için değeri yok, analiz UI'da kalır. Paragrafı (blockquote `>` ya da düz) boş satıra/başlığa kadar siler.
+_GOZLEM_NOTU = re.compile(
+    r"(?mis)^[ \t]*(?:>[ \t]*)?[-*•]?[ \t]*\*{0,2}\s*(?:🔎|🌐|👁|⚠️?|ℹ️?|📝)?\s*"
+    r"G[öo]zlem notu\b.*?(?:\n[ \t]*\n|\n(?=[ \t]*#{1,6}\s)|\Z)")
 _KOD_CITI = re.compile(r"(```.*?```|~~~.*?~~~)", re.S)
 
 
@@ -2188,6 +2193,7 @@ def jira_icin_temizle(markdown: str) -> str:
     # Agent iskele artıkları Jira'ya GİTMEZ (owner 2026-10-21): FE+BE katman göstergesi + 'Kaynak Görev' başlıkları.
     m = re.sub(r"(?mi)^\s*[-*•]?\s*\*{0,2}Bu katmanda iş\s*:?\*{0,2}.*$\n?", "", m)   # **Bu katmanda iş:** VAR|YOK …
     m = re.sub(r"(?mi)^#{1,4}\s*Kaynak Görev\s*:.*$\n?", "", m)                        # ### Kaynak Görev: <key> — <özet> (tekrarlı)
+    m = _GOZLEM_NOTU.sub("", m)         # "Gözlem notu: bu turda canlı gözlem yapılamadı…" meta notu (owner 2026-10-27)
     m = kanit_etiketlerini_temizle(m)   # ÖNCE etiketler: satır/cümle desenleri etiketsiz metne bakar
     m = _KAYNAK_MADDE.sub("", m)
     m = _KAYNAK_ALINTI.sub("", m)

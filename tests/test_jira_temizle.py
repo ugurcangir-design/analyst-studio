@@ -138,6 +138,13 @@ chk("sızıntı yokken metin değişmez (yan etki yok)",
     B.arac_cagri_temizle("## Amaç\nServisi çağırıyor.") == "## Amaç\nServisi çağırıyor.")
 chk("jira_icin_temizle de <invoke> eler", "<invoke" not in B.jira_icin_temizle(_AC) and "Gerçek analiz içeriği." in B.jira_icin_temizle(_AC))
 
+# "Gözlem notu: …" meta notu Jira'ya GİTMEZ (owner 2026-10-27) — blockquote + düz paragraf; gerçek içerik korunur.
+_gn = "## 1. Amaç\nGerçek.\n\n> Gözlem notu: Bu turda canlı gözlem yapılamadı. Add Role canlıda gözlenmedi. UAT'ta doğrulanmalı.\n\n## 2. Çözüm\nDevam."
+_gno = B.jira_icin_temizle(_gn)
+chk("Gözlem notu (blockquote) silinir", "Gözlem notu" not in _gno and "Gerçek." in _gno and "Devam." in _gno)
+chk("Gözlem notu (düz paragraf + emoji) silinir",
+    "Gözlem notu" not in B.jira_icin_temizle("## A\nX.\n\n🔎 Gözlem notu: gözlenemedi, UAT.\n\n## B\nY.") )
+
 print()
 if _hata:
     print(f"JIRA TEMİZLİK TESTLERİ BAŞARISIZ ({_hata} hata)")
