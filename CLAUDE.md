@@ -670,8 +670,12 @@ sıfırlanma saati `/api/cli/durum` header göstergesinde görünür (`cli_durum
   '## CREATE SONRASI SORGULAMA' bölümü eklendi. (b) **Analiz, raporda olmayan create/id'yi 'yapıldı' yazdı** →
   `gorev_teknik_analiz` RAG İLKESİ'ne '## GÖZLEM İDDİASI — YAPILMAYANI YAPILDI YAZMA' kuralı: rapor create
   içermiyorsa (BFF `## CREATE - Gözlemlenmedi`) 'bir kayıt oluşturularak doğrulandı' cümlesi + spesifik id/kayıt
-  adı UYDURMA; gözlem gereken ama yapılmamış doğrulama → `[K: ❓ Belirsiz]` + 'canlı doğrulanamadı' notu. Test:
-  `tests/test_bff_kesif.py` + `tests/test_servis_sozlesme.py`.
+  adı UYDURMA; gözlem gereken ama yapılmamış doğrulama → `[K: ❓ Belirsiz]` + 'canlı doğrulanamadı' notu.
+  **Aynı kural `_GOREV_DUZELT_SISTEM`'de de var (owner 2026-10-27, 'Analiz Düzelt çok hızlı bitti' = hedefli
+  düzelt task'ı yeniden OKUMAZ/canlı gözlem YAPMAZ, bu yüzden uydurma id kalıyordu):** düzelt, desteklenmeyen
+  create/id iddiasını talimat onu hedefliyorsa KORUMAZ (`[K: ❓ Belirsiz]`'e çevirir), yeni id uydurmaz.
+  NOT: uydurmayı GERÇEKTEN kayıtla kapatmak için app restart + 'Baştan üret' (tam üretim BFF Keşfi'ni çalıştırır);
+  Düzelt tek başına gerçek gözlem üretemez. Test: `tests/test_bff_kesif.py` + `tests/test_servis_sozlesme.py`.
   **CANLI GÖZLEM = MEVCUT DURUM → ÖNBELLEK OKUMAZ (KRİTİK):** canlı gözlemli analiz çağrıları
   (`canli_baglam`/`canli_uygulama_kapsami` doluyken) `_api_cagri(onbellek=False)` ile yapılır → "yeniden analiz"
   her seferinde uygulamayı **TAZE gözler**; bayat/eski-ortam (ör. DEV→UAT değişiminde eski) sonucu DÖNMEZ.
