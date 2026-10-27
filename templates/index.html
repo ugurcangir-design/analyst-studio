@@ -2900,9 +2900,6 @@ function temaDegistir() {
               <label class="jg-arama-lbl" for="jg-search">Görevde ara</label>
               <input type="text" id="jg-search" class="setting-input" placeholder="anahtar veya başlık…" autocomplete="off" oninput="jgFiltrele()">
             </div>
-            <button class="btn btn-outline" id="jg-ai-btn" onclick="jgSiniflandir()" title="AI her görevin başlık+açıklamasını okur ve içeriğe göre sınıflandırır (gerekçeli). Uzun listede birkaç dk sürebilir.">
-              <svg class="ico"><use href="#i-sparkles"/></svg> AI ile Sınıflandır
-            </button>
             <button class="btn btn-outline" id="jg-sc-btn" onclick="jgSadeceClient()" title="Görevleri tek tek inceler ve HİÇBİR BFF/BE değişikliği gerektirmeden yalnızca client (frontend) tarafında yapılacak olanları ayrı liste olarak verir. Bağlı BE task'ları dikkate alınır. Token harcar.">
               <svg class="ico"><use href="#i-monitor"/></svg> Sadece Client İşleri
             </button>
@@ -2932,47 +2929,8 @@ function temaDegistir() {
           </div>
         </div>
 
-        <!-- Grup 1: Hızlı işleme -->
-        <div class="panel jg-group" style="margin-bottom:14px">
-          <div class="panel-head jg-group-head" onclick="jgGrupAc('hazir')">
-            <span class="jg-dot ok"></span>
-            <span class="panel-title">Hızlı İşleme Alınacak</span>
-            <span class="badge" id="jg-hazir-count">0</span>
-            <span class="panel-spacer"></span>
-            <span class="jg-sub">Formatla/düzenle → ekibe gönder</span>
-            <button class="jg-export" onclick="event.stopPropagation();jgKopyala('hazir')" title="Listeyi panoya kopyala (anahtar + başlık) — sohbete/e-postaya yapıştırın">
-              <svg class="ico ico-sm"><use href="#i-clipboard"/></svg>
-            </button>
-            <button class="jg-export" onclick="event.stopPropagation();jgCsvIndir('hazir')" title="CSV indir (Excel'de açılır)">
-              <svg class="ico ico-sm"><use href="#i-download"/></svg>
-            </button>
-            <svg class="ico jg-caret" id="jg-caret-hazir"><use href="#i-chevron-down"/></svg>
-          </div>
-          <div class="panel-body" id="jg-hazir-body">
-            <div id="jg-hazir-list" class="jg-list"></div>
-          </div>
-        </div>
-
-        <!-- Grup 2: Detaylı analiz -->
-        <div class="panel jg-group" style="margin-bottom:14px">
-          <div class="panel-head jg-group-head" onclick="jgGrupAc('detay')">
-            <span class="jg-dot warn"></span>
-            <span class="panel-title">Detaylı Analiz Gerekir</span>
-            <span class="badge" id="jg-detay-count">0</span>
-            <span class="panel-spacer"></span>
-            <span class="jg-sub">Teknik Analiz Et → detaylandır → ekibe gönder</span>
-            <button class="jg-export" onclick="event.stopPropagation();jgKopyala('detay')" title="Listeyi panoya kopyala (anahtar + başlık) — sohbete/e-postaya yapıştırın">
-              <svg class="ico ico-sm"><use href="#i-clipboard"/></svg>
-            </button>
-            <button class="jg-export" onclick="event.stopPropagation();jgCsvIndir('detay')" title="CSV indir (Excel'de açılır)">
-              <svg class="ico ico-sm"><use href="#i-download"/></svg>
-            </button>
-            <svg class="ico jg-caret" id="jg-caret-detay"><use href="#i-chevron-down"/></svg>
-          </div>
-          <div class="panel-body" id="jg-detay-body">
-            <div id="jg-detay-list" class="jg-list"></div>
-          </div>
-        </div>
+        <!-- Triyaj kategorileri (Hızlı İşleme / Detaylı Analiz) KALDIRILDI (owner 2026-10-27):
+             task bazlı sorguda yalnız o task + ilişkili işler "Tüm Görevler"de gösterilir. -->
 
         <!-- Grup 3: Sadece Client (frontend-only) — butonla üretilir, varsayılan gizli -->
         <div class="panel jg-group" id="jg-sc-group" style="margin-bottom:14px;display:none">
@@ -4923,7 +4881,7 @@ async function jgGorevleriCek() {
     if (!d.ok) { _jgMsg('jg-fetch-msg', d.error || 'Hata', 'err'); _jgTopbar('Hazır', false); return; }
     _jgParentKey = d.parent_key;
     _jgYerlestir(d);
-    _jgMsg('jg-fetch-msg', `${d.parent_key}: ${d.toplam} görev çekildi. Triyaj (yalnızca Backlog + atanmamış): ${d.hazir.length} hızlı, ${d.detay.length} analiz — bu ayrım FORMAT ön-taraması (içerik incelenmedi), "AI ile Sınıflandır" ile içerikten karar verilir. İlerlemiş görevler yalnızca "Tüm Görevler"de.`, 'ok');
+    _jgMsg('jg-fetch-msg', `${d.parent_key}: ${d.toplam} görev çekildi (task + ilişkili işler). Aşağıda "Tüm Görevler"de listelenir; statü/atanan/arama ile süzebilirsiniz.`, 'ok');
     _jgTopbar(`${d.toplam} görev çekildi`, false);
   } catch (e) {
     _jgMsg('jg-fetch-msg', _jgHataMetni(e), 'err'); _jgTopbar('Hazır', false);
@@ -5179,20 +5137,8 @@ function jgScListeCiz() {
 // Uzun listede arama: her iki grubu canlı filtreler. Aramada içi boş grubu TAMAMEN
 // gizler (sadece içeriği olan grup görünür); aramasız durumda her iki grup açık.
 function jgFiltrele() {
-  const q = (document.getElementById('jg-search').value || '').trim().toLowerCase();
-  const suz = (liste) => !q ? liste
-    : liste.filter(g => (g.key + ' ' + (g.summary || '')).toLowerCase().includes(q));
-  const h = suz(_jgData.hazir), dt = suz(_jgData.detay);
-  jgListeCiz('jg-hazir-list', h, true);
-  jgListeCiz('jg-detay-list', dt, false);
-  document.getElementById('jg-hazir-count').textContent = h.length;
-  document.getElementById('jg-detay-count').textContent = dt.length;
-  // Aramada içi boş grubu gizle — gereksiz başlık+sayaç kalmasın
-  const hazirGrp = document.getElementById('jg-caret-hazir').closest('.jg-group');
-  const detayGrp = document.getElementById('jg-caret-detay').closest('.jg-group');
-  hazirGrp.style.display = (q && h.length === 0) ? 'none' : '';
-  detayGrp.style.display = (q && dt.length === 0) ? 'none' : '';
-  jgTumFiltrele();   // arama "Tüm Görevler" başlığını da süzer (statü seçimiyle birlikte)
+  // Triyaj kategorileri kaldırıldı (owner 2026-10-27) → yalnız "Tüm Görevler" (task + ilişkili işler) süzülür.
+  jgTumFiltrele();   // arama + statü + atanan filtrelerini "Tüm Görevler"e uygular
 }
 
 function jgGrupAc(grup) {
