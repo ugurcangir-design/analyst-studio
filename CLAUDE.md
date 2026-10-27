@@ -657,6 +657,21 @@ sıfırlanma saati `/api/cli/durum` header göstergesinde görünür (`cli_durum
 - **Bağımlılıklar** (`requirements.txt`): Flask, anthropic, requests, python-dotenv, PyMuPDF, Pillow, python-docx, ruff + **openpyxl** (UAT Mutabakat .xlsx rapor yazımı). `lxml` hâlâ kurulu (genel kullanım).
 - `reference/live-app` Claude MCP/Chrome ekran+network gözlem çıktıları içindir (gitignore); bağlam filtresinde ana URL + 5 alt URL ve "Örnek ekran olarak kullan" seçeneği süreç/teknik analize canlı uygulama görevi olarak eklenir.
 - **Canlı uygulama ÇALIŞMASI için `claude -p`'ye MCP + izin geçmek ZORUNLU** — bkz. `docs/MIMARI.md` "Canlı Uygulama (Chrome MCP)". `--allowedTools` verilmezse headless modda tarayıcı araçları sessizce reddedilir.
+  **CREATE GİRİŞ NOKTASI + GÖZLEM HALÜSİNASYONU (owner 2026-10-27, MBSTRADE-1896):** Owner 'tam çalışma istediğimde
+  ekrandan manuel kayıt oluşturma + izleme (dönen id → event id ile ekrandan sorgulama) yapmalı' dedi. Teşhis:
+  analiz §10 'AI-TEST Event 1027, id 51699 oluşturularak canlı gözlemle doğrulandı' yazmıştı AMA bu id/kayıt
+  HİÇBİR gözlem/BFF raporunda yoktu (UYDURMA). Kök neden ikili: (a) **BFF Keşfi 'Add Manual Event' header
+  butonunu kaçırdı** → 'ekranın oluştur formu yok' deyip CREATE'i atladı (gözlem fazı tasarım gereği salt-okunur;
+  create işini BFF Keşfi yapar). `bff_kesif._kesif_plani` adım 2 düzeltildi: create giriş noktası inline form
+  değil, çoğu zaman toolbar/header düğmesiyle (Add/New/Create/Ekle/+/'Add Manual Event') açılan MODAL/ayrı sayfa
+  → bunları SIRAYLA ara, aç, dene; denemeden 'oluştur formu yok' SONUCUNA VARMA. Yeni **adım 2b CREATE SONRASI
+  SORGULAMA**: dönen `id`'yi ekrandaki filtre alanına (Event ID) yaz + Apply → kaydın listede göründüğünü ve
+  liste isteğinin query'sini yakala (owner'ın asıl istediği). Rapor biçimine 'CREATE giriş noktası/DENENEN' +
+  '## CREATE SONRASI SORGULAMA' bölümü eklendi. (b) **Analiz, raporda olmayan create/id'yi 'yapıldı' yazdı** →
+  `gorev_teknik_analiz` RAG İLKESİ'ne '## GÖZLEM İDDİASI — YAPILMAYANI YAPILDI YAZMA' kuralı: rapor create
+  içermiyorsa (BFF `## CREATE - Gözlemlenmedi`) 'bir kayıt oluşturularak doğrulandı' cümlesi + spesifik id/kayıt
+  adı UYDURMA; gözlem gereken ama yapılmamış doğrulama → `[K: ❓ Belirsiz]` + 'canlı doğrulanamadı' notu. Test:
+  `tests/test_bff_kesif.py` + `tests/test_servis_sozlesme.py`.
   **CANLI GÖZLEM = MEVCUT DURUM → ÖNBELLEK OKUMAZ (KRİTİK):** canlı gözlemli analiz çağrıları
   (`canli_baglam`/`canli_uygulama_kapsami` doluyken) `_api_cagri(onbellek=False)` ile yapılır → "yeniden analiz"
   her seferinde uygulamayı **TAZE gözler**; bayat/eski-ortam (ör. DEV→UAT değişiminde eski) sonucu DÖNMEZ.

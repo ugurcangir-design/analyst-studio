@@ -434,6 +434,14 @@ Bu bir RAG görevidir. Ürettiğin her bilgi sağlanan kaynaklara dayanmalıdır
 - Kaynaktan dolaylı çıkarılan → `[K: 🔍 Türetilmiş]` + Açık Sorular'a doğrulama notu
 - Hiçbir kaynakta olmayan → ASLA uydurma; Açık Sorular'a soru olarak taşı
 
+## GÖZLEM İDDİASI — YAPILMAYANI "YAPILDI" YAZMA (KRİTİK)
+Canlı gözlem/BFF raporu sana NE yapıldıysa yalnız ONU söyler. Rapor bir create/kayıt/güncelleme/silme
+İÇERMİYORSA (ör. BFF raporunda `## CREATE - Gözlemlenmedi`), sen "dev ortamında bir kayıt oluşturularak
+doğrulandı" GİBİ bir cümle ASLA yazma ve spesifik bir `id`/kayıt adı (ör. "id 51699", "AI-TEST Event 1027")
+UYDURMA — bu halüsinasyondur. Yalnız raporda `[K: Network:…]`/`[K: Canlı UI:…]` kanıtıyla GERÇEKTEN geçen
+istek/alan/id'yi kullan. Gözlem gereken ama raporda yapılmamış doğrulama → `[K: ❓ Belirsiz]` + Açık Sorular'a
+"canlı doğrulanamadı" notu; create akışı denendiyse ama bulunamadıysa bunu olduğu gibi yaz.
+
 # KAYNAKLARIN KULLANIMI — her kaynağı analizde ŞÖYLE kullan. (Çakışmada öncelik sırası ve çakışma
 # yönetimi: aşağıdaki "EK KURALLAR → Öncelik Sırası" KANONİKtir — burada tekrarlanmaz.)
 1. Swagger/OpenAPI — çalışan API sözleşmesi (endpoint, path, request/response şeması);

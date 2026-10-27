@@ -97,11 +97,20 @@ def _kesif_plani(ekran_tarif: str) -> str:
         "detayını `browser_network_request` ile al (method · path · query · request payload · response gövdesi özeti · status):\n"
         "1. LİSTE: ekranı aç → açılış/liste ve lookup isteklerini yakala; tablo kolonlarını ve filtre/arama/sayfalama "
         "kontrollerini kaydet; filtre/sayfalamayı BİR kez kullanıp query parametrelerini al.\n"
-        f"2. OLUŞTUR: ekleme formunu aç; alanları (ad · tip · zorunlu · varsayılan · bağımlı/cascade) kaydet; geçerli "
-        f"veriyle doldur — ad/kod/isim alanlarına `AI-TEST-{damga}` öneki — kaydet → POST isteğinin payload'ı + yanıtı "
-        "(status, dönen id). BU KAYDI SİLME, kalsın (analist inceleyecek).\n"
-        "3. DOĞRULAMA: aynı formu zorunlu bir alan BOŞ bırakarak bir kez gönder → ekran hata mesajı + (istek gittiyse) "
-        "status/errorCode. Yalnız BİR kez.\n"
+        f"2. OLUŞTUR: create giriş noktasını BUL — ekranda inline ekleme formu olmayabilir; create çoğu zaman üst "
+        "bar/toolbar düğmesiyle açılan bir MODAL veya ayrı sayfadır. Şunları SIRAYLA ara: başlıktaki/toolbar'daki "
+        "'Add'/'New'/'Create'/'Ekle'/'+'/'Yeni' düğmeleri (ör. 'Add Manual Event', 'Add Market'), satır aksiyonları, "
+        "menü. İlk bulduğun create giriş noktasını AÇ (modal/sayfa) ve alanları (ad · tip · zorunlu · varsayılan · "
+        f"bağımlı/cascade) kaydet; geçerli veriyle doldur — ad/kod/isim alanlarına `AI-TEST-{damga}` öneki — kaydet → "
+        "POST isteğinin payload'ı + yanıtı (status, dönen id). BU KAYDI SİLME, kalsın (analist inceleyecek). Create "
+        "giriş noktasını gerçekten açıp denedikten sonra yoksa, 'Gezilemeyen' altında DENENEN düğme adlarıyla yaz — "
+        "denemeden 'oluştur formu yok' SONUCUNA VARMA.\n"
+        f"2b. CREATE SONRASI SORGULAMA: POST yanıtından dönen `id`'yi al ve ekrandaki ilgili filtre/arama alanına "
+        f"(ör. Event ID / ID) yazıp Apply ile SORGULA → yeni kaydın listede göründüğünü ve bu filtrenin ürettiği "
+        "liste isteğinin query'sini (hangi parametre, dönen alanlar) yakala. Bu adım owner'ın asıl istediğidir: "
+        "'dönen id ekrandan sorgulanabiliyor mu' sorusunu GERÇEK gözlemle kapatır.\n"
+        "3. DOĞRULAMA: aynı create formunu zorunlu bir alan BOŞ bırakarak bir kez gönder → ekran hata mesajı + "
+        "(istek gittiyse) status/errorCode. Yalnız BİR kez.\n"
         f"4. GÜNCELLE: `AI-TEST-{damga}` kaydını aç, 1-2 alanı değiştir, kaydet → PUT/PATCH path + payload + yanıt. Kayıt KALSIN.\n"
         f"5. SİL: AYRI ikinci bir kayıt (`AI-TEST-{damga}-SIL`) oluştur ve onu sil → DELETE path + yanıt + listeden "
         "kalktığı doğrulaması. İlk kaydı silme.\n"
@@ -128,8 +137,13 @@ Gözlem bitince YALNIZ şu bloğu yaz (blok dışına metin yok, süreç anlatma
 |---|---|---|---|---|
 
 ## CREATE
-- İstek: `POST /path` · payload (maskeli) · status · yanıt (id vb.)
+- Create giriş noktası: hangi düğme/modal/sayfa (ör. "Add Manual Event" modalı) · DENENEN giriş noktaları
+- İstek: `POST /path` · payload (maskeli) · status · yanıt (dönen id vb.)
 - Ekran sonucu: mesaj / liste yenilendi mi
+
+## CREATE SONRASI SORGULAMA (dönen id ile)
+- Dönen id hangi filtre/arama alanına yazıldı · sorgu sonucu (kayıt listede göründü mü)
+- Tetiklenen liste isteği: `GET /path` · query parametresi (id hangi ad ile: `id`/`eventId`/…) · dönen alanlar
 
 ## DOĞRULAMA HATASI
 - Boş bırakılan alan · ekran mesajı · istek gitti mi · status/errorCode
