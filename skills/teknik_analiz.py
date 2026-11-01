@@ -221,6 +221,18 @@ def teknik_analiz_yap(ozel_atla: bool = False) -> tuple[Path, Path]:
             print("  ⚠ Canlı gözlem yapılamadı — teknik analiz gözlemsiz üretiliyor.")
             stable_bloklar.append({"type": "text", "text": _gz.gozlem_yok_blogu(_gr.get("neden", ""))})
 
+    # KAYITLI SERVİS SÖZLEŞMELERİ (owner 2026-11-01): Swagger endpoint sözleşmeleri artık TEKNİK analizde de
+    # enjekte edilir (eskiden task-only). Süreç metni + canlı gözlemde geçen path/kaynaklarla eşleşen MEVCUT uçlar.
+    try:
+        from . import servis_sozlesme as _ss
+        _gm = gozlem_rapor.get("md", "") if isinstance(gozlem_rapor, dict) else ""
+        _sb = _ss.endpoint_baglami(surec_metni, ek_metin=_gm)
+        if _sb:
+            print("  📑 Kayıtlı servis sözleşmeleri (Swagger) teknik analize dahil ediliyor...")
+            stable_bloklar.append({"type": "text", "text": _sb})
+    except Exception as _e:
+        print(f"  ⚠ Servis sözleşmeleri dahil edilemedi: {_e}")
+
     if mockup_icerik:
         print(f"  HTML prototip dahil ediliyor ({len(mockup_icerik):,} karakter)...")
         stable_bloklar.append({"type": "text", "text": f"### HTML Prototip\n\n{mockup_icerik}"})

@@ -87,6 +87,12 @@ chk("prompt: KABUL KRİTERLERİ = HER EKRAN × HER İLGİLİ ALAN", "KABUL KRİT
 chk("prompt: META-KURAL EKOSU YAZMA ('icat edilmez' vb.)", "META-KURAL EKOSU" in gtp)
 chk("prompt: GENERİC FE/İMPLEMENTASYON REÇETESİ UYDURMA (debounce/race)", "GENERİC FE/İMPLEMENTASYON REÇETESİ" in gtp)
 chk("prompt: 'BE TEYİT EDİLMELİ' bir sonuç değil — Swagger/canlı yakala", "BİR SONUÇ DEĞİL" in gtp)
+# owner 2026-11-01: Swagger servis sözleşmesi enjeksiyonu artık task-only DEĞİL — süreç + teknik de kullanır
+import pathlib as _pl  # noqa: E402
+_surec_src = _pl.Path("skills/surec_analizi.py").read_text(encoding="utf-8")
+_teknik_src = _pl.Path("skills/teknik_analiz.py").read_text(encoding="utf-8")
+chk("süreç analizi servis_sozlesme enjekte eder", "servis_sozlesme" in _surec_src and "endpoint_baglami" in _surec_src)
+chk("teknik analiz servis_sozlesme enjekte eder", "servis_sozlesme" in _teknik_src and "endpoint_baglami" in _teknik_src)
 import skills.gozlem as GZ  # noqa: E402
 chk("gözlem: ÇOK EKRAN — her adlandırılan ekrana git", "ÇOK EKRAN" in GZ._RAPOR_FORMAT)
 chk("açık soru promptu: kaynaktan türetilebilir soru üretme", "KAYNAKTAN TÜRETİLEBİLİR SORU ÜRETME" in sq)

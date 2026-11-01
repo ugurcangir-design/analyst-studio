@@ -77,6 +77,20 @@ def surec_analizi_yap(icerik_override: list | None = None,
             print("  ⚠ Canlı gözlem yapılamadı — süreç analizi gözlemsiz üretiliyor.")
             icerik_parcalari.append({"type": "text", "text": _gz.gozlem_yok_blogu(_gr.get("neden", ""))})
 
+    # KAYITLI SERVİS SÖZLEŞMELERİ (owner 2026-11-01): Swagger endpoint sözleşmeleri artık SÜREÇ analizinde de
+    # enjekte edilir (eskiden task-only). Doküman + canlı gözlemde geçen path/kaynaklarla eşleşen MEVCUT uçlar.
+    try:
+        from . import servis_sozlesme as _ss
+        _sorgu_ss = (" ".join(p.get("text", "") for p in icerik if isinstance(p, dict) and p.get("type") == "text")
+                     if isinstance(icerik, list) else str(icerik))
+        _gm = _gr.get("md", "") if canli_baglam and isinstance(_gr, dict) and _gr.get("ok") else ""
+        _sb = _ss.endpoint_baglami(_sorgu_ss, ek_metin=_gm)
+        if _sb:
+            print("  📑 Kayıtlı servis sözleşmeleri (Swagger) süreç analizine dahil ediliyor...")
+            icerik_parcalari.append({"type": "text", "text": _sb})
+    except Exception as _e:
+        print(f"  ⚠ Servis sözleşmeleri dahil edilemedi: {_e}")
+
     # Few-shot: ekibin onayladığı süreç analizlerinden EN ALAKALI örnek(ler) — stil/derinlik referansı.
     try:
         from .ornek_havuzu import ornek_bloklari

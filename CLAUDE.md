@@ -245,7 +245,9 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
 - **SERVİS/ENDPOINT KARARI — agent punt etmez, mimari kararı verir (owner 2026-10-21: 'mevcut servis varsa kullan, yoksa yeni servisi request/response ile çıkar; analiste hangi uç diye sorma'):**
   `skills/servis_sozlesme.py` (`endpoint_baglami(sorgu, ek_metin)`): kayıtlı Swagger'lardan (`reference/services/*.json`)
   task+canlı gözlemde geçen path/kaynak adlarıyla alakalı MEVCUT endpoint'leri (method+path+request/response şeması,
-  `[K: Swagger:<servis>]`) çıkarır → `gorev_analiz_et` (katman≠fe) `stable_bloklar`'a enjekte eder. SORUN: task metni iç
+  `[K: Swagger:<servis>]`) çıkarır → **`gorev_analiz_et` (katman≠fe) + SÜREÇ (`surec_analizi_yap`) + TEKNİK
+  (`teknik_analiz_yap`)** `stable_bloklar`'a enjekte eder (owner 2026-11-01: artık task-only DEĞİL — üç analiz ekranı da
+  kayıtlı Swagger uç sözleşmelerini kullanır; sorgu = analizin kendi girdisi + canlı gözlem raporu md). SORUN: task metni iç
   servis adını (nebula, id-mapping) içermediğinden BM25 retrieval o uçları yüzeye çıkarmıyordu, agent canlı gözlemde
   servisi görse de sözleşmeyi bağlamda bulamayıp analiste 'hangi uç / (a) mı (b) mi' diye soruyordu (MBSUATEAM-153
   Q-T-001/002). Jenerik path segmentleri (`bff/api/service/external/id`) `_YOL_STOP` ile eşlemeden düşer (yoksa 'bff' herkesi
@@ -434,9 +436,14 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   `_handbook_swagger_adresleri` (0-token, offline; `_SWAGGER_URL_DESEN` + `_swagger_servis_adi` host→servis adı,
   ortam öneki dev-/test-/uat-/prod- çıkar, `_ortam_rank` ile aynı servisin test/uat/prod adresini dev'e tercih eder)
   → `GET /api/reference/swagger-kesfet` önizleme (adresler + kayıtlı mı) · `POST` kayıtlı olmayanları (`force` ile
-  hepsini) `_swagger_spec_cek`+`_servis_kaydet` ile çekip kaydeder (VPN gerekir). UI: Referanslar → **"El Kitabından
-  Keşfet"** butonu (`swaggerKesfet`: önce liste+onay, sonra çek). Bulunan 9 servis arasında `tradoria-definition`,
-  `tradoria-entity`, sky/wagoria/ge-* var. **EKİBE YAYIN (owner→analist):** `reference/servis_varsayilan.json`
+  hepsini) `_swagger_spec_cek`+`_servis_kaydet` ile çekip kaydeder (VPN gerekir) **VE keşfedilen tüm {name,url}'leri
+  `_servis_varsayilan_yayinla` ile TRACKED `servis_varsayilan.json`'a yazar** (`yayinla:false` ile kapatılır) → owner
+  commit+push edince analistler güncellemeyle URL'leri alır, spec'i kendi VPN'leriyle günlük sync'te çeker (dağıtım).
+  UI: Referanslar → **"El Kitabından Keşfet"** butonu (`swaggerKesfet`: önce liste+onay, sonra çek). Bulunan 9 servis
+  arasında `tradoria-definition`, `tradoria-entity`, sky/wagoria/ge-* var. **NOT — el kitabı kaynakları (G2 Kaynaklar):**
+  Swagger (contract) > Canlı Gözlem (DB/Kafka) > Confluence > BRD > Jira > UI; PostgreSQL ×10 pg-* + Kafka baseline +
+  servis envanteri el kitabında (196 Confluence md) METİN olarak ZATEN tüm analizlerin RAG corpus'unda (süreç/teknik/görev).
+  Yapısal/canlı DB (pg-* MCP, `analiz_mcp`) sır gerektirdiğinden git ile DAĞITILMAZ (per-analist yerel/opt-in). **EKİBE YAYIN (owner→analist):** `reference/servis_varsayilan.json`
   (TRACKED — owner'ın yayınladığı BFF `{name,url}` listesi, **auth YOK**) boot'ta yerel `sources.json`
   services[]'e merge edilir (`_servis_varsayilanlari_birlestir`: eksik olanı ekler, mevcut/auth'lu kaydı EZMEZ)
   → analistler URL'leri tek tek girmez, güncelleme+restart ile otomatik alır; yalnız gerekiyorsa auth token'ı

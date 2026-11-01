@@ -430,6 +430,7 @@ GET  /api/history              Son 5 çalıştırma arşivi
 | `POST /api/jira/gorev/mockup/geri-al` · `POST /api/jira/gorev/mockup/jira` | Task mockup'ı: son düzeltmeyi geri al · Jira'ya ek/tasarım task'ı olarak ekle (`mode: ek|yeni-task`) |
 | `POST /api/live-app/login` | Kalıcı profille HEADED Chrome aç ('Elle giriş (ayrı Chrome)') |
 | `DELETE /api/reference/services/<name>` | Kayıtlı servis Swagger'ını sil (`sources.json` + `services/<name>.json`) |
+| `GET/POST /api/reference/swagger-kesfet` | El kitabı (Confluence corpus) Swagger adreslerini çıkarır — GET önizleme (offline), POST çekip kaydeder + `servis_varsayilan.json`'a yayınlar (`yayinla:false` kapatır) |
 | `GET /api/cli-usage` | Claude CLI limit durumu (header göstergesi; `?probe=1` tazeler) |
 | `POST /api/bye` | Sayfa `pagehide` beacon'ı (DESKTOP_MODE watchdog; CSRF muaf) |
 | `POST /api/guncelleme/sifirla` | Uzak sürümle eşitle (`git reset --hard origin/<dal>` + restart; yalnız temiz ağaçta) |

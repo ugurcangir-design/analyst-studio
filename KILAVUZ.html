@@ -538,8 +538,13 @@ JIRA_URL=https://&lt;sitename&gt;.atlassian.net   # Atlassian SİTE adresiniz �
       <div class="box info">
         <strong>Servis Swagger'ları (BFF / OpenAPI)</strong>
         Referanslar → <em>Servis Tanımları</em>'nda BFF swagger adresini girerek (ör. <code>…/v3/api-docs</code>)
-        endpoint sözleşmesini eklersiniz — teknik analizin <strong>en yetkili kaynağıdır</strong>. Eklenen servisler
-        her gün otomatik tazelenir. Ekip varsayılanı BFF'ler otomatik gelir; yalnız gerekiyorsa auth token'ı girilir.
+        endpoint sözleşmesini eklersiniz — <strong>Süreç, Teknik ve Task analizinin</strong> en yetkili kaynağıdır
+        (üç ekran da kayıtlı Swagger uç sözleşmelerini kullanır). Eklenen servisler her gün otomatik tazelenir.
+        Ekip varsayılanı BFF'ler otomatik gelir; yalnız gerekiyorsa auth token'ı girilir.
+        <br><br><strong>El Kitabından Keşfet:</strong> Referanslar → Servis Tanımları'ndaki <em>“El Kitabından Keşfet”</em>
+        düğmesi, MBS analiz el kitabında (Confluence) geçen tüm Swagger adreslerini otomatik bulur, önce listeler,
+        onayınızla spec'lerini çeker (VPN gerekir). Owner çalıştırıp commit ederse keşfedilen servisler ekip
+        varsayılanına girer → analistler güncellemeyle otomatik alır.
       </div>
     </div>
 

@@ -896,6 +896,39 @@ def _servis_varsayilanlari_birlestir() -> None:
         logger.warning("Servis varsayılan merge hatası: %s", e)
 
 
+def _servis_varsayilan_yayinla(servisler: list) -> int:
+    """Keşfedilen {name,url} servislerini TRACKED `servis_varsayilan.json`'a upsert eder (auth YAZILMAZ) →
+    owner commit edince analistler güncellemeyle alır (boot'ta `_servis_varsayilanlari_birlestir`). Owner 2026-11-01.
+    Eklenen/güncellenen sayısını döner (0 = değişiklik yok)."""
+    try:
+        doc = {}
+        if SERVIS_VARSAYILAN_PATH.exists():
+            doc = json.loads(SERVIS_VARSAYILAN_PATH.read_text(encoding="utf-8")) or {}
+        lst = doc.setdefault("services", [])
+        mevcut = {e.get("name"): e for e in lst}
+        degisen = 0
+        for sv in servisler:
+            ad = (sv.get("name") or "").strip()
+            url = (sv.get("url") or "").strip()
+            if not ad or not url:
+                continue
+            e = mevcut.get(ad)
+            if e is None:
+                lst.append({"name": ad, "url": url})
+                degisen += 1
+            elif e.get("url") != url:
+                e["url"] = url
+                degisen += 1
+        if degisen:
+            doc.setdefault("_aciklama", "Owner tarafından YAYINLANAN varsayılan servis (BFF/Swagger) tanımları — "
+                           "boot'ta sources.json'a merge edilir; YALNIZ name+url (auth YOK).")
+            SERVIS_VARSAYILAN_PATH.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+        return degisen
+    except Exception as e:
+        logger.warning("Servis varsayılan yayın hatası: %s", e)
+        return 0
+
+
 def _html_to_text(html_str: str) -> str:
     import html as _html
     text = re.sub(r"<[^>]+>", " ", html_str)
@@ -4896,7 +4929,13 @@ def reference_swagger_kesfet():
     ozet = f"✓ {eklenen} servis eklendi/güncellendi."
     if basarisiz:
         ozet += f" {len(basarisiz)} başarısız (VPN/erişim?) — iç ağ hostları yalnız agent makinesinden erişilir."
-    return jsonify({"ok": True, "sonuclar": sonuclar, "eklenen": eklenen, "output": ozet})
+    # EKİBE DAĞIT: keşfedilen TÜM {name,url}'ler tracked servis_varsayilan.json'a yayınlanır (auth YOK) →
+    # owner commit edince analistler güncellemeyle alır (owner 2026-11-01 isteri).
+    yayin = _servis_varsayilan_yayinla(adresler) if data.get("yayinla", True) else 0
+    if yayin:
+        ozet += (f"\n📦 {yayin} servis ekip varsayılanına (servis_varsayilan.json) yazıldı — "
+                 "commit + push edince analistler güncellemeyle alır (spec'i kendi VPN'leriyle çeker).")
+    return jsonify({"ok": True, "sonuclar": sonuclar, "eklenen": eklenen, "yayin": yayin, "output": ozet})
 
 
 # ─── Bağlam Filtresi ──────────────────────────────────────────────────────────
