@@ -79,6 +79,10 @@ chk("prompt: HATA KODU → Fault Catalog + mevcut kodu kullan, soru açma", "HAT
 chk("prompt: ÖZEL KURAL YOKSA → NOT, soru değil", "ÖZEL KURAL YOKSA → NOT" in gtp)
 # owner 2026-10-26: çok ekranlı görevde her ekran ayrı analiz edilmeli, 'diğerleri aynı' yetersiz
 chk("prompt: ÇOK EKRANLI KAPSAM — her ekran ayrı ele alınır", "ÇOK EKRANLI KAPSAM" in gtp)
+# owner 2026-11-01: keşfedilen ekran Amaç'ta yüzeye çıkmalı + her ekran alt-başlık + kabul kriteri ekran×alan
+chk("prompt: KEŞFEDİLEN EKRAN yüzeye çıkar (Amaç'ta belirt)", "KEŞFEDİLEN EKRAN" in gtp)
+chk("prompt: HER EKRAN KENDİ ALT-BAŞLIĞIYLA", "HER EKRAN KENDİ ALT-BAŞLIĞIYLA" in gtp)
+chk("prompt: KABUL KRİTERLERİ = HER EKRAN × HER İLGİLİ ALAN", "KABUL KRİTERLERİ = HER EKRAN" in gtp)
 import skills.gozlem as GZ  # noqa: E402
 chk("gözlem: ÇOK EKRAN — her adlandırılan ekrana git", "ÇOK EKRAN" in GZ._RAPOR_FORMAT)
 chk("açık soru promptu: kaynaktan türetilebilir soru üretme", "KAYNAKTAN TÜRETİLEBİLİR SORU ÜRETME" in sq)

@@ -224,6 +224,14 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   'Gezilemeyen'e yaz". (2) `gorev_teknik_analiz` promptu — "ÇOK EKRANLI KAPSAM: her ekranı §3/§7'de adıyla ayrı ele al
   (rota+uç+değişiklik), Kabul Kriterleri her ekranı kapsasın; gözlemlenemeyen ekran `[K: ❓ Belirsiz]`/'⚠ gözlemlenemedi'".
   Test: `tests/test_servis_sozlesme.py`.
+  **KEŞFEDİLEN EKRAN + EKRAN-BAŞINA YAPI (owner 2026-11-01, MBSTRADE-1254):** çok-ekranlı görevde agent başlıkta/isterde
+  adı GEÇMEYEN bir ekranı (ör. `mapping-data/sports`) canlı gözlemde bulup gövdeye gömüyor, §1 Amaç'ta yüzeye çıkarmıyor;
+  ekranları tek tabloya sıkıştırıp ekran-başına başlık vermiyor; Kabul Kriterleri yalnız bir ekranı kapsıyordu. `gorev_teknik_analiz`
+  '# KAPSAM' bölümüne 3 kural: (1) **KEŞFEDİLEN EKRAN** — başlıkta/isterde olmayan ama değişikliği taşıyan ekran §1 Amaç'ta
+  AÇIKÇA 'ek ekran, teyit gerek `[K: ❓ Belirsiz]`' olarak belirtilir + §3/§7'de kendi alt-başlığı + Kabul Kriterleri'ne dahil.
+  (2) **HER EKRAN KENDİ ALT-BAŞLIĞIYLA** (`### <ekran — rota>`; tek tabloya sıkıştırma). (3) **KABUL KRİTERLERİ = HER EKRAN ×
+  HER İLGİLİ ALAN** (ekran/alan belirtilir, atlanmaz, analizin §3/§7'siyle çelişmez — ör. '§3 ID araması client-side' diyorsa
+  kriter koşulsuz 'ID yazınca listelenir' yazmaz). Test: `tests/test_servis_sozlesme.py`.
 - **SERVİS/ENDPOINT KARARI — agent punt etmez, mimari kararı verir (owner 2026-10-21: 'mevcut servis varsa kullan, yoksa yeni servisi request/response ile çıkar; analiste hangi uç diye sorma'):**
   `skills/servis_sozlesme.py` (`endpoint_baglami(sorgu, ek_metin)`): kayıtlı Swagger'lardan (`reference/services/*.json`)
   task+canlı gözlemde geçen path/kaynak adlarıyla alakalı MEVCUT endpoint'leri (method+path+request/response şeması,
