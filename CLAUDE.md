@@ -232,6 +232,16 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   (2) **HER EKRAN KENDİ ALT-BAŞLIĞIYLA** (`### <ekran — rota>`; tek tabloya sıkıştırma). (3) **KABUL KRİTERLERİ = HER EKRAN ×
   HER İLGİLİ ALAN** (ekran/alan belirtilir, atlanmaz, analizin §3/§7'siyle çelişmez — ör. '§3 ID araması client-side' diyorsa
   kriter koşulsuz 'ID yazınca listelenir' yazmaz). Test: `tests/test_servis_sozlesme.py`.
+  **TASK DİLİ — META-EKO + GENERİC FE REÇETESİ + PUNT (owner 2026-11-01, MBSTRADE-1254):** `gorev_teknik_analiz`
+  '# JİRA TASK DİLİ'ne 3 kural: (1) **META-KURAL EKOSU YAZMA** — 'Yeni çağrı icat edilmez / yeni servis eklenmez'
+  gibi ajan-dili negatif meta-cümleler YASAK (insan analist öyle yazmaz); yalnız pozitif eylem ('mevcut `…/markets`
+  ucunu kullan'). (2) **GENERİC FE/İMPLEMENTASYON REÇETESİ UYDURMA** — istenmemiş/gözlenmemiş debounce süresi (300 ms),
+  yarış-durumu/race-condition, retry, cache/TTL geliştirici takdiridir; kabul için önemliyse SONUÇ olarak yaz, sihirli
+  sayı verme (gözlemde varsa `[K:]`). (3) **'BE TEYİT EDİLMELİ'/'CANLI YAKALANMADI' BİR SONUÇ DEĞİL** — analist BFF/servis
+  kontrolü istediyse önce kayıtlı Swagger + ilgili çağrıyı canlı yakala (`browser_network_request`); çözemezse 'BE teyit'
+  deme → '⚠ kaynak/gözlemde doğrulanamadı — <ne denendi>' + açık soru. **NOT:** task'ın BFF'i (`tradoria/definition-service`)
+  `reference/services`'e KAYITLI DEĞİL (yalnız rita/sky) → Swagger'dan çözülemiyor; owner ilgili BFF Swagger'ını
+  Referanslar→'Swagger URL ile Ekle' ile eklerse uç/parametre sözleşmesi Swagger'dan kesin gelir. Test: `tests/test_servis_sozlesme.py`.
 - **SERVİS/ENDPOINT KARARI — agent punt etmez, mimari kararı verir (owner 2026-10-21: 'mevcut servis varsa kullan, yoksa yeni servisi request/response ile çıkar; analiste hangi uç diye sorma'):**
   `skills/servis_sozlesme.py` (`endpoint_baglami(sorgu, ek_metin)`): kayıtlı Swagger'lardan (`reference/services/*.json`)
   task+canlı gözlemde geçen path/kaynak adlarıyla alakalı MEVCUT endpoint'leri (method+path+request/response şeması,

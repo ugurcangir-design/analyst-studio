@@ -83,6 +83,10 @@ chk("prompt: ÇOK EKRANLI KAPSAM — her ekran ayrı ele alınır", "ÇOK EKRANL
 chk("prompt: KEŞFEDİLEN EKRAN yüzeye çıkar (Amaç'ta belirt)", "KEŞFEDİLEN EKRAN" in gtp)
 chk("prompt: HER EKRAN KENDİ ALT-BAŞLIĞIYLA", "HER EKRAN KENDİ ALT-BAŞLIĞIYLA" in gtp)
 chk("prompt: KABUL KRİTERLERİ = HER EKRAN × HER İLGİLİ ALAN", "KABUL KRİTERLERİ = HER EKRAN" in gtp)
+# owner 2026-11-01: meta-kural ekosu + generic FE reçetesi + 'BE teyit' punt yasağı
+chk("prompt: META-KURAL EKOSU YAZMA ('icat edilmez' vb.)", "META-KURAL EKOSU" in gtp)
+chk("prompt: GENERİC FE/İMPLEMENTASYON REÇETESİ UYDURMA (debounce/race)", "GENERİC FE/İMPLEMENTASYON REÇETESİ" in gtp)
+chk("prompt: 'BE TEYİT EDİLMELİ' bir sonuç değil — Swagger/canlı yakala", "BİR SONUÇ DEĞİL" in gtp)
 import skills.gozlem as GZ  # noqa: E402
 chk("gözlem: ÇOK EKRAN — her adlandırılan ekrana git", "ÇOK EKRAN" in GZ._RAPOR_FORMAT)
 chk("açık soru promptu: kaynaktan türetilebilir soru üretme", "KAYNAKTAN TÜRETİLEBİLİR SORU ÜRETME" in sq)
