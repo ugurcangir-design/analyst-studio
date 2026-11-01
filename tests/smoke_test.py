@@ -383,6 +383,13 @@ kontrol("/api/update iş yokken kontrol yapar (yetkisiz değil, 500 değil)", is
 kontrol("GIZLENEBILIR_KATALOG brd uçları gerçek (pipeline deseni)", any(e.startswith("/api/run?pipeline=brd") for k in uygulama.GIZLENEBILIR_KATALOG if k["id"] == "brd" for e in k["endpoints"]))
 
 
+# ── El kitabından Swagger keşfi (GET önizleme deterministik/offline, fetch YOK) ─────────────
+_sk = istemci.get("/api/reference/swagger-kesfet").get_json() or {}
+kontrol("swagger-kesfet GET: el kitabı adreslerini listeler", _sk.get("ok") and _sk.get("toplam", 0) >= 1)
+kontrol("swagger-kesfet: tradoria-definition keşfedilir (host→servis adı)",
+        any(a.get("name") == "tradoria-definition" for a in _sk.get("adresler", [])))
+
+
 # ── Güvenlik kapıları ─────────────────────────────────────────────────────────
 kontrol("CSRF: Origin'siz POST 403", istemci.post("/api/revizyon/surec-analizi.md/baslat").status_code == 403)
 kontrol("allowlist: geçersiz dosya 400", istemci.get("/api/revizyon/../etc").status_code in (400, 404))

@@ -807,6 +807,64 @@ def _servis_sil(name: str) -> None:
         pass
 
 
+# El kitabı (Confluence corpus) içinde geçen Swagger/OpenAPI adresleri → otomatik servis adı.
+# Owner 2026-11-01: 'el kitabında bütün servisler var, oradan swagger adreslerini çıkarıp ekleyemez mi?'
+_SWAGGER_URL_DESEN = re.compile(
+    r"https?://[a-zA-Z0-9._-]+(?:\.[a-zA-Z0-9._-]+)+(?::\d+)?/[a-zA-Z0-9._~!$&'()*+,;=:@%/?#-]*"
+    r"(?:swagger-ui|swagger\.json|openapi\.json|/v\d+/api-docs|/api-docs)[a-zA-Z0-9._~!$&'()*+,;=:@%/?#=-]*",
+    re.I)
+# Ortam öneki (dev-/test-/uat-/prod-/stage-) + yaygın alan adı kuyruğu → sade, kararlı servis adı.
+_ORTAM_ONEK = re.compile(r"^(?:dev|test|uat|preprod|pre-prod|stage|staging|prod|production)-", re.I)
+
+
+def _swagger_servis_adi(url: str) -> str:
+    """Swagger URL'inin host adından kararlı bir servis adı türetir
+    (ör. https://test-tradoria-definition-service.sanstech.dev/... → tradoria-definition-service)."""
+    from urllib.parse import urlparse
+    host = (urlparse(url).hostname or "").lower()
+    etiket = host.split(".")[0] if host else ""
+    etiket = _ORTAM_ONEK.sub("", etiket)
+    etiket = re.sub(r"-(?:service|bff|api|gateway)$", "", etiket) or etiket
+    etiket = re.sub(r"[^a-z0-9_-]+", "-", etiket).strip("-")
+    return etiket or "servis"
+
+
+def _ortam_rank(url: str) -> int:
+    """Aynı servisin birden çok ortam adresi görülürse hangisi tercih edilir — yüksek kazanır.
+    test/uat/prod spec'i dev'den daha kararlı (owner ortam matrisi: analiz test ortamına bakar)."""
+    from urllib.parse import urlparse
+    etiket = (urlparse(url).hostname or "").split(".")[0].lower()
+    if etiket.startswith(("prod", "production")):
+        return 4
+    if etiket.startswith(("uat", "preprod", "pre-prod")):
+        return 3
+    if etiket.startswith(("test", "stage", "staging")):
+        return 2
+    if etiket.startswith("dev"):
+        return 1
+    return 2  # ortam öneki yok → test seviyesinde varsay
+
+
+def _handbook_swagger_adresleri() -> list[dict]:
+    """El kitabı (Confluence corpus) dosyalarını tarar, geçen Swagger/OpenAPI adreslerini
+    benzersiz {name, url} listesine çevirir. 0-token, offline (yalnız metin tarar — fetch YOK)."""
+    bulunan: dict[str, dict] = {}
+    if not CONF_DIR.exists():
+        return []
+    for p in sorted(CONF_DIR.rglob("*.md")):
+        try:
+            metin = p.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+        for m in _SWAGGER_URL_DESEN.finditer(metin):
+            url = m.group(0).rstrip(").,;'\"")
+            ad = _swagger_servis_adi(url)
+            onceki = bulunan.get(ad)
+            if onceki is None or _ortam_rank(url) > _ortam_rank(onceki["url"]):
+                bulunan[ad] = {"name": ad, "url": url}
+    return sorted(bulunan.values(), key=lambda e: e["name"])
+
+
 SERVIS_VARSAYILAN_PATH = REF_DIR / "servis_varsayilan.json"
 
 
@@ -4790,6 +4848,55 @@ def reference_service_sil(name):
     """Kayıtlı servis Swagger'ını sil (sources.json'dan + services/<name>.json dosyasını)."""
     _servis_sil((name or "").strip())
     return jsonify({"ok": True})
+
+
+@app.route("/api/reference/swagger-kesfet", methods=["GET", "POST"])
+def reference_swagger_kesfet():
+    """El kitabı (Confluence corpus) içinde geçen Swagger adreslerini çıkarır.
+    GET: yalnız listeyi + kayıtlı mı bilgisini döner (0-token, offline, fetch YOK).
+    POST: kayıtlı olmayanları (force=true ise hepsini) `_swagger_spec_cek` ile çekip kaydeder
+    (owner makinesinde VPN gerekir; iç ağ hostları yalnız oradan erişilir). Owner 2026-11-01."""
+    adresler = _handbook_swagger_adresleri()
+    kayitli = {e.get("name") for e in _load_sources().get("services", [])}
+    for a in adresler:
+        a["kayitli"] = a["name"] in kayitli
+
+    if request.method == "GET":
+        return jsonify({"ok": True, "adresler": adresler,
+                        "toplam": len(adresler), "kayitli_sayisi": sum(1 for a in adresler if a["kayitli"])})
+
+    data = request.get_json(silent=True) or {}
+    force = bool(data.get("force"))
+    hedefler = adresler if force else [a for a in adresler if not a["kayitli"]]
+    if not hedefler:
+        return jsonify({"ok": True, "sonuclar": [], "eklenen": 0,
+                        "output": "El kitabındaki tüm Swagger servisleri zaten kayıtlı."})
+    try:
+        import requests as _req
+    except ImportError:
+        return jsonify({"ok": False, "error": "requests paketi yüklü değil"}), 500
+
+    sonuclar, eklenen = [], 0
+    for a in hedefler:
+        ad, url = a["name"], a["url"]
+        try:
+            spec, kaynak = _swagger_spec_cek(url, {}, _req)
+            if spec is None or len(spec.get("paths", {})) == 0:
+                sonuclar.append({"name": ad, "url": url, "ok": False,
+                                 "neden": "spec alınamadı/boş (VPN gerekli olabilir)"})
+                continue
+            SERVIS_DIR.mkdir(parents=True, exist_ok=True)
+            (SERVIS_DIR / f"{ad}.json").write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")
+            _servis_kaydet(ad, url, "")
+            eklenen += 1
+            sonuclar.append({"name": ad, "url": url, "ok": True, "endpoint": len(spec.get("paths", {}))})
+        except Exception as e:
+            sonuclar.append({"name": ad, "url": url, "ok": False, "neden": str(e)[:160]})
+    basarisiz = [s for s in sonuclar if not s["ok"]]
+    ozet = f"✓ {eklenen} servis eklendi/güncellendi."
+    if basarisiz:
+        ozet += f" {len(basarisiz)} başarısız (VPN/erişim?) — iç ağ hostları yalnız agent makinesinden erişilir."
+    return jsonify({"ok": True, "sonuclar": sonuclar, "eklenen": eklenen, "output": ozet})
 
 
 # ─── Bağlam Filtresi ──────────────────────────────────────────────────────────

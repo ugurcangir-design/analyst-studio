@@ -429,7 +429,14 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   `_swagger_spec_cek` (swagger-ui HTML'inden `/v3/api-docs` vb. çözer, OpenAPI doğrular) → `services/<name>.json`
   YAZAR **ve `sources.json` `services[]` listesine upsert eder** (`_servis_kaydet`) → günlük oto-sync onu tazeler
   (`_servisleri_sync_et`, best-effort: erişilemezse mevcut spec korunur). `DELETE /api/reference/services/<name>`
-  (`_servis_sil`) kayıt + dosyayı siler. **EKİBE YAYIN (owner→analist):** `reference/servis_varsayilan.json`
+  (`_servis_sil`) kayıt + dosyayı siler. **EL KİTABINDAN OTOMATİK KEŞİF (owner 2026-11-01):** MBS analiz el
+  kitabı (Confluence corpus, `reference/confluence/`) içinde Swagger/OpenAPI adresleri geçiyor →
+  `_handbook_swagger_adresleri` (0-token, offline; `_SWAGGER_URL_DESEN` + `_swagger_servis_adi` host→servis adı,
+  ortam öneki dev-/test-/uat-/prod- çıkar, `_ortam_rank` ile aynı servisin test/uat/prod adresini dev'e tercih eder)
+  → `GET /api/reference/swagger-kesfet` önizleme (adresler + kayıtlı mı) · `POST` kayıtlı olmayanları (`force` ile
+  hepsini) `_swagger_spec_cek`+`_servis_kaydet` ile çekip kaydeder (VPN gerekir). UI: Referanslar → **"El Kitabından
+  Keşfet"** butonu (`swaggerKesfet`: önce liste+onay, sonra çek). Bulunan 9 servis arasında `tradoria-definition`,
+  `tradoria-entity`, sky/wagoria/ge-* var. **EKİBE YAYIN (owner→analist):** `reference/servis_varsayilan.json`
   (TRACKED — owner'ın yayınladığı BFF `{name,url}` listesi, **auth YOK**) boot'ta yerel `sources.json`
   services[]'e merge edilir (`_servis_varsayilanlari_birlestir`: eksik olanı ekler, mevcut/auth'lu kaydı EZMEZ)
   → analistler URL'leri tek tek girmez, güncelleme+restart ile otomatik alır; yalnız gerekiyorsa auth token'ı

@@ -3826,8 +3826,12 @@ function temaDegistir() {
           <button class="btn btn-outline btn-sm" onclick="document.getElementById('ref-input-services').click()">
             <svg class="ico"><use href="#i-plus"/></svg> Spec Ekle
           </button>
+          <button class="btn btn-outline btn-sm" id="ref-kesfet-btn" onclick="swaggerKesfet()" title="MBS el kitabındaki (Confluence) Swagger adreslerini otomatik bulup kaydeder (VPN gerekir)">
+            <svg class="ico"><use href="#i-search"/></svg> El Kitabından Keşfet
+          </button>
           <span class="ref-drop-hint">JSON · YAML · YML</span>
         </div>
+        <div class="ref-fetch-output" id="ref-kesfet-output"></div>
 
         <hr class="divider" style="margin:16px 0">
 
@@ -11264,6 +11268,38 @@ async function addBeService() {
     toast(`${name} servisi eklendi — her gün otomatik güncellenir`, 'success');
     loadRefDocs();
   }
+}
+
+// El kitabından (Confluence) Swagger adreslerini otomatik bul + kaydet (owner 2026-11-01).
+async function swaggerKesfet() {
+  const btn = document.getElementById('ref-kesfet-btn');
+  const out = document.getElementById('ref-kesfet-output');
+  // Önce önizleme (0-token, offline): kaç servis var, kaçı kayıtlı?
+  out.style.display = 'block';
+  out.textContent = 'El kitabı taranıyor…';
+  let g;
+  try { g = await (await fetch('/api/reference/swagger-kesfet')).json(); }
+  catch (e) { out.textContent = 'Hata: ' + e; return; }
+  if (!g.ok || !g.toplam) { out.textContent = 'El kitabında Swagger adresi bulunamadı.'; return; }
+  const eksik = g.toplam - g.kayitli_sayisi;
+  const liste = g.adresler.map(a => `  ${a.kayitli ? '✓' : '+'} ${a.name}`).join('\n');
+  if (!confirm(`El kitabında ${g.toplam} Swagger servisi bulundu (${g.kayitli_sayisi} zaten kayıtlı, ${eksik} yeni).\n\n${liste}\n\nEksik olanların spec'i çekilip kaydedilsin mi? (İç ağ — VPN gerekir)`)) {
+    out.textContent = `${g.toplam} servis bulundu, ${g.kayitli_sayisi} kayıtlı. İşlem iptal edildi.`;
+    return;
+  }
+  btn.disabled = true; btn.textContent = 'Çekiliyor…';
+  out.textContent = 'Spec\'ler çekiliyor (VPN üzerinden)…';
+  try {
+    const d = await (await fetch('/api/reference/swagger-kesfet', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({})
+    })).json();
+    const satir = (d.sonuclar || []).map(s =>
+      s.ok ? `  ✓ ${s.name} (${s.endpoint} endpoint)` : `  ✗ ${s.name} — ${s.neden}`).join('\n');
+    out.textContent = (d.output || '') + (satir ? '\n' + satir : '');
+    if (d.eklenen) { toast(`${d.eklenen} servis el kitabından eklendi`, 'success'); loadRefDocs(); }
+  } catch (e) { out.textContent = 'Hata: ' + e; }
+  btn.disabled = false;
+  btn.innerHTML = '<svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> El Kitabından Keşfet';
 }
 
 // ─── Bağlam Filtresi ─────────────────────────────────────────────────────────
