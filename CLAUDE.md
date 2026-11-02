@@ -255,6 +255,17 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   sportId/name, sayfalama) PASİF izlenmez, FİİLEN denenir (değer gir / parametreyle+parametresiz çağır,
   `browser_network_request` ile her iki path+sonucu yakala); deneyemeyince 'Gezilemeyen'e yaz, 'analist bildirdi' RAPORA
   geçmez. Test: `tests/test_servis_sozlesme.py`.
+  **SERVİS SÖZLEŞME EŞLEŞME KAÇAĞI — PARAMETRELER İNDEKSLENMİYORDU (owner 2026-11-02, MBSTRADE-1254):** owner tradoria
+  Swagger'ını (`reference/services/tradoria.json`, `GET /api/v1/market` → `sportId`/`name`/`marketId`/`page`/`size`)
+  kaydetmiş olmasına RAĞMEN analiz hâlâ 'analist bildirdi, doğrulanamadı' diyordu. Teşhis: `servis_sozlesme` eşleşmesinde
+  3 kaçak — (1) endpoint'in **query/path parametreleri** (`parameters`) ne indeksleniyor ne çıktıda gösteriliyordu →
+  bir GET-filtre ucunda **sözleşme = parametrelerdir**, tamamen kayıptı; (2) bu yüzden `GET /api/v1/market` (10 filtre
+  param) ile `createMarket`/`updateMarket` eşit 'market' token'ıyla skorlanıp eleniyordu; (3) tradoria.json path'leri
+  `tradoria` kelimesini içermez (`/api/v1/market`) → 'tradoria' sorgusu yalnız sky-panel/sky-operation proxy kopyalarını
+  eşliyordu. Düzeltme (`skills/servis_sozlesme.py`): `_parametreler` (op+path-seviye query/path param) + `_alan_tokenlari`
+  (istek/yanıt alan adları) token kümesine katıldı; `param_boost = 3×(param adı ∩ sorgu)` → filtre ucu CRUD'u geçer;
+  çıktıya **Parametreler (ad:tip, * = zorunlu)** satırı eklendi → agent filtre sözleşmesini (sportId/name/marketId) görür.
+  Test: `tests/test_servis_sozlesme.py` (parametre indeksleme + boost + çıktı).
 - **SERVİS/ENDPOINT KARARI — agent punt etmez, mimari kararı verir (owner 2026-10-21: 'mevcut servis varsa kullan, yoksa yeni servisi request/response ile çıkar; analiste hangi uç diye sorma'):**
   `skills/servis_sozlesme.py` (`endpoint_baglami(sorgu, ek_metin)`): kayıtlı Swagger'lardan (`reference/services/*.json`)
   task+canlı gözlemde geçen path/kaynak adlarıyla alakalı MEVCUT endpoint'leri (method+path+request/response şeması,

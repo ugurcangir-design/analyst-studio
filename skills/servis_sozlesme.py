@@ -73,8 +73,41 @@ def _sema_metin(d, kirp: int = 900) -> str:
     return s[:kirp] + ("…" if len(s) > kirp else "")
 
 
+def _parametreler(op: dict, path_seviye: list) -> list[dict]:
+    """Operasyonun query/path parametreleri (op-seviye + path-seviye birleşik): [{ad, yer, tip, zorunlu}]."""
+    ham = list(path_seviye or []) + list(op.get("parameters", []) or [])
+    out, gorulen = [], set()
+    for pr in ham:
+        if not isinstance(pr, dict):
+            continue
+        ad = pr.get("name")
+        yer = pr.get("in", "")
+        if not ad or yer not in ("query", "path") or (ad, yer) in gorulen:
+            continue
+        gorulen.add((ad, yer))
+        out.append({"ad": ad, "yer": yer,
+                    "tip": (pr.get("schema", {}) or {}).get("type", "") or pr.get("type", ""),
+                    "zorunlu": bool(pr.get("required"))})
+    return out
+
+
+def _alan_tokenlari(d, derinlik: int = 0) -> set[str]:
+    """İstek/yanıt şemasının alan ADLARINI token'a çevirir (eşleşme sinyali: ör. 'sportId' → {sport}})."""
+    out: set[str] = set()
+    if not isinstance(d, dict) or derinlik > 2:
+        return out
+    for ad, alt in d.items():
+        if ad == "[]":
+            out |= _alan_tokenlari(alt, derinlik + 1) if isinstance(alt, dict) else set()
+            continue
+        out |= _tokenle(ad)
+        if isinstance(alt, dict):
+            out |= _alan_tokenlari(alt, derinlik + 1)
+    return out
+
+
 def _endpointleri_oku() -> list[dict]:
-    """Tüm kayıtlı Swagger'lardan endpoint kayıtları: {servis, method, path, ozet, istek, yanit, token}."""
+    """Tüm kayıtlı Swagger'lardan endpoint kayıtları: {servis, method, path, ozet, istek, yanit, parametreler, token}."""
     kayitlar: list[dict] = []
     try:
         dosyalar = sorted(SERVICES_DIR.glob("*.json"))
@@ -90,6 +123,7 @@ def _endpointleri_oku() -> list[dict]:
         for yol, opsler in paths.items():
             if not isinstance(opsler, dict):
                 continue
+            path_params = opsler.get("parameters", [])
             for method, op in opsler.items():
                 if method.lower() not in ("get", "post", "put", "delete", "patch") or not isinstance(op, dict):
                     continue
@@ -110,10 +144,18 @@ def _endpointleri_oku() -> list[dict]:
                                 yanit = _sema_coz((rc[ct] or {}).get("schema", {}), bilesenler)
                                 break
                         break
+                parametreler = _parametreler(op, path_params)
+                # token = path kaynakları + özet + PARAMETRE adları + istek/yanıt ALAN adları
+                # (parametreler/alanlar olmadan bir GET-filtre ucu 'sportId/name' sorgusuyla eşleşmiyordu — kaçak).
+                param_tok = set()
+                for pr in parametreler:
+                    param_tok |= _tokenle(pr["ad"])
+                alan_tok = _alan_tokenlari(istek) | _alan_tokenlari(yanit)
                 kayitlar.append({
                     "servis": f.stem, "method": method.upper(), "path": yol, "ozet": ozet,
-                    "istek": istek, "yanit": yanit,
-                    "token": _tokenle(yol + " " + ozet) | _yol_kaynaklari(yol),
+                    "istek": istek, "yanit": yanit, "parametreler": parametreler,
+                    "param_token": param_tok,
+                    "token": _tokenle(yol + " " + ozet) | _yol_kaynaklari(yol) | param_tok | alan_tok,
                 })
     return kayitlar
 
@@ -135,7 +177,10 @@ def endpoint_baglami(sorgu_metni: str, ek_metin: str = "", butce: int = 9000, az
         ortak = len(k["token"] & sorgu_tok)
         # Path kaynağı metinde birebir geçiyorsa büyük boost (gözlemlenen/istenen endpoint)
         path_boost = 5 * len(_yol_kaynaklari(k["path"]) & gecenler)
-        skor = ortak + path_boost
+        # Parametre adı sorguda geçiyorsa güçlü sinyal (ör. 'sportId/name/marketId ile filtre' → GET /market
+        # bu sayede createMarket/updateMarket gibi parametresiz uçları geçer; filtre/arama sözleşmesi budur).
+        param_boost = 3 * len(k.get("param_token", set()) & sorgu_tok)
+        skor = ortak + path_boost + param_boost
         if skor > 0:
             skorlu.append((skor, k))
     if not skorlu:
@@ -150,6 +195,10 @@ def endpoint_baglami(sorgu_metni: str, ek_metin: str = "", butce: int = 9000, az
         if n >= azami:
             break
         blok = f"- **{k['method']} {k['path']}**" + (f" — {k['ozet']}" if k["ozet"] else "") + f"  `[K: Swagger:{k['servis']}]`\n"
+        if k.get("parametreler"):
+            prs = ", ".join(f"{p['ad']}" + (f":{p['tip']}" if p['tip'] else "") + ("*" if p["zorunlu"] else "")
+                            for p in k["parametreler"][:14])
+            blok += f"  - Parametreler ({'* = zorunlu' if any(p['zorunlu'] for p in k['parametreler']) else 'query/path'}): `{prs}`\n"
         if k["istek"]:
             blok += f"  - İstek: `{_sema_metin(k['istek'])}`\n"
         if k["yanit"]:

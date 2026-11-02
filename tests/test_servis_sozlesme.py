@@ -36,6 +36,11 @@ spec = {
         },
         "/bff/tradoria/definition-service/markets": {
             "get": {"operationId": "getMarkets",
+                    "parameters": [
+                        {"name": "sportId", "in": "query", "schema": {"type": "integer"}},
+                        {"name": "name", "in": "query", "schema": {"type": "string"}},
+                        {"name": "marketId", "in": "query", "required": True, "schema": {"type": "integer"}},
+                    ],
                     "responses": {"200": {"content": {"application/json": {"schema": {
                         "type": "array", "items": {"$ref": "#/components/schemas/Market"}}}}}}},
         },
@@ -57,6 +62,13 @@ chk("ALAKASIZ ödeme servisi GİRMEZ (ister dışı)", "payment-service" not in 
 chk("method+path yazılır", "GET /bff/" in blok)
 chk("çözülen response şeması (Market alanları) görünür", "outcomes" in blok or "name" in blok)
 chk("blok başlığı + 'KULLAN' yönergesi", "KAYITLI SERVİS SÖZLEŞMELERİ" in blok and "KULLAN" in blok)
+# owner 2026-11-02: query/path parametreleri indekslenir + çıktıda gösterilir (GET-filtre sözleşmesi)
+chk("parametre satırı çıktıda görünür (sportId/name/marketId)",
+    "Parametreler" in blok and all(x in blok for x in ("sportId", "name", "marketId")), blok)
+chk("zorunlu parametre * ile işaretli", "marketId:integer*" in blok, blok)
+blok_p = SS.endpoint_baglami("sportId ve name ile market filtreleme araması")
+chk("parametre ADIYLA sorgu → GET-filtre ucunu yüzeye çıkarır (param_boost)",
+    "definition-service/markets" in blok_p, blok_p[:300])
 
 # Hiç alaka yoksa boş (blok eklenmez)
 chk("alakasız sorgu → boş", SS.endpoint_baglami("tamamen alakasız xyzzy foobar") == "")
