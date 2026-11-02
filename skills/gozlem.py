@@ -169,15 +169,38 @@ def _dogrulama_listesi(gorev_ozet: str) -> str:
             ucler.append(u)
     if not not_bolumu and not params:
         return ""
-    sat = ["### GÖZLEM BİTMEDEN ÖNCE ZORUNLU DOĞRULAMA (analist/task isteği — pasif izleme YETMEZ)"]
+    # Kayıtlı Swagger'daki GERÇEK parametre adları (1254 koşusu: gözlemci nottaki 'id'/'q' ile uğraşıp `name`/`marketId`'yi
+    # hiç denemedi) — uç adı eşleşen kayıtlı endpoint'lerin query parametreleri listeye eklenir.
+    swagger_params: dict[str, list[str]] = {}
+    try:
+        from .servis_sozlesme import _endpointleri_oku, _yol_kaynaklari
+        kayitlar = _endpointleri_oku()
+        for u in ucler[:4]:
+            hedef = _yol_kaynaklari(u)
+            for k in kayitlar:
+                if k["method"] == "GET" and hedef and hedef <= _yol_kaynaklari(k["path"]):
+                    adlar = [p["ad"] for p in (k.get("parametreler") or []) if p["yer"] == "query"
+                             and p["ad"] not in ("page", "size", "sortBy", "sortDirection")]
+                    if adlar:
+                        swagger_params[u] = adlar[:10]
+                        break
+    except Exception:
+        pass
+    sat = ["### GÖZLEM BİTMEDEN ÖNCE ZORUNLU DOĞRULAMA (analist/task isteği — pasif izleme YETMEZ; ÖNCELİK 1: bunları "
+           "İLK yap, referans ekran aramaya/gezintiye tur harcamadan önce)"]
     if ucler:
         sat.append("- İlgili uç(lar): " + ", ".join(f"`{u}`" for u in ucler[:4]))
+    for u, adlar in swagger_params.items():
+        sat.append(f"- Kayıtlı Swagger'a göre `{u}` GERÇEK query parametreleri: " + ", ".join(f"`{a}`" for a in adlar)
+                   + " — nottaki ad farklıysa (ör. 'id'/'q') BUNLARI dene ve eşlemeyi yaz.")
     if params:
-        sat.append("- Şu parametrelerin HER BİRİ için en az bir istek at (arama/filtre alanına değer gir ya da ucu "
-                   "parametreyle çağır), `browser_network_request` ile path+query+yanıtı yakala ve 'Aksiyonlar → Servis "
-                   "Çağrıları'na `[K: Network:GET …?<param>=…]` satırı olarak yaz: " + ", ".join(f"`{p}`" for p in params[:8]))
-        sat.append("- Parametrenin GERÇEK adı notta yazandan farklıysa (ör. 'id' → `marketId`) gerçek adı yaz; parametre yoksa "
-                   "bunu 'Gezilemeyen'e DENENDİ + sonuç olarak yaz (ör. '`?name=x` → 400 / filtre uygulanmadı').")
+        sat.append("- Şu parametrelerin HER BİRİ için en az bir istek tetikle: " + ", ".join(f"`{p}`" for p in params[:8])
+                   + ". NASIL: ekrandaki ilgili filtre/arama alanına değer yazıp Apply/Enter ile UI ÜZERİNDEN tetikle (uygulama "
+                   "isteği kendi oturum token'ıyla atar). Oturum dışı doğrudan URL/`fetch` çağrısı 401 döner ve KANIT SAYILMAZ. "
+                   "Filtreli yanıt küçüktür → `browser_network_request` ile path+query+yanıt gövdesini oku ve 'Aksiyonlar → "
+                   "Servis Çağrıları'na `[K: Network:GET …?<param>=…]` satırı olarak yaz (parametresiz/parametreli toplam kayıt farkını belirt).")
+        sat.append("- Parametrenin GERÇEK adı notta yazandan farklıysa gerçek adı yaz; UI'da o filtre alanı yoksa 'Gezilemeyen'e "
+                   "'UI'da tetiklenemedi: <alan yok>' + Swagger'daki adı yaz (400/401 denemesi kanıt değildir).")
     sat.append("- Bu listedeki her madde rapora 'denendi' ya da 'denenemedi + neden' olarak girmeden raporu BİTİRME.")
     return "\n".join(sat)
 

@@ -325,6 +325,7 @@ _oz = "Ekran açıklaması.\n\n### ANALİST NOTU — gözlemde FİİLEN DENE\nGE
 _dl = GZ._dogrulama_listesi(_oz)
 chk("not varsa zorunlu doğrulama listesi: uç + parametreler id/sportId/name",
     "ZORUNLU DOĞRULAMA" in _dl and "`id`" in _dl and "`sportId`" in _dl and "`name`" in _dl and "definition-service/markets" in _dl, _dl)
+chk("liste: UI üzerinden tetikle (oturum dışı 401 kanıt değil) + ÖNCELİK 1", "UI ÜZERİNDEN" in _dl and "401" in _dl and "ÖNCELİK 1" in _dl)
 chk("not/parametre yoksa liste boş (prompt büyümez)", GZ._dogrulama_listesi("Yalnız ekran açıklaması, parametre yok.") == "")
 _src_gz = Path(GZ.__file__).read_text(encoding="utf-8")
 chk("rapor_al listeyi _RAPOR_FORMAT'tan SONRA (recency) ekler",
