@@ -307,6 +307,16 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   `_jgAdimVurgu` katman-duyarlı. **TEST KURALI:** denetçi raporları `tests/test_*`'e regresyon olarak işlendi
   (jira_temizle §6, servis_sozlesme, bff_kesif §7, canli_giris, katman_secimi, soru_hedefli). Prompt metrikleri (D#7):
   gorev promptu 61 negatif kural — yeni yasak eklemek yerine `_TASK_DILI_KURALLARI`'nı pozitif tut.
+  **1254 doğrulama koşusu (11:43) sonrası ek düzeltme:** künye/punt/ekran-başına yapı DÜZELDİ; kalan sapma: Swagger bloğu
+  `GET …/markets`'ı 1. sırada `name`+`marketId` ile verdiği hâlde model 'doğrulanamadı' yazdı (notta 'id' dendiği için
+  `marketId`'yi eşlemedi) + gözlem 47 turda yalnız varsayılan liste çağrısını yakaladı (parametre denenmedi). (a)
+  `servis_sozlesme` blok başlığı: 'Parametreler satırı KESİN sözleşmedir, notta başka adla anılıyorsa (id→marketId) Swagger
+  adını kullan, `/bff/<servis>` proxy = `/api/v1` aynı uç'; aynı cümle 'ANALİST BİLDİRDİ' kuralına. (b) `gozlem._dogrulama_listesi`
+  (recency, `_RAPOR_FORMAT`'tan SONRA): analist notundaki uç + parametre adlarından 'GÖZLEM BİTMEDEN ÖNCE ZORUNLU DOĞRULAMA'
+  bloğu — her parametre için istek at, `[K: Network:…?<param>=…]` kanıtı yaz, denenemediyse 'Gezilemeyen'e; not yoksa eklenmez.
+  (c) `soru_cozumleme._GOZLEMLE_GEREKSIZ` 'hangi değer … yazılmalı' veri-modeli sorusunu post-değişiklik sanıyordu (Q-T-001'e
+  yanlış 'BE sözleşmesinden teyit' notu) → yalnız 'hangi varsayılan değer … atan/türet' + 'hangi kural …'. Test:
+  `test_gozlem_fazi` §X, `test_soru_cozumleme`, `test_servis_sozlesme`.
 - **SERVİS/ENDPOINT KARARI — agent punt etmez, mimari kararı verir (owner 2026-10-21: 'mevcut servis varsa kullan, yoksa yeni servisi request/response ile çıkar; analiste hangi uç diye sorma'):**
   `skills/servis_sozlesme.py` (`endpoint_baglami(sorgu, ek_metin)`): kayıtlı Swagger'lardan (`reference/services/*.json`)
   task+canlı gözlemde geçen path/kaynak adlarıyla alakalı MEVCUT endpoint'leri (method+path+request/response şeması,

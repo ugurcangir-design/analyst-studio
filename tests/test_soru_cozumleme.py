@@ -196,6 +196,12 @@ _md = "## Açık Sorular\n\n### Q-T-001: Switch kaldırıldığında BE zorunlu 
 _cozumle_gercek(_md, {"key": "X-1", "summary": "s"}, canli=True)   # gerçek cozumle (mock değil)
 chk("post-değişiklik sorusu canlı gözleme girmez, gözlemlenebilir soru girer (1 soru gözlendi, 2 değil)", _canli_cagrildi["n"] == 1, _canli_cagrildi)
 
+# denetim 2026-11-02: 'hangi değer … yazılmalı' (veri modeli sorusu) post-değişiklik sayılmaz; gerçek post-değişiklik yine yakalanır
+chk("_gozlemle_gereksiz: 'hangi değeri alana yazılmalı: id mi definitionId mi' GÖZLEMLENEBİLİR (false)",
+    not SC._gozlemle_gereksiz("Seçilen market'in hangi değeri mainPreMatchMarketId alanına yazılmalı: id değeri mi, definitionId mi?"))
+chk("_gozlemle_gereksiz: 'kaldırıldığında … kabul eder mi' + 'hangi varsayılan değer atanır' hâlâ true",
+    SC._gozlemle_gereksiz("Alan kaldırıldığında BE istek kabul eder mi?") and SC._gozlemle_gereksiz("Yeni kayıtta hangi varsayılan değer atanır?"))
+
 print()
 if _hata:
     print(f"SORU ÇÖZÜMLEME TESTLERİ BAŞARISIZ ({_hata} hata)")

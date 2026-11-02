@@ -208,7 +208,11 @@ def endpoint_baglami(sorgu_metni: str, ek_metin: str = "", butce: int = 9000, az
     skorlu = [(v["_skor"], v) for v in tekil.values()]
     satirlar = ["### KAYITLI SERVİS SÖZLEŞMELERİ (Swagger — task'a alakalı MEVCUT endpoint'ler)",
                 "Aşağıdakiler sistemde ZATEN VAR olan endpoint'lerdir. İhtiyacını karşılayan varsa ÇÖZÜM OLARAK KULLAN "
-                "(method+path+alanları aynen), `[K: Swagger:<servis>]` ile. Yoksa canlı gözlemle doğrula; o da yoksa yeni tasarla.\n"]
+                "(method+path+alanları aynen), `[K: Swagger:<servis>]` ile. Yoksa canlı gözlemle doğrula; o da yoksa yeni tasarla.\n"
+                "**Parametreler satırı KESİN sözleşmedir:** bir parametre burada listeleniyorsa onu `[K: Swagger:<servis>]` ile "
+                "DOĞRULANMIŞ say — 'Swagger'da doğrulanamadı' / 'BE teyit' YAZMA. Task/analist notu parametreyi başka adla "
+                "anıyorsa (ör. 'id ile arama' → listede `marketId`) Swagger'daki GERÇEK adı kullan ve eşlemeyi tek cümleyle belirt. "
+                "`/bff/<servis>/...` proxy yolu ile servisin kendi `/api/v1/...` yolu AYNI uçtur (parametreleri birleştir).\n"]
     toplam = len(satirlar[0]) + len(satirlar[1])
     n = 0
     for skor, k in skorlu:

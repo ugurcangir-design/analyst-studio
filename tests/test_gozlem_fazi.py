@@ -320,6 +320,19 @@ chk("uç + Kullanım Raporu paneli", '"/api/usage/cagri-ozet"' in src_app and "k
 for mod, et in (("soru_cozumleme", "soru:cozum"), ("bff_kesif", '"bff"'), ("canli_giris", '"giris"'), ("kabul_kontrolu", "kabul:dogrula")):
     chk(f"aşama etiketi: {mod}", et in Path(JG.__file__).parent.joinpath(f"{mod}.py").read_text(encoding="utf-8"))
 
+print("X) denetim 2026-11-02 — analist notundan ZORUNLU DOĞRULAMA LİSTESİ (recency bloğu)")
+_oz = "Ekran açıklaması.\n\n### ANALİST NOTU — gözlemde FİİLEN DENE\nGET /bff/tradoria/definition-service/markets ucunda id parametresi var mı dene; sportId ve name filtresi."
+_dl = GZ._dogrulama_listesi(_oz)
+chk("not varsa zorunlu doğrulama listesi: uç + parametreler id/sportId/name",
+    "ZORUNLU DOĞRULAMA" in _dl and "`id`" in _dl and "`sportId`" in _dl and "`name`" in _dl and "definition-service/markets" in _dl, _dl)
+chk("not/parametre yoksa liste boş (prompt büyümez)", GZ._dogrulama_listesi("Yalnız ekran açıklaması, parametre yok.") == "")
+_src_gz = Path(GZ.__file__).read_text(encoding="utf-8")
+chk("rapor_al listeyi _RAPOR_FORMAT'tan SONRA (recency) ekler",
+    _src_gz.find("_dogrulama_listesi(gorev_ozet)") > _src_gz.find('{"type": "text", "text": _RAPOR_FORMAT}'))
+chk("_ozet_kirp baş+son: uzun özetin SONUNDAKİ istek düşmez", "SONDAKI_ISTEK" in GZ._ozet_kirp("A" * 5000 + " SONDAKI_ISTEK"))
+chk("_anahtar tam özet: yalnız sonu farklı iki özet FARKLI anahtar",
+    GZ._anahtar(CANLI, "gorev", "X" * 3000 + "a") != GZ._anahtar(CANLI, "gorev", "X" * 3000 + "b"))
+
 print()
 if _hata:
     print(f"GÖZLEM FAZI TESTLERİ BAŞARISIZ ({_hata} hata)")

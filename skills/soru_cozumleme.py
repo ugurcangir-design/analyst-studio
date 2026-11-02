@@ -236,7 +236,7 @@ _GOZLEMLE_GEREKSIZ = re.compile(
     r"|alan[- ]?(lar)?[- ]?(gönderilmediğinde|olmadan|yoksa)"
     r"|yoksa[- ]?koru"
     r"|(varsay[ıi]lan|default)\s+(değer|de[ğg]er).*(atan|yaz[ıi]l|türet)"
-    r"|hangi\s+(değer|de[ğg]er|kural).*(atan|yaz[ıi]l|türet)",
+    r"|hangi\s+(varsay[ıi]lan\s+)?(değer|de[ğg]er).*(atan|türet)|hangi\s+kural.*(atan|yaz[ıi]l|türet)",
     re.I)
 
 

@@ -149,6 +149,39 @@ def _ozet_kirp(metin: str) -> str:
     return m[:bas] + "\n…(orta kısım kırpıldı)…\n" + m[-son:]
 
 
+_PARAM_ADAY = re.compile(r"`?\b([a-z][A-Za-z0-9]*(?:Id|ID|Name|Code)|id|name|q|page|size|sportId|marketId)\b`?")
+_UC_ADAY = re.compile(r"(?:GET|POST|PUT|PATCH|DELETE)?\s*(/(?:bff|api)/[A-Za-z0-9_./{}-]+)")
+
+
+def _dogrulama_listesi(gorev_ozet: str) -> str:
+    """Analist notu / task özetinde adı geçen parametre ve uçlardan ZORUNLU doğrulama listesi (recency bloğu).
+    Not yoksa ve parametre adayı yoksa boş döner (prompt büyümez)."""
+    m = (gorev_ozet or "")
+    not_bolumu = m.split("ANALİST NOTU", 1)[1] if "ANALİST NOTU" in m else ""
+    kaynak = not_bolumu or m
+    params = []
+    for p in _PARAM_ADAY.findall(kaynak):
+        if p not in params and p.lower() not in ("page", "size"):
+            params.append(p)
+    ucler = []
+    for u in _UC_ADAY.findall(m):
+        if u not in ucler:
+            ucler.append(u)
+    if not not_bolumu and not params:
+        return ""
+    sat = ["### GÖZLEM BİTMEDEN ÖNCE ZORUNLU DOĞRULAMA (analist/task isteği — pasif izleme YETMEZ)"]
+    if ucler:
+        sat.append("- İlgili uç(lar): " + ", ".join(f"`{u}`" for u in ucler[:4]))
+    if params:
+        sat.append("- Şu parametrelerin HER BİRİ için en az bir istek at (arama/filtre alanına değer gir ya da ucu "
+                   "parametreyle çağır), `browser_network_request` ile path+query+yanıtı yakala ve 'Aksiyonlar → Servis "
+                   "Çağrıları'na `[K: Network:GET …?<param>=…]` satırı olarak yaz: " + ", ".join(f"`{p}`" for p in params[:8]))
+        sat.append("- Parametrenin GERÇEK adı notta yazandan farklıysa (ör. 'id' → `marketId`) gerçek adı yaz; parametre yoksa "
+                   "bunu 'Gezilemeyen'e DENENDİ + sonuç olarak yaz (ör. '`?name=x` → 400 / filtre uygulanmadı').")
+    sat.append("- Bu listedeki her madde rapora 'denendi' ya da 'denenemedi + neden' olarak girmeden raporu BİTİRME.")
+    return "\n".join(sat)
+
+
 def rapor_al(canli_blok: str, kapsam: str, gorev_ozet: str = "", yeniden: bool = True,
              max_turns: int | None = None, _ai=None) -> dict:
     """Gözlem fazını çalıştırır (ya da taze raporu yeniden kullanır).
@@ -166,8 +199,14 @@ def rapor_al(canli_blok: str, kapsam: str, gorev_ozet: str = "", yeniden: bool =
     asama_ayarla("gozlem")
     icerik = [{"type": "text", "text": canli_blok},
               {"type": "text", "text": "### Gözlem konusu (görev/doküman özeti — yalnız hedefi anlamak için)\n" + _ozet_kirp(gorev_ozet)},
-              {"type": "text", "text": _RAPOR_FORMAT},
-              {"type": "text", "text": "Gözlemi uygula ve raporu yaz."}]
+              {"type": "text", "text": _RAPOR_FORMAT}]
+    # ZORUNLU DOĞRULAMA LİSTESİ (recency — promptun SONUNA): analist notu/task belirli parametre/uç adlandırıyorsa gözlemci
+    # bunları FİİLEN denemeden raporu bitiremez (MBSTRADE-1254 koşusu: not 'id/name/sportId dene' dediği hâlde 47 turda
+    # yalnız varsayılan liste çağrısı yakalandı → analiz 'gözlem raporunda doğrulanamadı' dedi).
+    _dl = _dogrulama_listesi(gorev_ozet)
+    if _dl:
+        icerik.append({"type": "text", "text": _dl})
+    icerik.append({"type": "text", "text": "Gözlemi uygula ve raporu yaz."})
     ai = _ai or (lambda s, m: _api_cagri(s, m, max_tokens=MAX_TOKENS_COMBINED, thinking=False, onbellek=False,
                                          canli_uygulama_kapsami=kapsam, max_turns=max_turns, katman="yardimci"))
     baslangic = time.time()      # durum dosyası tazeliği: bu çağrıdan önce yazılmış kalıntı 'yapıldı' sayılmaz

@@ -62,6 +62,9 @@ chk("ALAKASIZ ödeme servisi GİRMEZ (ister dışı)", "payment-service" not in 
 chk("method+path yazılır", "GET /bff/" in blok)
 chk("çözülen response şeması (Market alanları) görünür", "outcomes" in blok or "name" in blok)
 chk("blok başlığı + 'KULLAN' yönergesi", "KAYITLI SERVİS SÖZLEŞMELERİ" in blok and "KULLAN" in blok)
+# 1254 koşusu: blok name/marketId listelerken model 'doğrulanamadı' yazdı → başlık parametre listesini KESİN ilan eder + ad eşleme
+chk("blok başlığı: Parametreler satırı KESİN + 'id'→marketId ad eşleme + proxy/api aynı uç",
+    "KESİN sözleşmedir" in blok and "marketId" in blok and "AYNI uçtur" in blok)
 # owner 2026-11-02: query/path parametreleri indekslenir + çıktıda gösterilir (GET-filtre sözleşmesi)
 chk("parametre satırı çıktıda görünür (sportId/name/marketId)",
     "Parametreler" in blok and all(x in blok for x in ("sportId", "name", "marketId")), blok)
