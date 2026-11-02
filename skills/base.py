@@ -395,6 +395,10 @@ _TASK_DILI_KURALLARI = (
     "cümlesi ve ortama özgü somut kayıt ID listesi yazılmaz; sınır gerekiyorsa `## Kapsam Dışı` altında tek kısa madde.\n"
     "6. Yalnız bu görevin kendi bağlı issue'su anılır; örnek/referanstan gelen başka task anahtarı kopyalanmaz, "
     "yetenek SERVİS ADIYLA verilir.\n"
+    "7. Tablo 'Durum'/'Kanıt' hücresi OLGUSAL durum taşır ('Gözlendi', 'Swagger'da tanımlı', 'Tanımlı değil') — "
+    "kaynak adı ('Analist cevabı', 'Analist notu', 'Confluence') tek başına hücre/durum DEĞİLDİR; kaynak yalnız "
+    "`[K: …]` etiketi olarak hücre sonuna gelir. Kayıtlı Swagger sözleşmesinde LİSTELENEN bir parametre için "
+    "'doğrulanamadı/bulunamadı/analist bildirdi' yazılmaz — `[K: Swagger:<servis>]` ile kesin yazılır.\n"
 )
 
 _EK_KURAL_SKILL_IDS = frozenset({

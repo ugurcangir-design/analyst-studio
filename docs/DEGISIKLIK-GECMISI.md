@@ -25,6 +25,10 @@
 - Tüm bulgular `tests/test_*`'e regresyon olarak işlendi; 39 test + smoke yeşil. Analistlere: Güncelleme → Yeniden Başlat;
   görünür etki: Task analizi artık kendi önceki hatasını örnek almaz, Düzelt/Cevap aynı dili uygular, gözlem analist
   notundaki parametreyi fiilen dener, Jira kopyası kod/alt madde/hata mesajı kaybetmez.
+- **1254 3. koşu ek (aynı gün):** Swagger bloğu doğru parametreleri listelerken ana analiz 'bulunamadı', cevap turu 'Analist
+  bildirdi … canlı doğrulanamadı' + Durum hücresi 'Analist cevabı' yazdı → prompt kuralı yerine mekanik kapı:
+  `servis_sozlesme.sozlesme_celiskileri` (0 token) + tek hedefli düzelt turu; düzelt/cevap turlarına Swagger bloğu girer;
+  TASK DİLİ #7 (Durum hücresi olgusal). Test: `tests/test_servis_sozlesme.py`.
 
 ## Opt-in Ekran Görüntüsü — FE task'ına canlı ekran eki ✅ (CLAUDE.md "EKRAN GÖRÜNTÜSÜ", MIMARI yok — CLAUDE.md yeterli)
 - `skills/ekran_goruntu.py`: analizin adlandırdığı canlı ekranları Playwright `browser_take_screenshot` (dosya-adsız → `--output-dir`)

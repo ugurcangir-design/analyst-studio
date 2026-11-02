@@ -319,6 +319,20 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   ÖNCELİK 1 olarak gezintiden önce ister. **Bilinen sınır:** büyük yanıt gövdesi (ör. 79k) Playwright tarafından dosyaya
   yazılır, canlı çağrıda `Read`/`browser_evaluate` kapalı → gözlemci alanları okuyamaz; filtreli (küçük) yanıt bu sınıra
   takılmaz. `browser_evaluate`'i gözlem fazında açmak owner kararı (oturum-içi fetch + gövde dilimi sağlar, yazma riski).
+  **3. koşu (15:39) — SÖZLEŞME ÇELİŞKİ DENETİMİ (prompt kuralı yetmedi, mekanik kapı):** Swagger bloğu `name`/`marketId`'yi
+  LİSTELEDİĞİ hâlde (yeniden kuruldu, doğrulandı) Opus ana analiz '§3.1 kayıtlı Swagger bloğunda bulunamadı' + §10 'ayrı BE
+  task'ı' yazdı; sonraki cevap turları (Swagger bloğunu GÖRMEZ) analistin 'serviste id parametresi var' cevabını 'Analist
+  bildirdi … canlı doğrulanamadı' + Durum hücresi 'Analist cevabı' olarak işledi. Düzeltme: (1) `servis_sozlesme.
+  sozlesme_celiskileri(analiz_md, blok)` 0-token: Swagger bloğunu geri ayrıştırır (`blok_parametreleri`), analizde ANILAN
+  ucun TANIMLI parametresi için punt satırı (`_PUNT` + `_PUNT_KONU`: konu parametre/sözleşme varlığı olmalı; tırnak içi UI
+  mesajı '"Market ID bulunamadı"' ve davranış belirsizliği 'sportId'siz çağrı … doğrulanamadı' çelişki DEĞİL; satır en yakın
+  önceki uç anımına (≤30 satır) bağlanır, genel 'ID arama parametresi' → `*Id` parametresine) → `celiski_talimati` →
+  `jira_gorevleri._sozlesme_celiski_duzelt` ana analizden hemen sonra TEK hedefli düzelt turu (`gorev:sozlesme`, yardımcı
+  katman; `SOZLESME_DENETIM=false` kapatır). 3. koşu çıktısında tam 5 gerçek satır, 2. koşu (doğru) çıktısında 0 yanlış
+  pozitif. (2) `gorev_analiz_duzelt(sozlesme_blok=)`: verilmezse `_duzelt_sozlesme_blogu` (0 token, butce 5000/azami 8)
+  türetir → düzelt + cevap + öz-çözümleme işleme turları Swagger sözleşmesini 'KESİN BİLGİ' etiketiyle görür. (3)
+  `_CEVAP_TALIMAT` + `_TASK_DILI_KURALLARI` #7: Durum/Kanıt hücresi OLGUSAL ('Swagger'da tanımlı'), kaynak adı hücre
+  olmaz, listelenen parametre için punt yazılmaz. Test: `tests/test_servis_sozlesme.py` (sentetik blok + yakalanan düzelt içeriği).
   (c) `soru_cozumleme._GOZLEMLE_GEREKSIZ` 'hangi değer … yazılmalı' veri-modeli sorusunu post-değişiklik sanıyordu (Q-T-001'e
   yanlış 'BE sözleşmesinden teyit' notu) → yalnız 'hangi varsayılan değer … atan/türet' + 'hangi kural …'. Test:
   `test_gozlem_fazi` §X, `test_soru_cozumleme`, `test_servis_sozlesme`.

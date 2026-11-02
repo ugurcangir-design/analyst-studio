@@ -143,6 +143,78 @@ chk("açık soru promptu: kaynaktan türetilebilir soru üretme", "KAYNAKTAN TÜ
 import skills.soru_cozumleme as SC  # noqa: E402
 chk("öz-çözümleme: kaynaktan türetilebilir → cevaplandi", "KAYNAKTAN TÜRETİLEBİLİR SORULAR `cevaplandi`" in SC._SISTEM if hasattr(SC, "_SISTEM") else "KAYNAKTAN TÜRETİLEBİLİR" in inspect.getsource(SC))
 
+# --- owner 2026-11-02 (1254 3. koşu): Swagger bloğu `name`/`marketId` listelerken ana analiz 'bulunamadı / analist bildirdi'
+# yazdı → 0-token çelişki dedektörü + hedefli düzelt; düzelt/cevap turuna Swagger bloğu girer; Durum hücresi kaynak adı olmaz.
+import skills.servis_sozlesme as SS  # noqa: E402
+_blok = (
+    "### KAYITLI SERVİS SÖZLEŞMELERİ\n"
+    "- **GET /bff/tradoria/definition-service/markets** — getMarkets  `[K: Swagger:sky-panel-bff|sky-operation-bff]`\n"
+    "  - Parametreler (query/path): `page:integer, size:integer, sportId:integer, name:string, marketId:string`\n"
+    "- **GET /bff/tradoria/event-management-service/fixture** — getFixtures  `[K: Swagger:sky-panel-bff]`\n"
+    "  - Parametreler (query/path): `id:integer, name:string, externalId:string`\n"
+    "- **PUT /bff/tradoria/definition-service/sports/{id}** — updateSport  `[K: Swagger:sky-panel-bff]`\n"
+)
+_bp = SS.blok_parametreleri(_blok)
+chk("blok_parametreleri: parametreli uçlar geri ayrışır (parametresiz uç yok)",
+    set(_bp) == {"/bff/tradoria/definition-service/markets", "/bff/tradoria/event-management-service/fixture"}
+    and _bp["/bff/tradoria/definition-service/markets"]["parametreler"] == {"page", "size", "sportId", "name", "marketId"}
+    and _bp["/bff/tradoria/definition-service/markets"]["servis"] == "sky-panel-bff|sky-operation-bff")
+_md_kotu = (
+    "## 3. Teknik Gereksinimler\n### 3.1. Kullanılacak servis\n"
+    "Market listesi `GET /bff/tradoria/definition-service/markets` ucundan okunur.\n\n"
+    "| Yetenek | Parametre | Kanıt |\n|---|---|---|\n"
+    "| Ad ile arama | `name` | ⚠ Kayıtlı Swagger bloğunda doğrulanamadı `[K: ❓ Belirsiz]` |\n"
+    "| ID ile arama | — | ⚠ Swagger bloğunda ID arama parametresi bulunamadı `[K: ❓ Belirsiz]` |\n"
+    "| Sport filtresi | `sportId` | `[K: Swagger:sky-panel-bff]` |\n\n"
+    "- `sportId`'siz çağrının tüm marketleri döndürdüğü doğrulanamadı `[K: ❓ Belirsiz]`.\n"
+    "- Eşleşmeyen terim \"Market ID bulunamadı\" hatası verir.\n"
+    "## 10. Teknik Borç\n- Analist, serviste id parametresinin bulunduğunu bildirdi; tam adı canlı doğrulanamadı.\n"
+)
+_c = SS.sozlesme_celiskileri(_md_kotu, _blok)
+chk("çelişki: Swagger'da TANIMLI `name` + 'ID arama parametresi bulunamadı' + 'analist bildirdi' yakalanır (markets'a bağlı)",
+    {x["parametre"] for x in _c} == {"name", "marketId"} and all(x["path"].endswith("/markets") for x in _c) and len(_c) == 3)
+chk("çelişki DEĞİL: davranış belirsizliği ('sportId'siz çağrı … doğrulanamadı') ve tırnak içi UI mesajı ('Market ID bulunamadı')",
+    not any("sportId'siz" in x["satir"] or "Eşleşmeyen terim" in x["satir"] for x in _c))
+_md_iyi = _md_kotu.replace("⚠ Kayıtlı Swagger bloğunda doğrulanamadı `[K: ❓ Belirsiz]`", "`[K: Swagger:sky-panel-bff]`") \
+    .replace("| ID ile arama | — | ⚠ Swagger bloğunda ID arama parametresi bulunamadı `[K: ❓ Belirsiz]` |",
+             "| ID ile arama | `marketId` | `[K: Swagger:sky-panel-bff]` |") \
+    .replace("- Analist, serviste id parametresinin bulunduğunu bildirdi; tam adı canlı doğrulanamadı.\n", "")
+chk("çelişki yok: doğru analizde 0 bulgu (yanlış pozitif → gereksiz düzelt turu olmaz)", SS.sozlesme_celiskileri(_md_iyi, _blok) == [])
+chk("çelişki yok: analizde anılmayan uç (fixture) için yargı yapılmaz",
+    SS.sozlesme_celiskileri("`externalId` parametresi Swagger'da bulunamadı `[K: ❓ Belirsiz]`", _blok) == [])
+_t = SS.celiski_talimati(_c)
+chk("celiski_talimati: KESİN parametre listesi + gerçek ad (marketId) + Durum hücresi + §10/Açık Soru temizliği",
+    "`marketId`" in _t and "`name`" in _t and "Swagger:sky-panel-bff" in _t and "Durum/Kanıt" in _t and "§10" in _t)
+chk("celiski_talimati: boş listede boş", SS.celiski_talimati([]) == "")
+import skills.jira_gorevleri as JG  # noqa: E402
+_jg_src = inspect.getsource(JG)
+chk("gorev_analiz_et: ana çıktı _sozlesme_celiski_duzelt'ten geçer (tespit → hedefli düzelt, SOZLESME_DENETIM ile kapanır)",
+    "teknik = _sozlesme_celiski_duzelt(gorev, teknik, _sozlesme_blok)" in _jg_src and "SOZLESME_DENETIM" in _jg_src)
+# düzelt turu: Swagger bloğu çağrıya girer (verilen ya da 0-token türetilen) — yakalanan içerikle doğrula
+_yakalanan = {}
+def _sahte_api(sistem, mesajlar, **kw):
+    _yakalanan["icerik"] = mesajlar[0]["content"]
+    return "<teknik_analiz>" + "## 1\n## 2\n## 3\n" + ("x" * 400) + "</teknik_analiz>"
+_eski_api = JG._api_cagri
+JG._api_cagri = _sahte_api
+try:
+    _mev = "## 1\n## 2\n## 3\n" + ("y" * 500)
+    JG.gorev_analiz_duzelt({"key": "X-1", "summary": "s"}, _mev, "düzelt", sozlesme_blok=_blok)
+    _metinler = [b.get("text", "") for b in _yakalanan["icerik"]]
+    chk("gorev_analiz_duzelt: verilen Swagger bloğu 'KAYITLI SERVİS SÖZLEŞMESİ — KESİN' etiketiyle talimattan ÖNCE girer",
+        any("KAYITLI SERVİS SÖZLEŞMESİ — KESİN" in m and "definition-service/markets" in m for m in _metinler)
+        and _metinler[-1].startswith("[DÜZELTME TALİMATI"))
+    JG.gorev_analiz_duzelt({"key": "X-1", "summary": "s"}, _mev, "düzelt", sozlesme_blok="")
+    chk("gorev_analiz_duzelt: boş blok verilirse sözleşme bloğu eklenmez (türetme de yapılmaz)",
+        not any("KAYITLI SERVİS SÖZLEŞMESİ — KESİN" in b.get("text", "") for b in _yakalanan["icerik"]))
+finally:
+    JG._api_cagri = _eski_api
+chk("_CEVAP_TALIMAT: cevaptaki parametre Swagger'daki gerçek ada çözülür, 'analist bildirdi' kurulmaz, Durum hücresi 'Analist cevabı' olmaz",
+    "KAYITLI SERVİS SÖZLEŞMESİ" in JG._CEVAP_TALIMAT and "'Analist cevabı' YAZMA" in JG._CEVAP_TALIMAT)
+from skills.base import _TASK_DILI_KURALLARI as _TD  # noqa: E402
+chk("TASK DİLİ #7: Durum/Kanıt hücresi olgusal; Swagger'da listelenen parametre için punt yazılmaz",
+    "7. Tablo 'Durum'/'Kanıt' hücresi OLGUSAL" in _TD and "LİSTELENEN bir parametre" in _TD)
+
 print()
 if HATA:
     print(f"FAIL — {HATA} kontrol başarısız")

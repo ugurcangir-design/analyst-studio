@@ -233,3 +233,113 @@ def endpoint_baglami(sorgu_metni: str, ek_metin: str = "", butce: int = 9000, az
         toplam += len(blok)
         n += 1
     return "".join(satirlar) if n else ""
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# SÖZLEŞME ÇELİŞKİ DENETİMİ (0 token — owner 2026-11-02, MBSTRADE-1254 3. koşu): Swagger bloğu `name`/`marketId`'yi
+# LİSTELEDİĞİ hâlde ana analiz "kayıtlı Swagger bloğunda bulunamadı / analist bildirdi / canlı doğrulanamadı" yazdı
+# (188k karakterlik promptta 20 uçluk bloğun bir satırı gözden kaçtı). Prompt kuralı tek başına yetmiyor → üretim
+# SONRASI deterministik tarama: analizde ANILAN ucun Swagger'da TANIMLI parametresi için punt/belirsiz cümlesi varsa
+# çelişki = hedefli düzeltme talimatı (Swagger bloğu düzelt turuna da verilir).
+# ---------------------------------------------------------------------------------------------------------------
+_BLOK_UC = re.compile(r"^- \*\*(GET|POST|PUT|DELETE|PATCH) (\S+)\*\*.*?`\[K: Swagger:([^\]]+)\]`", re.M)
+_BLOK_PARAM = re.compile(r"^  - Parametreler[^`]*`([^`]+)`", re.M)
+_PUNT = re.compile(r"(?i)doğrulanamadı|doğrulanmadı|bulunamadı|bulunmadı|bildirdi|teyit edil|❓ Belirsiz|yakalayamadı|"
+                   r"yakalanmadı|parametre(?:si)? yok|belirlenemedi|tam adı")
+# Punt'un KONUSU parametre/sözleşme VARLIĞI olmalı — 'sportId'siz çağrının davranışı doğrulanamadı' (davranış) ya da UI
+# hata mesajı '"Market ID bulunamadı"' (tırnak içi, önce silinir) çelişki DEĞİLDİR.
+_PUNT_KONU = re.compile(r"(?i)swagger|sözleşme|parametre|bildirdi|teyit|serviste|uçta|ucunda")
+_TIRNAK = re.compile(r"\"[^\"\n]*\"|“[^”\n]*”")
+_GENEL_ID_ARAMA = re.compile(r"(?i)\bID\s+(?:ile\s+)?arama|ID arama parametresi|id parametresi")
+_YAKIN_SATIR = 30   # punt satırı, en yakın ÖNCEKİ uç anımına (≤30 satır) bağlanır
+
+
+def blok_parametreleri(blok: str) -> dict[str, dict]:
+    """Swagger bloğunu geri ayrıştırır: {path: {method, servis, parametreler:set}}. Yalnız parametresi olan uçlar."""
+    out: dict[str, dict] = {}
+    if not blok:
+        return out
+    uclar = list(_BLOK_UC.finditer(blok))
+    for i, m in enumerate(uclar):
+        son = uclar[i + 1].start() if i + 1 < len(uclar) else len(blok)
+        govde = blok[m.end():son]
+        pm = _BLOK_PARAM.search(govde)
+        if not pm:
+            continue
+        params = {p.strip().split(":")[0].rstrip("*") for p in pm.group(1).split(",") if p.strip()}
+        out[m.group(2)] = {"method": m.group(1), "servis": m.group(3), "parametreler": params}
+    return out
+
+
+def sozlesme_celiskileri(analiz_md: str, blok: str) -> list[dict]:
+    """Analizde ANILAN uçların Swagger'da TANIMLI parametreleri hakkında punt/belirsiz satırları döndürür:
+    [{path, servis, parametre, satir}]. Analizde hiç geçmeyen uç ya da bloğa girmemiş parametre çelişki sayılmaz
+    (yanlış pozitif → gereksiz düzelt turu). 'ID ile arama … bulunamadı' genel ifadesi, uçta `*id` biçimli bir
+    query parametresi (marketId/id) varsa ona bağlanır."""
+    uclar = blok_parametreleri(blok)
+    if not uclar or not analiz_md:
+        return []
+    low = analiz_md.lower()
+    # Analizde ANILAN uçlar: tam path ya da `…/<son iki segment>` kısaltması (analiz böyle atıf yapar)
+    anilan: dict[str, tuple[str, ...]] = {}
+    for path in uclar:
+        son2 = "/".join(path.lower().strip("/").split("/")[-2:])
+        imzalar = (path.lower(), "…/" + son2, ".../" + son2)
+        if any(im in low for im in imzalar):
+            anilan[path] = imzalar
+    if not anilan:
+        return []
+    satirlar = analiz_md.splitlines()
+    bulgular: list[dict] = []
+    for i, ham in enumerate(satirlar):
+        s = _TIRNAK.sub("", ham)
+        if not (_PUNT.search(s) and _PUNT_KONU.search(s)):
+            continue
+        # en yakın önceki uç anımı (satırın kendisi dahil)
+        path = ""
+        for j in range(i, max(-1, i - _YAKIN_SATIR), -1):
+            lj = satirlar[j].lower()
+            hit = [p for p, imz in anilan.items() if any(im in lj for im in imz)]
+            if hit:
+                path = max(hit, key=len)   # en özgül yol (fixture vs fixture/market)
+                break
+        if not path:
+            continue
+        u = uclar[path]
+        id_param = next((p for p in sorted(u["parametreler"]) if p.lower().endswith("id") and p.lower() != "sportid"), "")
+        for p in sorted(u["parametreler"], key=len, reverse=True):
+            if re.search(rf"`{re.escape(p)}`|\b{re.escape(p)}\b", s):
+                bulgular.append({"path": path, "servis": u["servis"], "parametre": p, "satir": ham.strip()})
+                break
+        else:
+            if id_param and _GENEL_ID_ARAMA.search(s):
+                bulgular.append({"path": path, "servis": u["servis"], "parametre": id_param, "satir": ham.strip()})
+    gorulen, tekil = set(), []
+    for b in bulgular:
+        if b["satir"] in gorulen:
+            continue
+        gorulen.add(b["satir"])
+        tekil.append(b)
+    return tekil
+
+
+def celiski_talimati(celiskiler: list[dict]) -> str:
+    """Çelişki listesinden `gorev_analiz_duzelt` talimatı (Swagger bloğu çağrıya ayrıca verilir)."""
+    if not celiskiler:
+        return ""
+    uc_param: dict[str, set] = {}
+    for c in celiskiler:
+        uc_param.setdefault(f"{c['path']} `[K: Swagger:{c['servis']}]`", set()).add(c["parametre"])
+    satir = "\n".join(f"- {uc}: " + ", ".join(f"`{p}`" for p in sorted(ps)) for uc, ps in uc_param.items())
+    ornek = "\n".join(f"  > {c['satir'][:220]}" for c in celiskiler[:8])
+    return (
+        "SÖZLEŞME ÇELİŞKİSİ DÜZELTMESİ: Aşağıdaki parametreler kayıtlı Swagger sözleşmesinde TANIMLIDIR (KESİN):\n"
+        f"{satir}\n"
+        "Analizdeki şu satırlar bu sözleşmeyle çelişiyor ('bulunamadı / doğrulanamadı / analist bildirdi / BE teyit / "
+        "❓ Belirsiz'):\n" + ornek + "\n"
+        "Yapılacaklar: (1) Bu satırları ve aynı konudaki tablo hücrelerini düzelt — parametreyi Swagger'daki GERÇEK adıyla "
+        "(ör. 'id ile arama' → `marketId`) ve `[K: Swagger:<servis>]` etiketiyle KESİN yaz; punt cümlesini ve `[K: ❓ Belirsiz]` "
+        "etiketini kaldır. (2) Tablo 'Durum/Kanıt' hücresine olgusal durum yaz ('Swagger'da tanımlı'), kaynak adını hücre "
+        "yapma. (3) §10 Teknik Borç / Açık Sorular'da yalnız bu belirsizliğe dayanan maddeyi/soruyu sil; 'ayrı BE task'ı "
+        "açılır' koşulunu kaldır. (4) Diğer bölümlere dokunma."
+    )

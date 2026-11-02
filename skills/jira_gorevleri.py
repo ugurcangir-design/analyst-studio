@@ -950,6 +950,7 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
     # KAYITLI SERVİS SÖZLEŞMELERİ (owner 2026-10-21): task + canlı gözlemde geçen path/kaynaklarla eşleşen MEVCUT
     # Swagger endpoint'lerini (method+path+şema) enjekte et → agent mevcut servisi GÖRÜR ve kullanır (ister dışı EKLEMEZ;
     # yalnız task'a alakalı). FE katmanında atla (BE sözleşmesi zaten iliskili ile gelir). Hata/boşsa sessiz.
+    _sozlesme_blok = ""
     if katman != "fe":
         try:
             from . import servis_sozlesme as _ss
@@ -959,6 +960,7 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
             if _sb:
                 print("  📑 Kayıtlı servis sözleşmeleri (Swagger) analize dahil ediliyor...")
                 stable_bloklar.append({"type": "text", "text": _sb})
+                _sozlesme_blok = _sb
         except Exception as _e:
             print(f"  ⚠ Servis sözleşmeleri dahil edilemedi: {_e}")
 
@@ -1083,6 +1085,7 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
     yanit = _api_cagri(sistem, [{"role": "user", "content": icerik}],
                        max_tokens=MAX_TOKENS_COMBINED, thinking=extended_thinking_acik())
     teknik = _meta_notlari_temizle(_xml_ayir(_metin_sikistir(yanit), "teknik_analiz"))
+    teknik = _sozlesme_celiski_duzelt(gorev, teknik, _sozlesme_blok)
 
     # Şeffaflık: editör ön-izlemesinde + history'de RAG durumu görünür.
     # HTML yorumu olarak ekle — markdown render'da görünmez ama analist editörde okur.
@@ -1498,8 +1501,45 @@ def _govde_ayir(markdown: str) -> tuple[str, bool, str]:
     return rag, ozet_vardi, govde
 
 
+def sozlesme_denetimi_acik() -> bool:
+    """Üretim sonrası Swagger çelişki denetimi (0 token tarama + gerekirse 1 ucuz düzelt turu). `SOZLESME_DENETIM=false` kapatır."""
+    return os.getenv("SOZLESME_DENETIM", "true").strip().lower() not in ("0", "false", "no", "hayir", "hayır")
+
+
+def _sozlesme_celiski_duzelt(gorev: dict, teknik: str, sozlesme_blok: str) -> str:
+    """Ana analiz Swagger'da TANIMLI parametre için 'bulunamadı/analist bildirdi/doğrulanamadı' yazdıysa (3. koşu
+    MBSTRADE-1254: `name`/`marketId` blokta vardı, model gözden kaçırdı) → deterministik tarama + TEK hedefli düzelt
+    turu (yardımcı katman, Swagger bloğu çağrıya dahil). Çelişki yoksa / hata → metin aynen."""
+    if not (sozlesme_blok and teknik and sozlesme_denetimi_acik()):
+        return teknik
+    try:
+        from . import servis_sozlesme as _ss
+        celiskiler = _ss.sozlesme_celiskileri(teknik, sozlesme_blok)
+        if not celiskiler:
+            return teknik
+        print(f"  📑 Swagger sözleşme çelişkisi: {len(celiskiler)} satır ({', '.join(sorted({c['parametre'] for c in celiskiler}))}) "
+              "— hedefli düzeltiliyor...")
+        yeni = gorev_analiz_duzelt(gorev, teknik, _ss.celiski_talimati(celiskiler), asama="gorev:sozlesme",
+                                   sozlesme_blok=sozlesme_blok)
+        return yeni if yeni.strip() else teknik
+    except Exception as e:
+        print(f"  ⚠ Sözleşme çelişki düzeltmesi atlandı: {str(e)[:160]}")
+        return teknik
+
+
+def _duzelt_sozlesme_blogu(gorev: dict, mevcut: str) -> str:
+    """Düzelt/cevap turuna kayıtlı Swagger sözleşmesi (0 token): tur ana bağlamı görmez, analistin 'serviste id parametresi
+    var' cevabını Swagger'daki gerçek ada (marketId) çözemeyip 'analist bildirdi … canlı doğrulanamadı' yazıyordu."""
+    try:
+        from . import servis_sozlesme as _ss
+        return _ss.endpoint_baglami(f"{gorev.get('summary','')} {gorev.get('description','') or ''}",
+                                    ek_metin=(mevcut or "")[:30000], butce=5000, azami=8)
+    except Exception:
+        return ""
+
+
 def gorev_analiz_duzelt(gorev: dict, mevcut_markdown: str, talimat: str, asama: str = "gorev:duzelt",
-                        acik_sorular: str = "") -> str:
+                        acik_sorular: str = "", sozlesme_blok: str | None = None) -> str:
     """İteratif düzeltme: mevcut teknik analiz + talimat → yalnız ilgili kısmı düzeltilmiş tam analiz.
     HTML prototip 'sohbetle düzelt' deseninin görev-analizi karşılığı. Jira'ya YAZMAZ (önizleme).
     Girdideki Yönetici Özeti + `<!-- RAG -->` yorumu modele GİTMEZ; özet vardıysa çıktıda deterministik olarak
@@ -1516,8 +1556,15 @@ def gorev_analiz_duzelt(gorev: dict, mevcut_markdown: str, talimat: str, asama: 
     icerik = [
         {"type": "text", "text": f"[MEVCUT TEKNİK ANALİZ — düzeltilecek metin]\n\n{mevcut}"},
         {"type": "text", "text": f"[Kaynak görev bağlamı — SADECE BİLGİ, ÇIKTIYA YAZMA]: {gorev.get('key','')} — {gorev.get('summary','')}"},
-        {"type": "text", "text": f"[DÜZELTME TALİMATI — yalnız bunu uygula]\n{talimat}"},
     ]
+    if sozlesme_blok is None:
+        sozlesme_blok = _duzelt_sozlesme_blogu(gorev, mevcut)
+    if sozlesme_blok:
+        icerik.append({"type": "text", "text": "[KAYITLI SERVİS SÖZLEŞMESİ — KESİN BİLGİ, ÇIKTIYA KOPYALAMA] Talimat/analist cevabı bir "
+                                               "parametreyi başka adla anıyorsa ('id ile arama') buradaki GERÇEK adı kullan; burada "
+                                               "listelenen parametre için 'analist bildirdi / canlı doğrulanamadı / BE teyit' YAZMA — "
+                                               "`[K: Swagger:<servis>]` ile kesin yaz.\n\n" + sozlesme_blok})
+    icerik.append({"type": "text", "text": f"[DÜZELTME TALİMATI — yalnız bunu uygula]\n{talimat}"})
     asama_ayarla(asama or "gorev:duzelt")
     # onbellek=False (denetim 2026-11-02 E#4): analistin AÇIK düzeltme isteği — aynı metin+talimat önbellekten
     # dönünce 'Düzelt çok hızlı bitti, uydurma id kaldı' ve kesik çıktı aynen geri geliyordu (revizyon_ai ile aynı gerekçe).
@@ -1554,6 +1601,10 @@ _CEVAP_TALIMAT = (
     "ne YAPILACAĞINI yaz; sınır gerekiyorsa tek kısa madde, tekrar etme. Cevapta geçse bile ortama özgü somut kayıt "
     "ID'lerini ('UAT ID 17/18/19', 'dev id 181/182') analize yazma — kuralı genel ifade et.\n"
     "- Açık Sorular bölümü varsa cevaplanan soruları oradan ÇIKAR; kalanları aynen bırak.\n"
+    "- Cevap bir servis parametresi/alanı söylüyorsa ('serviste id parametresi var') verilen KAYITLI SERVİS SÖZLEŞMESİ'nden "
+    "gerçek adı al (`marketId`) ve `[K: Swagger:<servis>]` ile kesin yaz; 'analist bildirdi … canlı doğrulanamadı' cümlesi "
+    "KURMA (bu tur gözlem yapmaz, bunu anlatma). Tablo 'Durum' hücresine 'Analist cevabı' YAZMA — olgusal durum yaz "
+    "('Swagger'da tanımlı' / 'Kural'), `[K: Analist cevabı]` etiketi hücre sonuna.\n"
     "- Cevapla ilgisiz hiçbir bölüme, başlığa, numaralandırmaya DOKUNMA; analizi kısaltma/genişletme; yeniden yazma.\n"
     + _TASK_DILI_KURALLARI   # cevap turu da aynı task dilini bilir (denetim 2026-11-02 D#5)
     + "\n### ANALİSTİN CEVAPLARI\n")
