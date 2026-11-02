@@ -314,6 +314,11 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   adını kullan, `/bff/<servis>` proxy = `/api/v1` aynı uç'; aynı cümle 'ANALİST BİLDİRDİ' kuralına. (b) `gozlem._dogrulama_listesi`
   (recency, `_RAPOR_FORMAT`'tan SONRA): analist notundaki uç + parametre adlarından 'GÖZLEM BİTMEDEN ÖNCE ZORUNLU DOĞRULAMA'
   bloğu — her parametre için istek at, `[K: Network:…?<param>=…]` kanıtı yaz, denenemediyse 'Gezilemeyen'e; not yoksa eklenmez.
+  2. koşu sonrası: liste kayıtlı Swagger'dan ucun GERÇEK query parametrelerini de verir, tetiklemeyi **UI filtre alanı
+  üzerinden** şart koşar (oturum dışı doğrudan URL/`fetch` → 401, kanıt sayılmaz — gözlemci tam bunu yapmıştı) ve
+  ÖNCELİK 1 olarak gezintiden önce ister. **Bilinen sınır:** büyük yanıt gövdesi (ör. 79k) Playwright tarafından dosyaya
+  yazılır, canlı çağrıda `Read`/`browser_evaluate` kapalı → gözlemci alanları okuyamaz; filtreli (küçük) yanıt bu sınıra
+  takılmaz. `browser_evaluate`'i gözlem fazında açmak owner kararı (oturum-içi fetch + gövde dilimi sağlar, yazma riski).
   (c) `soru_cozumleme._GOZLEMLE_GEREKSIZ` 'hangi değer … yazılmalı' veri-modeli sorusunu post-değişiklik sanıyordu (Q-T-001'e
   yanlış 'BE sözleşmesinden teyit' notu) → yalnız 'hangi varsayılan değer … atan/türet' + 'hangi kural …'. Test:
   `test_gozlem_fazi` §X, `test_soru_cozumleme`, `test_servis_sozlesme`.
