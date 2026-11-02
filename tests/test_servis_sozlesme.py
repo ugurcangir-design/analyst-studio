@@ -87,6 +87,9 @@ chk("prompt: KABUL KRİTERLERİ = HER EKRAN × HER İLGİLİ ALAN", "KABUL KRİT
 chk("prompt: META-KURAL EKOSU YAZMA ('icat edilmez' vb.)", "META-KURAL EKOSU" in gtp)
 chk("prompt: GENERİC FE/İMPLEMENTASYON REÇETESİ UYDURMA (debounce/race)", "GENERİC FE/İMPLEMENTASYON REÇETESİ" in gtp)
 chk("prompt: 'BE TEYİT EDİLMELİ' bir sonuç değil — Swagger/canlı yakala", "BİR SONUÇ DEĞİL" in gtp)
+# owner 2026-11-02: notta/isterde adlandırılan ekran kesin kapsam (künye yazma) + 'analist bildirdi' geçersiz kaynak
+chk("prompt: NOTTA/İSTERDE ADLANDIRILAN EKRAN = KESİN KAPSAM (künye yazma)", "NOTTA/İSTERDE ADLANDIRILAN EKRAN" in gtp)
+chk("prompt: 'ANALİST BİLDİRDİ' geçersiz kaynak — servise isteği atıp doğrula", "ANALİST BİLDİRDİ" in gtp and "DOĞRULAMALISIN" in gtp)
 # owner 2026-11-01: Swagger servis sözleşmesi enjeksiyonu artık task-only DEĞİL — süreç + teknik de kullanır
 import pathlib as _pl  # noqa: E402
 _surec_src = _pl.Path("skills/surec_analizi.py").read_text(encoding="utf-8")
@@ -95,6 +98,7 @@ chk("süreç analizi servis_sozlesme enjekte eder", "servis_sozlesme" in _surec_
 chk("teknik analiz servis_sozlesme enjekte eder", "servis_sozlesme" in _teknik_src and "endpoint_baglami" in _teknik_src)
 import skills.gozlem as GZ  # noqa: E402
 chk("gözlem: ÇOK EKRAN — her adlandırılan ekrana git", "ÇOK EKRAN" in GZ._RAPOR_FORMAT)
+chk("gözlem: PARAMETRE/YETENEK DOĞRULAMA — pasif gözlem yetmez, fiilen dene", "PARAMETRE/YETENEK DOĞRULAMA" in GZ._RAPOR_FORMAT)
 chk("açık soru promptu: kaynaktan türetilebilir soru üretme", "KAYNAKTAN TÜRETİLEBİLİR SORU ÜRETME" in sq)
 import skills.soru_cozumleme as SC  # noqa: E402
 chk("öz-çözümleme: kaynaktan türetilebilir → cevaplandi", "KAYNAKTAN TÜRETİLEBİLİR SORULAR `cevaplandi`" in SC._SISTEM if hasattr(SC, "_SISTEM") else "KAYNAKTAN TÜRETİLEBİLİR" in inspect.getsource(SC))

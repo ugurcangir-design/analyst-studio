@@ -242,6 +242,19 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   deme → '⚠ kaynak/gözlemde doğrulanamadı — <ne denendi>' + açık soru. **NOT:** task'ın BFF'i (`tradoria/definition-service`)
   `reference/services`'e KAYITLI DEĞİL (yalnız rita/sky) → Swagger'dan çözülemiyor; owner ilgili BFF Swagger'ını
   Referanslar→'Swagger URL ile Ekle' ile eklerse uç/parametre sözleşmesi Swagger'dan kesin gelir. Test: `tests/test_servis_sozlesme.py`.
+  **KAPSAM KÜNYESİ + 'ANALİST BİLDİRDİ' PUNT (owner 2026-11-02, MBSTRADE-1254):** iki ek bulgu. (1) **Künye cümlesi:**
+  agent 'görev başlığında yalnız Edit geçiyor; Add Sport ve mapping analist notuyla kapsama girdi' gibi kapsamın NEREDEN
+  geldiğini anlatan provenans cümlesi yazıyordu — oysa **notta/isterde adlandırılan ekran = KESİN KAPSAM** (teyit
+  gerekmez, künye geliştiriciyi ilgilendirmez). `gorev_teknik_analiz` '# KAPSAM'a 'NOTTA/İSTERDE ADLANDIRILAN EKRAN =
+  KESİN KAPSAM, KÜNYE YAZMA' kuralı + `KEŞFEDİLEN EKRAN` teyit bayrağı daraltıldı: YALNIZ ne ticket ne not ne isterde
+  geçmeyen, gözlemde bulunan sürpriz ekran için (notta geçen ekran keşif DEĞİL). (2) **'Analist bildirdi' punt:** agent
+  §10'da 'analist serviste `id` parametresi olduğunu bildirdi, canlı doğrulanamadı' yazıyordu — analistin dediği geçersiz
+  kaynak, SEN servise isteği atıp dönüşü okuyup doğrulamalısın. '# JİRA TASK DİLİ' 'BE TEYİT…BİR SONUÇ DEĞİL' kuralına
+  'ANALİST BİLDİRDİ' eklendi (parametreyi EKLEYEREK+EKLEMEDEN ayrı çağır, farkı gözle). Asıl kök neden gözlemde:
+  `gozlem.py` `_RAPOR_FORMAT`'a **PARAMETRE/YETENEK DOĞRULAMA** bloğu — notta istenen parametre/filtre (id arama,
+  sportId/name, sayfalama) PASİF izlenmez, FİİLEN denenir (değer gir / parametreyle+parametresiz çağır,
+  `browser_network_request` ile her iki path+sonucu yakala); deneyemeyince 'Gezilemeyen'e yaz, 'analist bildirdi' RAPORA
+  geçmez. Test: `tests/test_servis_sozlesme.py`.
 - **SERVİS/ENDPOINT KARARI — agent punt etmez, mimari kararı verir (owner 2026-10-21: 'mevcut servis varsa kullan, yoksa yeni servisi request/response ile çıkar; analiste hangi uç diye sorma'):**
   `skills/servis_sozlesme.py` (`endpoint_baglami(sorgu, ek_metin)`): kayıtlı Swagger'lardan (`reference/services/*.json`)
   task+canlı gözlemde geçen path/kaynak adlarıyla alakalı MEVCUT endpoint'leri (method+path+request/response şeması,

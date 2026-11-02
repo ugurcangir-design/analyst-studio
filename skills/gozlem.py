@@ -115,6 +115,12 @@ _RAPOR_FORMAT = """
 - KRİTİK VERİ-ÇEKME çağrıları (liste/detay/eşleme okuma) için `browser_network_request` ile o isteğin TAM yanıt
   gövdesini AÇ ve GERÇEK alan adlarını 'Yanıt alanları' sütununa YAZ (ör. `outcomes[].externalId`, `provider`,
   `matchedInfo`). Alan adları geliştiriciye sözleşme olur — 'okunamadı' bırakma, mümkünse birkaç örnek alan ver.
+- **PARAMETRE/YETENEK DOĞRULAMA (notta istenen servis kontrolü — PASİF GÖZLEM YETMEZ):** görev/analist notu belirli bir
+  parametre ya da yetenek doğrulaması istiyorsa (ör. "serviste `id` parametresi var mı", `sportId`/`name` ile filtre,
+  sayfalama) o parametreyi SADECE varsayılan ekran yüklenirken İZLEME — FİİLEN DENE: arama/filtre alanına değer gir ya da
+  aynı ucu parametreyi EKLEYEREK ve EKLEMEDEN çağır, her iki isteğin path+query'sini ve dönen sonucu `browser_network_request`
+  ile yakala, davranış farkını yaz (ör. "`?id=123` → tek kayıt / `?name=x&sportId=5` → filtreli liste, page 0-tabanlı size 20").
+  Deneyemediğin parametreyi 'Gezilemeyen'e nedeniyle yaz — 'analist bildirdi' diye RAPORA GEÇME (rapor yalnız SENİN gözlemin).
 
 ## Validasyon ve Mesajlar
 - Hangi alan/aksiyonda hangi mesaj AYNEN · istek gitti mi · errorCode
