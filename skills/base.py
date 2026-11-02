@@ -2149,8 +2149,9 @@ def kanit_etiketlerini_temizle(markdown: str) -> str:
         return markdown
     temiz = _KANIT_ETIKET.sub("", markdown)
     # Etiket kaldırınca oluşan artıklar: çift boşluk, noktalama öncesi boşluk,
-    # satır sonu öncesi boşluk temizlenir.
-    temiz = re.sub(r"[ \t]{2,}", " ", temiz)
+    # satır sonu öncesi boşluk temizlenir. SATIR BAŞI GİRİNTİSİ KORUNUR (denetim 2026-11-02 C#1: eskiden
+    # `[ \t]{2,}` kod bloğu/alt madde girintisini tek boşluğa indiriyordu → YAML/JSON örnekleri Jira'da çöküyordu).
+    temiz = re.sub(r"(?<=\S)[ \t]{2,}(?=\S)", " ", temiz)
     temiz = re.sub(r"[ \t]+([.,;:!?])", r"\1", temiz)
     temiz = re.sub(r"[ \t]+\n", "\n", temiz)
     return temiz
@@ -2166,22 +2167,33 @@ def kanit_etiketlerini_temizle(markdown: str) -> str:
 # model kaysa bile Jira kopyasını deterministik temizler. Analiz dosyası/ekran DEĞİŞMEZ.
 _HTML_YORUM = re.compile(r"<!--.*?-->\s*", re.S)
 # Tamamı kaynak alıntısı olan madde satırı: `- **Beklenen davranış kaynakta tanımlı:** "…"`
+# Geliştiricinin BİREBİR göstermesi gereken metin maddeleri (hata mesajı / toast / uyarı / label / description) alıntı
+# biçiminde olsa da KORUNUR (denetim 2026-11-02 C#5: 'Hata mesajı (Swagger'daki description): "…"' siliniyordu).
+_METIN_ETIKET = r"(?![^*\n]*(?:mesaj|metin|uyar[ıi]|toast|description|label|ba[şs]l[ıi][kğg]|placeholder|tooltip))"
 _KAYNAK_MADDE = re.compile(
-    r"^[ \t]*[-*]\s*\*\*[^*\n]*(?:kaynak|Confluence|Analist notu|BRD|Swagger)[^*\n]*:\*\*\s*[\"“][^\"”\n]+[\"”]\s*\.?[ \t]*$\n?",
+    r"^[ \t]*[-*]\s*\*\*" + _METIN_ETIKET + r"[^*\n]*(?:kaynak|Confluence|Analist notu|BRD|Swagger)[^*\n]*:\*\*\s*[\"“][^\"”\n]+[\"”]\s*\.?[ \t]*$\n?",
     re.I | re.M)
 # `Analist notu bunu doğrular: "…"` · `Confluence: "…"` · `Kaynakta tanımlı: "…"` → alıntı cümlesi tamamen
 _KAYNAK_ALINTI = re.compile(
-    r"(?:Analist notu|Confluence|Kaynak(?:ta)?|BRD|Swagger|Jira)[^.\n\"“]{0,40}?:\*{0,2}\s*[\"“][^\"”\n]{15,}[\"”][ \t]*\.?[ \t]*")
+    r"\b(?:Analist notu|Confluence|Kaynak(?:ta)?|BRD|Swagger|Jira)\b"
+    r"(?![^.\n\"“]{0,40}?(?:mesaj|metin|uyar[ıi]|toast|description|label|placeholder|tooltip))"
+    r"[^.\n\"“]{0,40}?:\*{0,2}\s*[\"“][^\"”\n]{15,}[\"”][ \t]*\.?[ \t]*", re.I)
 # "Confluence'a göre manuel eventler …" → "manuel eventler …" (yalnız önek düşer)
 _KAYNAK_ONEK = re.compile(
     r"\b(?:Confluence|BRD|Swagger|Analist notu|Kaynak|Dokümantasyon)(?:'[aey]|’[aey])?\s+(?:göre|uyarınca)\s*,?\s*([^\s])", re.I)
 # Seçilen yaklaşımın alternatiflere karşı gerekçesi / kontrol-dışı hedge — geliştiriciye iş değil
 _META_ISARET = (r"yaklaşımına kıyasla|alternatif(?:ler)?e kıyasla|en doğrudan (?:çözüm|yol)dur|"
                 r"kontrolü dışıdır|bu varsayımın uygulanıp uygulanmadığı")
+# Cümle düzeyinde silinenler — 'kontrolü dışıdır' HARİÇ (yalnız parantez içinde hedge sayılır; düz cümlede meşru
+# sorumluluk paylaşımıdır: "Bu alan FE kontrolü dışıdır; BE doğrular." — denetim 2026-11-02 C#6).
+_META_ISARET_CUMLE = (r"yaklaşımına kıyasla|alternatif(?:ler)?e kıyasla|en doğrudan (?:çözüm|yol)dur|"
+                      r"bu varsayımın uygulanıp uygulanmadığı")
 # bir seviye iç parantez toleranslı — "(… bkz. `## Bağımlılık (FE↔BE)`.)" bütünüyle silinsin
 _META_PARANTEZ = re.compile(r"[ \t]*\((?:[^()\n]|\([^()\n]*\))*(?:" + _META_ISARET + r")(?:[^()\n]|\([^()\n]*\))*\)[ \t]*\.?", re.I)
 # `|` sınıf dışı: tablo hücresindeki meta cümle silinirken satırın diğer hücreleri/ayraçları KORUNUR (satır yaşar).
-_META_GEREKCE = re.compile(r"[^.\n|]*(?:" + _META_ISARET + r")[^.\n|]*\.?[ \t]*", re.I)
+# Cümle sınırı: ondalık/sürüm noktası ("v1.2", "0.5 sn") cümleyi BÖLMEZ (C#6: "Sürüm v1.Devam cümlesi" artığı kalıyordu).
+_META_CUMLE_PARCA = r"(?:[^.\n|]|(?<=\d)\.(?=\d))*"
+_META_GEREKCE = re.compile(_META_CUMLE_PARCA + r"(?:" + _META_ISARET_CUMLE + r")" + _META_CUMLE_PARCA + r"\.?[ \t]*", re.I)
 # "Gözlem notu: …" — agent'ın gözlem yapamadığına/sürecine dair META not. Jira'ya GİTMEZ (owner 2026-10-27):
 # geliştirici için değeri yok, analiz UI'da kalır. Paragrafı (blockquote `>` ya da düz) boş satıra/başlığa kadar siler.
 _GOZLEM_NOTU = re.compile(
@@ -2191,14 +2203,20 @@ _GOZLEM_NOTU = re.compile(
 # ör. "- Mevcut yetim kayıtlar: UAT'taki ID 17/18/19 ve dev'deki id 181/182 … temizlenmez; … yapılmayacaktır".
 # ÜÇ koşul da gerekli (güvenli daraltma) → meşru "ne yapılacak" satırı ya da tek başına ID listesi/negasyon KORUNUR.
 _KAPSAM_NEG = re.compile(r"(?i)yap[ıi]lmayacak|yap[ıi]lmaz\b|temizlenmez|dokunulmaz|silinmez|de[ğg]i[şs]tirilmez|kald[ıi]r[ıi]lmaz")
-_ORTAM_KEY = re.compile(r"(?i)\b(?:UAT|DEV|TEST|PROD|PRE-?PROD|STAGING|canl[ıi])\b")
+# Ortam anahtarı YALNIZ iyelik/bulunma ekli biçimde ("UAT'taki", "dev'deki", "prod'da") — çıplak TEST/canlı gündelik
+# kelimeleri ("Test senaryosunda", "Canlı ortamda") meşru kabul kriterlerini yakalıyordu (denetim 2026-11-02 C#3).
+_ORTAM_KEY = re.compile(r"(?i)\b(?:UAT|DEV|PROD|PRE-?PROD|STAGING)['’]?(?:ta|da|te|de)(?:ki)?\b")
 _KAYIT_ID_LISTE = re.compile(r"(?i)\b[iı]d\b[^.\n]{0,20}?\d+\s*[/,]\s*\d+")
+_KAPSAM_KORU = re.compile(r"^\s*\||\bAC-\d")   # tablo satırı / kabul kriteri → ASLA silinmez
 
 
 def _ortam_id_kapsam_sil(markdown: str) -> str:
-    """Negatif kapsam-dışı + ortama özgü somut kayıt ID enumerasyonu bir arada olan satırı siler."""
+    """Negatif kapsam-dışı + ortama özgü somut kayıt ID enumerasyonu bir arada olan satırı siler
+    (tablo satırı ve `AC-n` kabul kriteri korunur)."""
     def _satir(m):
         s = m.group(0)
+        if _KAPSAM_KORU.search(s):
+            return s
         if _KAPSAM_NEG.search(s) and _ORTAM_KEY.search(s) and _KAYIT_ID_LISTE.search(s):
             return ""
         return s
@@ -2210,6 +2228,25 @@ def _kod_citi_disinda(metin: str, fn) -> str:
     """`fn`'yi yalnız çitli kod blokları (``` / ~~~) DIŞINDAKİ parçalara uygular; kod aynen kalır."""
     parcalar = _KOD_CITI.split(metin)
     return "".join(p if i % 2 else fn(p) for i, p in enumerate(parcalar))
+
+
+# Açık/ZORUNLU sorular bölümü başlığı — numaralı (`## 10. Açık Sorular`), emojili (`## ❓ Açık Sorular ve Varsayımlar`),
+# 1-3. seviye. (Denetim 2026-11-02 C#4: eski desen yalnız '❗' ve numarasız başlığı yakalıyordu → Q-T blokları Jira'ya
+# sızıyordu; `###` seviyesinde ise bir sonraki `##`'e kadar silip komşu `### 9.2` gerçek bölümü de yutuyordu.)
+_ACIK_SORU_BASLIK = re.compile(
+    r"(?m)^(#{1,3})\s*(?:\d+(?:\.\d+)*\.?\s*)?[^\w\s]{0,4}\s*(?:Cevap Bekleyen Zorunlu Sorular|A[çc][ıi]k Sorular)\b.*$")
+
+
+def _acik_sorular_bolumunu_sil(markdown: str) -> str:
+    """Açık Sorular / Zorunlu Sorular bölümünü, AYNI ya da ÜST seviyedeki bir sonraki başlığa kadar siler."""
+    md = markdown
+    while True:
+        m = _ACIK_SORU_BASLIK.search(md)
+        if not m:
+            return md
+        seviye = len(m.group(1))
+        son = re.compile(r"(?m)^#{1,%d}\s" % seviye).search(md, m.end())
+        md = md[:m.start()] + (md[son.start():] if son else "")
 # Bölüm başlığı: `## 3. Teknik …` / `### 3.3. Alt …` / `### 3.3 Alt …`
 _BOLUM_BASLIK = re.compile(r"^(#{2,3})\s+(\d+)(?:\.(\d+))?\.?\s+(.+)$", re.M)
 
@@ -2277,13 +2314,13 @@ def jira_icin_temizle(markdown: str) -> str:
     m = _HTML_YORUM.sub("", m)
     # Açık/ZORUNLU sorular Jira gövdesine GİTMEZ (owner kararı 2026-10-21). "Jira'dan içeriği çek" ile
     # eski gövde geri yüklenip tekrar yazılsa bile bu bölümler burada temizlenir (savunma; UI zaten eklemez).
-    m = re.sub(r"(?ms)^#{1,3}\s*(?:❗\s*)?(?:Cevap Bekleyen Zorunlu Sorular|Açık Sorular)\b.*?(?=^#{1,2}\s|\Z)", "", m)
+    m = _acik_sorular_bolumunu_sil(m)   # numaralı/emojili/3. seviye başlıklar dahil; yalnız KENDİ seviyesine kadar (C#4)
     # Agent iskele artıkları Jira'ya GİTMEZ (owner 2026-10-21): FE+BE katman göstergesi + 'Kaynak Görev' başlıkları.
     m = re.sub(r"(?mi)^\s*[-*•]?\s*\*{0,2}Bu katmanda iş\s*:?\*{0,2}.*$\n?", "", m)   # **Bu katmanda iş:** VAR|YOK …
     m = re.sub(r"(?mi)^#{1,4}\s*Kaynak Görev\s*:.*$\n?", "", m)                        # ### Kaynak Görev: <key> — <özet> (tekrarlı)
     m = _GOZLEM_NOTU.sub("", m)         # "Gözlem notu: bu turda canlı gözlem yapılamadı…" meta notu (owner 2026-10-27)
     m = _kod_citi_disinda(m, _ortam_id_kapsam_sil)  # negatif kapsam-dışı + ortam kayıt ID listesi satırı (owner 2026-10-27)
-    m = kanit_etiketlerini_temizle(m)   # ÖNCE etiketler: satır/cümle desenleri etiketsiz metne bakar
+    m = _kod_citi_disinda(m, kanit_etiketlerini_temizle)   # ÖNCE etiketler; kod çiti DIŞI (C#1: kod girintisi bozulmasın)
     m = _KAYNAK_MADDE.sub("", m)
     m = _KAYNAK_ALINTI.sub("", m)
     m = _KAYNAK_ONEK.sub(_onek_sil, m)   # cümle başındaysa sonraki harf büyütülür
@@ -2293,7 +2330,9 @@ def jira_icin_temizle(markdown: str) -> str:
     # Boş parantez yalnız BOŞLUKTAN SONRA gelen, içi boş olan `( )`/`()`'dir — `foo()` fonksiyon çağrısı ve çitli
     # kod blokları DOKUNULMAZ (eskiden `liste()` → `liste` oluyordu).
     m = _kod_citi_disinda(m, lambda s: re.sub(r"(?<![^\s])\(\s*\)", "", s))
-    m = re.sub(r"^[ \t]*[-*]\s*(?:\*\*[^*\n]*:\*\*\s*)?$\n?", "", m, flags=re.M)
+    # Boş madde / yalnız `- **Etiket:**` satırı silinir — AMA altında girintili alt madde varsa KORUNUR (C#2: eskiden
+    # `- **Request:**` ebeveyni gidiyor, alt maddeler Jira'da bağlamsız kalıyordu — 10/27 gerçek analizde).
+    m = re.sub(r"^[ \t]*[-*][ \t]*(?:\*\*[^*\n]*:\*\*[ \t]*)?$(?!\n[ \t]+[-*]\s)\n?", "", m, flags=re.M)
     m = re.sub(r"[ \t]+([.,;:!?])", r"\1", m)
     m = re.sub(r"\n{3,}", "\n\n", m)
     m = _bolumleri_yeniden_numarala(m)
@@ -2358,7 +2397,7 @@ def _jira_json_to_md(dosya: Path, limit: int) -> str:
             satir += f" — {atanan}"
         satir += f"\n{ozet}"
         if aciklama:
-            satir += f"\n{aciklama[:250]}"
+            satir += f"\n{aciklama[:1500]}"   # 250→1500 (denetim 2026-11-02 A#2): bağlam filtresine girilen task'ın gövdesi analize ulaşsın
         satir += "\n"
 
         if toplam + len(satir) > limit:
@@ -2387,7 +2426,9 @@ def _icerik_metni(icerik) -> str:
     return str(icerik or "")
 
 
-def _ref_sorgu_hazirla(sorgu_metni, kw: list, kap: int = 30_000, kw_boost: int = 5) -> str:
+def _ref_sorgu_hazirla(sorgu_metni, kw: list, kap: int = 120_000, kw_boost: int = 5) -> str:
+    # kap 30k→120k (denetim 2026-11-02 A#4): sorgu PROMPTA GİRMEZ, yalnız BM25'e → 40-60k'lık süreç analizinin
+    # sondaki bölümleri (API/Teknik Notlar/Açık Sorular) de referans/Swagger parçası yüzeye çıkarabilsin.
     """Corpus-geneli getirim SORGUSU: analiz edilen dokümanın metni (otomatik; str ya da
     input_hazirla content-listesi) + varsa analistin girdiği manuel keyword'ler (kw_boost kez
     tekrarlanarak AĞIRLIKLANDIRILIR → girildiğinde güçlü yönlendirir). İkisi de boşsa "" →
@@ -2401,6 +2442,52 @@ def _ref_sorgu_hazirla(sorgu_metni, kw: list, kap: int = 30_000, kw_boost: int =
     return " ".join(parcalar).strip()
 
 
+def _swagger_kompakt_metin(spec: dict) -> str:
+    """OpenAPI spec → uç başına tek satır: `METHOD /path — özet · param: a,b · istek: {…} · yanıt: {…}`.
+    BM25 indeksi için ham JSON'dan ~10× kompakt, her satır path kimliği taşır. Şema çözümü servis_sozlesme'den."""
+    try:
+        from .servis_sozlesme import _parametreler, _sema_coz, _sema_metin
+    except Exception:
+        return json.dumps(spec, ensure_ascii=False)[:300_000]
+    bilesenler = (spec.get("components", {}) or {}).get("schemas", {}) or {}
+    info = spec.get("info", {}) or {}
+    satirlar = [f"# {info.get('title', '')} {info.get('version', '')}".strip()]
+    for yol, opsler in (spec.get("paths", {}) or {}).items():
+        if not isinstance(opsler, dict):
+            continue
+        path_params = opsler.get("parameters", [])
+        for method, op in opsler.items():
+            if method.lower() not in ("get", "post", "put", "delete", "patch") or not isinstance(op, dict):
+                continue
+            parca = [f"{method.upper()} {yol}"]
+            ozet = op.get("summary") or op.get("operationId") or ""
+            if ozet:
+                parca.append(f"— {ozet}")
+            prs = _parametreler(op, path_params)
+            if prs:
+                parca.append("· param: " + ", ".join(p["ad"] + ("*" if p["zorunlu"] else "") for p in prs[:16]))
+            rb = (op.get("requestBody", {}) or {}).get("content", {}) or {}
+            for ct in ("application/json", *rb.keys()):
+                if ct in rb:
+                    istek = _sema_coz((rb[ct] or {}).get("schema", {}), bilesenler)
+                    if istek:
+                        parca.append("· istek: " + _sema_metin(istek, 300))
+                    break
+            resps = op.get("responses", {}) or {}
+            for kod in ("200", "201", "default"):
+                if kod in resps:
+                    rc = (resps[kod] or {}).get("content", {}) or {}
+                    for ct in ("application/json", *rc.keys()):
+                        if ct in rc:
+                            yanit = _sema_coz((rc[ct] or {}).get("schema", {}), bilesenler)
+                            if yanit:
+                                parca.append("· yanıt: " + _sema_metin(yanit, 300))
+                            break
+                    break
+            satirlar.append(" ".join(parca))
+    return "\n".join(satirlar)
+
+
 def _ref_dokuman_metinleri(tip_konfig: list, kap: int = 300_000) -> list[dict]:
     """Tüm referans dosyalarını okunmuş metne çevirir (corpus-geneli BM25 indexi için):
     [{"tip","rel","metin"}]. Jira JSON→md, Swagger geçerlilik kontrolü, PDF-farkında okuma;
@@ -2412,7 +2499,8 @@ def _ref_dokuman_metinleri(tip_konfig: list, kap: int = 300_000) -> list[dict]:
                 rel = str(f.relative_to(REF_DIR)).replace("\\", "/")
             except ValueError:
                 rel = f.name
-            if rel.startswith("services/"):
+            _swagger = rel.startswith("services/") or f.name.startswith("_filtered_")
+            if _swagger:
                 try:
                     _s = json.loads(f.read_text(encoding="utf-8", errors="ignore"))
                     if not (isinstance(_s, dict) and (_s.get("paths") or _s.get("openapi") or _s.get("swagger"))):
@@ -2422,6 +2510,12 @@ def _ref_dokuman_metinleri(tip_konfig: list, kap: int = 300_000) -> list[dict]:
             try:
                 if jira_modu and f.suffix.lower() == ".json":
                     metin = _jira_json_to_md(f, kap)
+                elif _swagger:
+                    # Swagger KOMPAKT indekslenir (denetim 2026-11-02 A#1/A#7): ham pretty-JSON 300k'da kırpılınca
+                    # sky-panel/sky-operation uçlarının ~%50'si (344 endpoint) corpus'a hiç girmiyordu; giren parçaların
+                    # da yarısı path kimliği olmayan şema boilerplate'iydi. Uç başına tek satır (~140 kc) → 926 uç ≈
+                    # 130k, kırpma kalkar, her parça path taşır → `[K: Swagger:<dosya>#/<path>]` atfı mümkün.
+                    metin = _swagger_kompakt_metin(_s)
                 else:
                     metin = _filtre_metni_oku(f) or dosya_oku(f, kap)
                     if metin and len(metin) > kap:
@@ -2507,7 +2601,9 @@ def _ref_bloklari_olustur(ref_dosyalar: list[Path], sorgu_metni: str = "") -> tu
             gruplari["confluence"].append(f)
         elif rel.startswith("jira/"):
             gruplari["jira"].append(f)
-        elif rel.startswith("services/"):
+        elif rel.startswith("services/") or f.name.startswith("_filtered_"):
+            # keyword'le filtrelenmiş Swagger (`_filtered_cache/`) da SERVİS tipidir (denetim 2026-11-02 A#3:
+            # eskiden 'diger'e düşüp 20k limit + en düşük öncelikle giriyordu)
             gruplari["servisler"].append(f)
         elif rel.startswith("live-app/"):
             gruplari["canli_uygulama"].append(f)
@@ -2613,7 +2709,7 @@ def _ref_bloklari_olustur(ref_dosyalar: list[Path], sorgu_metni: str = "") -> tu
 
             # Servis (Swagger) dosyası geçerli bir OpenAPI spec DEĞİLSE (ör. yanlışlıkla
             # kaydedilmiş Swagger UI HTML'i) RAG'e SOKMA — yoksa analiz çöp içerikle bozulur.
-            if rel.startswith("services/"):
+            if rel.startswith("services/") or f.name.startswith("_filtered_"):
                 try:
                     _s = json.loads(f.read_text(encoding="utf-8", errors="ignore"))
                     if not (isinstance(_s, dict) and (_s.get("paths") or _s.get("openapi") or _s.get("swagger"))):
@@ -3160,7 +3256,10 @@ def _filtrele_openapi_json(json_path: Path, keywords: list) -> "Path | None | bo
             if esl:
                 eslesen[path_key] = path_obj
         if not eslesen:
-            return False
+            # Keyword path/summary'de geçmiyor → Swagger'ı DÜŞÜRME (denetim 2026-11-02 A#3: Türkçe keyword'ler
+            # İngilizce path'e uymayınca 4 Swagger'ın 4'ü RAG'den çıkıyordu; köprüde HER zaman). Corpus-geneli BM25
+            # alakayı zaten kendisi seçer → dosya olduğu gibi kalsın.
+            return None
         if len(eslesen) >= len(paths) * 0.7:
             return None
         kw_hash = hashlib.md5(",".join(sorted(keywords)).encode()).hexdigest()[:8]
@@ -3170,9 +3269,12 @@ def _filtrele_openapi_json(json_path: Path, keywords: list) -> "Path | None | bo
         if tmp_path.exists() and tmp_path.stat().st_mtime >= json_path.stat().st_mtime:
             return tmp_path
         filtered_spec = {
+            "openapi": spec.get("openapi") or spec.get("swagger") or "3.0",
             "info": spec.get("info", {}),
             "_not": f"{len(paths)} endpoint'ten {len(eslesen)} tanesi filtrelendi (keywords: {keywords})",
             "paths": eslesen,
+            # components KORUNUR → `$ref` şemaları çözülebilsin (A#3: eskiden atılıyordu, tradoria'da 54/54 path $ref'li)
+            "components": spec.get("components", {}),
         }
         tmp_path.write_text(json.dumps(filtered_spec, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"   🔍 {json_path.name}: {len(paths)} → {len(eslesen)} endpoint filtrelendi")

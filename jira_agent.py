@@ -191,10 +191,14 @@ def parse_inline(text: str) -> list:
             nodes.append({"type": "text", "text": m.group(1), "marks": [{"type": "em"}]})
             pos += m.end(); continue
 
-        m = re.match(r'_([^_\n]+?)_', remaining, re.DOTALL)
-        if m:
+        # `_em_` YALNIZ kelime sınırında (denetim 2026-11-02 C#8): `event_id ve market_id` → eskiden 'id ve market'
+        # italik oluyordu (backtick'siz snake_case alan adları Jira'da parçalanıyordu).
+        m = re.match(r'_([^_\n]+?)_(?![\w])', remaining, re.DOTALL)
+        if m and (pos == 0 or not (text[pos - 1].isalnum() or text[pos - 1] == "_")):
             nodes.append({"type": "text", "text": m.group(1), "marks": [{"type": "em"}]})
             pos += m.end(); continue
+        if remaining.startswith("_"):
+            nodes.append({"type": "text", "text": "_"}); pos += 1; continue
 
         m = re.match(r'`(.+?)`', remaining, re.DOTALL)
         if m:
@@ -234,6 +238,44 @@ def _bullet(items: list) -> dict:
 def _ordered(items: list) -> dict:
     return {"type": "orderedList",
             "content": [{"type": "listItem", "content": [_p(i)]} for i in items]}
+
+_LISTE_SATIR = re.compile(r'^(\s*)([-*]|\d+\.)\s+(.*)$')
+
+
+def _liste_parse(lines: list, i: int, girinti: int | None = None) -> tuple[dict, int]:
+    """`lines[i]`'den başlayan liste bloğunu (madde ya da numaralı) ADF listesine çevirir; daha DERİN girintili
+    satırlar önceki listItem'ın içine iç içe liste olarak girer (özyinelemeli). Dönen: (liste düğümü, yeni i)."""
+    m0 = _LISTE_SATIR.match(lines[i])
+    taban = len(m0.group(1).expandtabs(4)) if girinti is None else girinti
+    ordered = m0.group(2)[0].isdigit()
+    items = []
+    while i < len(lines):
+        raw = lines[i]
+        if not raw.strip():
+            # boş satır: liste bir sonraki satırda aynı/derin girintiyle sürüyorsa devam, değilse biter
+            j = i + 1
+            if j < len(lines) and (mm := _LISTE_SATIR.match(lines[j])) and len(mm.group(1).expandtabs(4)) >= taban:
+                i = j; continue
+            break
+        m = _LISTE_SATIR.match(raw)
+        if not m:
+            break
+        g = len(m.group(1).expandtabs(4))
+        if g < taban:
+            break
+        if g > taban:
+            if not items:
+                break
+            alt, i = _liste_parse(lines, i, g)
+            items[-1]["content"].append(alt)
+            continue
+        tip_ordered = m.group(2)[0].isdigit()
+        if tip_ordered != ordered:
+            break
+        items.append({"type": "listItem", "content": [_p(m.group(3))]})
+        i += 1
+    return {"type": "orderedList" if ordered else "bulletList", "content": items}, i
+
 
 def _code(code: str, lang: str = "") -> dict:
     return {"type": "codeBlock", "attrs": {"language": lang},
@@ -295,17 +337,18 @@ def markdown_to_adf(md: str) -> list:
                 table_rows.append(_parse_row(lines[i])); i += 1
             if header: nodes.append(_table([header] + table_rows)); continue
 
-        if re.match(r'^[-*]\s+', s):
-            items = []
-            while i < len(lines) and re.match(r'^[-*]\s+', lines[i].strip()):
-                items.append(re.sub(r'^[-*]\s+', '', lines[i].strip())); i += 1
-            nodes.append(_bullet(items)); continue
+        # Blockquote (`> …`) → ADF blockquote (eskiden literal '> ' paragraf oluyordu — denetim 2026-11-02 C#8)
+        if s.startswith(">"):
+            q = []
+            while i < len(lines) and lines[i].strip().startswith(">"):
+                q.append(lines[i].strip().lstrip(">").strip()); i += 1
+            nodes.append({"type": "blockquote", "content": [_p(t) for t in q if t] or [_p("")]}); continue
 
-        if re.match(r'^\d+\.\s+', s):
-            items = []
-            while i < len(lines) and re.match(r'^\d+\.\s+', lines[i].strip()):
-                items.append(re.sub(r'^\d+\.\s+', '', lines[i].strip())); i += 1
-            nodes.append(_ordered(items)); continue
+        # Liste (madde / numaralı) — GİRİNTİLİ alt maddeler önceki listItem'ın içine iç içe liste olarak girer
+        # (C#8: eskiden girinti görülmeyip `1. a / - alt / 2. b` üç ayrı listeye bölünüyor, 2. adım '1.' numaralanıyordu).
+        if re.match(r'^[-*]\s+', s) or re.match(r'^\d+\.\s+', s):
+            node, i = _liste_parse(lines, i)
+            nodes.append(node); continue
 
         nodes.append(_p(s)); i += 1
 

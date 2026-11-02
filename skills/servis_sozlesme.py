@@ -150,6 +150,7 @@ def _endpointleri_oku() -> list[dict]:
                 param_tok = set()
                 for pr in parametreler:
                     param_tok |= _tokenle(pr["ad"])
+                    param_tok.add(pr["ad"].lower())   # 'id', 'q' gibi <3 karakterli adlar da eşleşsin (denetim A#6: 211 param düşüyordu)
                 alan_tok = _alan_tokenlari(istek) | _alan_tokenlari(yanit)
                 kayitlar.append({
                     "servis": f.stem, "method": method.upper(), "path": yol, "ozet": ozet,
@@ -160,7 +161,7 @@ def _endpointleri_oku() -> list[dict]:
     return kayitlar
 
 
-def endpoint_baglami(sorgu_metni: str, ek_metin: str = "", butce: int = 9000, azami: int = 10) -> str:
+def endpoint_baglami(sorgu_metni: str, ek_metin: str = "", butce: int = 9000, azami: int = 20) -> str:
     """Task metni (+ canlı gözlem/BFF metni) ile EN ALAKALI kayıtlı endpoint'lerin SÖZLEŞMESİNİ (method+path+
     istek/yanıt şeması) döndürür — agent mevcut servisi görsün ve kullansın (ister dışı endpoint EKLEMEZ; yalnız
     task'a alakalı olanlar). Alaka yoksa/boşsa boş döner (blok eklenmez)."""
@@ -168,6 +169,8 @@ def endpoint_baglami(sorgu_metni: str, ek_metin: str = "", butce: int = 9000, az
     if not kayitlar:
         return ""
     sorgu_tok = _tokenle(sorgu_metni + " " + ek_metin)
+    # 'id', 'q' gibi 1-2 karakterli parametre adları sorguda geçiyorsa da eşleşsin (A#6; _tokenle <3'ü atar)
+    sorgu_tok |= {w.lower() for w in re.findall(r"\b[a-zA-Z]{1,2}\b", sorgu_metni + " " + ek_metin)}
     # Canlı gözlem/task metninde GEÇEN gerçek path kaynakları (ör. /bff/nebula/id-mapping-service/...) güçlü sinyal
     gecenler = _yol_kaynaklari(sorgu_metni + " " + ek_metin)
     if not sorgu_tok and not gecenler:
@@ -186,6 +189,23 @@ def endpoint_baglami(sorgu_metni: str, ek_metin: str = "", butce: int = 9000, az
     if not skorlu:
         return ""
     skorlu.sort(key=lambda x: x[0], reverse=True)
+    # DEDUP (denetim 2026-11-02 A#5): aynı (method, path-kuyruğu) sky-panel/sky-operation/tradoria kopyaları azami
+    # slotu yiyordu (926 kayıtta 77 kopya) → tekilleştir, servisleri tek satırda birleştir.
+    tekil: dict[tuple, dict] = {}
+    for skor, k in skorlu:
+        kuyruk = "/".join(s for s in k["path"].lower().split("/") if s and s not in _YOL_STOP)
+        anahtar = (k["method"], kuyruk)
+        if anahtar in tekil:
+            if k["servis"] not in tekil[anahtar]["servis"]:
+                tekil[anahtar]["servis"] += "|" + k["servis"]
+            # parametreler BİRLEŞTİRİLİR (ad+yer tekil) — iki spec'in bildiği tüm parametreler görünsün
+            mevcut = {(p["ad"], p["yer"]) for p in (tekil[anahtar].get("parametreler") or [])}
+            tekil[anahtar]["parametreler"] = list(tekil[anahtar].get("parametreler") or []) + \
+                [p for p in (k.get("parametreler") or []) if (p["ad"], p["yer"]) not in mevcut]
+            continue
+        tekil[anahtar] = dict(k)
+        tekil[anahtar]["_skor"] = skor
+    skorlu = [(v["_skor"], v) for v in tekil.values()]
     satirlar = ["### KAYITLI SERVİS SÖZLEŞMELERİ (Swagger — task'a alakalı MEVCUT endpoint'ler)",
                 "Aşağıdakiler sistemde ZATEN VAR olan endpoint'lerdir. İhtiyacını karşılayan varsa ÇÖZÜM OLARAK KULLAN "
                 "(method+path+alanları aynen), `[K: Swagger:<servis>]` ile. Yoksa canlı gözlemle doğrula; o da yoksa yeni tasarla.\n"]

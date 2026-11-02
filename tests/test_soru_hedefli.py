@@ -35,6 +35,13 @@ kontrol("surec-analizi.md kendine hedefli", app._SORU_HEDEF_ANALIZ.get("surec-an
 kontrol("acik-sorular.md → teknik-analiz.md", app._SORU_HEDEF_ANALIZ.get("acik-sorular.md") == "teknik-analiz.md")
 kontrol("brd-sorular.md → brd-analizi.md", app._SORU_HEDEF_ANALIZ.get("brd-sorular.md") == "brd-analizi.md")
 
+# ── bolum_bul gövde-içi fallback (GERÇEK, mock öncesi) — denetim 2026-11-02 E#2 ────────────────
+_md_bb = ("## 1. Süreç Adımları\n\n**PA-001:** Onay adımı — süre belirsiz.\n\n"
+          "## 5. Açık Sorular\n\n### Q-001: Onay süresi\n- Bağlı ID: PA-001\n- Soru: kaç gün?\n")
+_bb = revizyon_ai.bolum_bul(_md_bb, "PA-001")
+kontrol("bolum_bul: cevap SORU BLOĞUNA değil, ID'yi tanımlayan süreç bölümüne gider",
+        _bb is not None and _bb["baslik"].startswith("1. Süreç") and not _bb["baslik"].startswith("Q-"))
+
 # ── Ortam: geçici OUTPUT_DIR + surec-analizi.md ────────────────────────────────
 tmp = Path(tempfile.mkdtemp())
 app.OUTPUT_DIR = tmp

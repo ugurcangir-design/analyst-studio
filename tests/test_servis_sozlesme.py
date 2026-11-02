@@ -69,6 +69,18 @@ chk("zorunlu parametre * ile işaretli", "marketId:integer*" in blok, blok)
 blok_p = SS.endpoint_baglami("sportId ve name ile market filtreleme araması")
 chk("parametre ADIYLA sorgu → GET-filtre ucunu yüzeye çıkarır (param_boost)",
     "definition-service/markets" in blok_p, blok_p[:300])
+# denetim 2026-11-02 A#5/A#6: aynı uç iki serviste → TEK satır (servisler '|' ile); kısa 'id'/'q' parametreleri eşleşir
+spec2 = {"paths": {"/bff/tradoria/definition-service/markets": {"get": {"operationId": "getMarkets",
+         "parameters": [{"name": "q", "in": "query", "schema": {"type": "string"}}, {"name": "id", "in": "query", "schema": {"type": "integer"}}],
+         "responses": {"200": {}}}}}}
+(tmp / "sky-operation-bff.json").write_text(json.dumps(spec2), encoding="utf-8")
+blok_d = SS.endpoint_baglami("market listesi id ile ara q")
+_sat = [ln for ln in blok_d.splitlines() if "GET /bff/tradoria/definition-service/markets" in ln]
+chk("DEDUP: aynı (method,path) iki Swagger'da → TEK satır, etiket iki servisi '|' ile taşır",
+    len(_sat) == 1 and "sky-panel-bff" in _sat[0] and "sky-operation-bff" in _sat[0] and "|" in _sat[0], _sat)
+chk("DEDUP: parametreler BİRLEŞİR (marketId + q/id birlikte) ve kısa ad ('id'/'q') eşleşir",
+    "marketId" in blok_d and "q:" in blok_d and "id:" in blok_d, blok_d[-500:])
+(tmp / "sky-operation-bff.json").unlink()
 
 # Hiç alaka yoksa boş (blok eklenmez)
 chk("alakasız sorgu → boş", SS.endpoint_baglami("tamamen alakasız xyzzy foobar") == "")

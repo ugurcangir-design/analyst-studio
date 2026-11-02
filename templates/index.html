@@ -5652,7 +5652,10 @@ function _jgSetKaydet() {
     if (!anahtarlar.length) { localStorage.removeItem(_JG_SET_KEY); return; }
     // Jira'ya yazımı TAMAMLANMIŞ set KALICILAŞTIRILMAZ → yenileme/reattach'te bitmiş analiz geri gelmez
     // (owner 2026-10-21: task açma/güncelleme tamamlandıysa ekrandan kaldırma). Her giriş tamamlandı/yazıldı ise atla.
-    const hepsiBitti = anahtarlar.every(k => { const s = _jgAnalizSeti[k] || {}; return s.tamamlandi || (s.jiraYazildi && (s.jiraYazildi.be || s.jiraYazildi.fe)); });
+    // Katman-duyarlı (denetim 2026-11-02 E#7): yalnız BE yazıldıysa FE entry'si 'bitti' sayılmaz — eskiden
+    // `be || fe` ile set siliniyor, yazılmamış FE analizi yenilemede kayboluyordu.
+    const hepsiBitti = anahtarlar.every(k => { const s = _jgAnalizSeti[k] || {}; const y = s.jiraYazildi || {};
+      return s.tamamlandi || (/::FE$/.test(k) ? !!y.fe : !!y.be); });
     if (hepsiBitti) { localStorage.removeItem(_JG_SET_KEY); return; }
     localStorage.setItem(_JG_SET_KEY, JSON.stringify({ set: _jgAnalizSeti, aktif: _jgAktifAnalizKey, ts: Date.now() }));
   } catch (e) {}   // kota/erişim hatası — sessiz
@@ -5867,7 +5870,8 @@ function _jgAdimVurgu(key, s) {
   const set = (el, sonuk, aktif) => { el.classList.toggle('jg-ak-sonuk', !!sonuk); el.classList.toggle('jg-ak-aktif', !!aktif); };
   const kabulOnly = !!s.kabulOnly && !!s.kabul;
   const dolu = !!((s.markdown || '').trim());
-  const yazildi = !!s.tamamlandi || !!(s.jiraYazildi && (s.jiraYazildi.be || s.jiraYazildi.fe));
+  // katman-duyarlı (E#7): FE sekmesi yalnız FE yazıldıysa 'yazıldı' sayılır (eskiden BE yazılınca FE de yazıldı görünüyordu)
+  const yazildi = !!s.tamamlandi || !!(s.jiraYazildi && (/::FE$/.test(key || '') ? s.jiraYazildi.fe : s.jiraYazildi.be));
   if (kabulOnly)      { set(g1, true, false);  set(g2, true, false);  set(g3, false, true);  }
   else if (s.hata || !dolu) { set(g1, false, true); set(g2, true, false);  set(g3, true, false);  }
   else if (yazildi)   { set(g1, true, false);  set(g2, false, false); set(g3, false, true);  }
@@ -6225,6 +6229,13 @@ async function _jgPollDurumIc() {
                            kabulOnly,
                            // Jira yazım izi, agent 'bu katmanda iş' kararı ve girilen cevaplar taşınır
                            jiraYazildi: eski.jiraYazildi, isVar: eski.isVar, cevaplar: eski.cevaplar };
+      // FE+BE seti: açık sorular İKİ katman üzerinden TEK liste üretilir → cevap/düzelt sonrası yakınsayan liste
+      // KARDEŞ entry'ye de yazılır (denetim 2026-11-02 E#6: BE'de cevaplanan soru FE sekmesinde listede kalıyor,
+      // ZORUNLU kapısı FE yazımında cevaplanmış soru için uyarıyordu).
+      if (eski.feBeKaynak && typeof rs.acik_sorular === 'string') {
+        const kardes = /::FE$/.test(k) ? eski.feBeKaynak : (k + '::FE');
+        if (_jgAnalizSeti[kardes]) _jgAnalizSeti[kardes].acik_sorular = rs.acik_sorular;
+      }
     }
   }
   if (d.durum === 'calisiyor') {

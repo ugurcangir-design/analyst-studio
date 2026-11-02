@@ -1054,7 +1054,7 @@ def _fetch_jira_project(project_key: str, cloud_id: str) -> int:
                 "type": (f.get("issuetype") or {}).get("name", ""),
                 "priority": (f.get("priority") or {}).get("name", ""),
                 "assignee": (f.get("assignee") or {}).get("displayName", ""),
-                "description": str(desc)[:500],
+                "description": str(desc)[:2000],   # denetim 2026-11-02 A#2: 500 → 2000 (kabul kriterleri/kurallar corpus'a girsin)
             })
         next_token = data.get("nextPageToken")
         if not next_token:
@@ -4263,6 +4263,10 @@ def _sorulari_hedefli_uygula(kaynak: str, sorular: list[dict]) -> dict:
                 try:
                     rev = revizyon_ai.bolum_duzenle(hedef, bid, duzeltme_notu_olustur([s]))
                     revizyon.onayla(hedef, rev["id"])
+                    # HER cevaptan sonra diske yaz (denetim 2026-11-02 E#1): döngü sonunda tek yazım yapılınca
+                    # 2. sorunun `bolum_duzenle`'si 'oturum ≠ disk' görüp diske (1. cevapsız) yeniden bazlanıyor,
+                    # 1. cevap sessizce ATILIYORDU ('cevap girdim ama uygulanmadı').
+                    hedef_yol.write_text(revizyon.onayli_icerik(hedef), encoding="utf-8")
                     hedefli += 1
                     continue
                 except Exception as e:

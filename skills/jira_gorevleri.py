@@ -1519,11 +1519,21 @@ def gorev_analiz_duzelt(gorev: dict, mevcut_markdown: str, talimat: str, asama: 
         {"type": "text", "text": f"[DÜZELTME TALİMATI — yalnız bunu uygula]\n{talimat}"},
     ]
     asama_ayarla(asama or "gorev:duzelt")
+    # onbellek=False (denetim 2026-11-02 E#4): analistin AÇIK düzeltme isteği — aynı metin+talimat önbellekten
+    # dönünce 'Düzelt çok hızlı bitti, uydurma id kaldı' ve kesik çıktı aynen geri geliyordu (revizyon_ai ile aynı gerekçe).
     yanit = _api_cagri(_GOREV_DUZELT_SISTEM, [{"role": "user", "content": icerik}],
-                       max_tokens=MAX_TOKENS_COMBINED, thinking=extended_thinking_acik(), katman="yardimci")
+                       max_tokens=MAX_TOKENS_COMBINED, thinking=extended_thinking_acik(), katman="yardimci",
+                       onbellek=False)
     yeni = _meta_notlari_temizle(_xml_ayir(_metin_sikistir(yanit), "teknik_analiz"))
     if not yeni.strip():
         return yeni
+    # KESİK ÇIKTI REDDİ (denetim 2026-11-02 E#3): model yalnız bir bölümü döndürürse (4151→115 kc) sonuç olduğu gibi
+    # editöre/depoya yazılıp analiz ERİYORDU. %50 kuralı + `##` başlık sayısı belirgin azalmışsa ValueError → UI eski
+    # içeriği korur, cevap yolu tam üretime düşer.
+    _eski_bas, _yeni_bas = len(re.findall(r"(?m)^##\s", mevcut)), len(re.findall(r"(?m)^##\s", yeni))
+    if len(yeni) < 0.5 * len(mevcut) or (_eski_bas >= 3 and _yeni_bas < _eski_bas * 0.6):
+        raise ValueError(f"Düzeltme çıktısı kesik görünüyor ({len(mevcut)}→{len(yeni)} kc, başlık {_eski_bas}→{_yeni_bas}) — "
+                         "mevcut analiz korundu; talimatı daraltıp tekrar deneyin.")
     yeni = yonetici_ozetini_cikar(yeni)
     if ozet_vardi:
         yeni = yonetici_ozeti_olustur(yeni, acik_sorular=acik_sorular or "") + yeni
@@ -1569,7 +1579,10 @@ def gorev_cevap_uygula(gorev: dict, mevcut_markdown: str, cevaplar: str, onceki_
     try:
         acik = _gorev_acik_sorular_uret(yeni, gorev, cevaplar=cevaplar, onceki_sorular=onceki_sorular or "")
     except Exception as e:
-        print(f"  ⚠ Kalan açık sorular üretilemedi (cevaplar yine de işlendi): {str(e)[:120]}")
+        # Soru üretimi (haiku 429 vb.) düşerse cevaplanMAMIŞ sorular SİLİNMEZ (denetim 2026-11-02 E#5): deterministik
+        # yakınsama ile önceki listeden yalnız cevaplananlar düşer, kalanlar (ZORUNLU dahil) listede kalır.
+        print(f"  ⚠ Kalan açık sorular üretilemedi (cevaplar yine de işlendi; önceki liste deterministik yakınsandı): {str(e)[:120]}")
+        acik = _cevaplanan_sorulari_dus(onceki_sorular or "", cevaplar) if (onceki_sorular or "").strip() else ""
     # Özet (açık soru sayacı dahil) GÜNCEL gövde + KALAN sorulardan yeniden kurulur; RAG yorumu geri konur.
     ozet = yonetici_ozeti_olustur(yeni, acik_sorular=acik) if ozet_vardi else ""
     return {"markdown": rag + ozet + yeni, "acik_sorular": acik, "hedefli": True}
@@ -1650,26 +1663,35 @@ def _gorev_acik_sorular_uret(teknik_metni: str, gorev: dict,
     acik = _xml_ayir(_metin_sikistir(yanit), "acik_sorular")
     # DETERMİNİSTİK YAKINSAMA (owner 2026-10-21: 'cevap girdim ama aynı soruyu tekrar çıkarıyor'):
     # Analistin CEVAPLADIĞI soru ID'lerini model ne derse desin ELE — reworded olsa da aynı ID geri gelmesin.
-    return _cevaplanan_sorulari_dus(acik, cevaplar)
+    return _cevaplanan_sorulari_dus(acik, cevaplar, onceki_sorular)
 
 
 _SORU_BASLIK = re.compile(r"(?mi)^#{1,4}\s*(Q-?T?-?\d+)\b")
-_CEVAP_ID = re.compile(r"(?mi)^\s*[-*•]?\s*\*{0,2}(Q-?T?-?\d+)\*{0,2}\s*[:\-–]")
+# Ayraç opsiyonel (E#8): tek-kutu serbest metin `Q-T-001 cevabım` (iki nokta/tire yok) de cevap sayılır
+_CEVAP_ID = re.compile(r"(?mi)^\s*[-*•]?\s*\*{0,2}(Q-?T?-?\d+)\*{0,2}\s*(?:[:\-–]|\s(?=\S))")
 
 
-def _cevaplanan_sorulari_dus(acik: str, cevaplar: str) -> str:
+def _cevaplanan_sorulari_dus(acik: str, cevaplar: str, onceki_sorular: str = "") -> str:
     """Analistin cevapladığı (cevaplar metninde `Q-T-00n:` ile başlayan, boş olmayan) soru ID'lerinin
     `### <ID>:` bloklarını açık sorulardan çıkarır — model yakınsamada bırakmış olsa da. ID normalize edilir
-    (Q-T-1 == Q-T-001 == QT1) → reworded ama AYNI ID geri gelmez. Yeni ID'li gerçek yeni soru korunur."""
-    if not (acik or "").strip() or not (cevaplar or "").strip():
+    (Q-T-1 == Q-T-001 == QT1 == Q-001 — T-AGNOSTİK, denetim 2026-11-02 E#8: başlık `Q-001` / cevap `Q-T-001`
+    eşleşmiyordu) → reworded ama AYNI ID geri gelmez. `onceki_sorular`'da agent'ın ÇÖZÜP analize işlediği
+    bölümdeki (`COZULEN_BASLIK`) ID'ler de düşer (eskiden model onları yeniden açıyordu). Yeni ID'li gerçek yeni soru korunur."""
+    if not (acik or "").strip():
         return acik
 
     def _norm(i: str) -> str:
-        m = re.search(r"T?-?(\d+)", i.upper().replace(" ", ""))
-        t = "T" if "T" in i.upper() else ""
-        return f"Q{t}{int(m.group(1))}" if m else i.upper()
+        m = re.search(r"(\d+)", i.upper().replace(" ", ""))
+        return f"Q{int(m.group(1))}" if m else i.upper()
 
-    cevaplanan = {_norm(m.group(1)) for m in _CEVAP_ID.finditer(cevaplar)}
+    cevaplanan = {_norm(m.group(1)) for m in _CEVAP_ID.finditer(cevaplar or "")}
+    try:
+        from .soru_cozumleme import COZULEN_BASLIK
+        _bolum = (onceki_sorular or "").split(COZULEN_BASLIK, 1)
+        if len(_bolum) == 2:
+            cevaplanan |= {_norm(x) for x in re.findall(r"\*\*(Q-?T?-?\d+)\*\*", _bolum[1])}
+    except Exception:
+        pass
     if not cevaplanan:
         return acik
     # Blokları `### <ID>:` başlıklarından böl; cevaplanan ID'li blokları at (başlıksız giriş metni korunur).
@@ -1720,6 +1742,20 @@ def govde_birlestir(analiz_md: str, mevcut_desc: str) -> str:
             f"---\n\n## 🤖 Teknik Analiz (Analyst Agent)\n\n{temiz}")
 
 
+def _segmentli_temizle(markdown: str) -> str:
+    """`🤖 Teknik Analiz` işareti varsa yalnız işaretten SONRAKİ analiz segmentini `jira_icin_temizle`'den geçirir;
+    '📌 Orijinal Talep' segmenti (müşterinin kendi ticket metni) DOKUNULMAZ. İşaret yoksa tamamı temizlenir."""
+    m = _ANALIZ_ISARET.search(markdown or "")
+    if not m:
+        return jira_icin_temizle(markdown)
+    bas, analiz = markdown[:m.end()], markdown[m.end():]
+    # başlık satırının kalanını (ör. ' (Analyst Agent)') koru, gövdeyi temizle
+    satir_sonu = analiz.find("\n")
+    if satir_sonu == -1:
+        return markdown
+    return bas + analiz[:satir_sonu + 1] + jira_icin_temizle(analiz[satir_sonu + 1:])
+
+
 def gorev_jiraya_yaz(task_key: str, markdown: str, summary: str | None = None, orijinal_koru: bool = True) -> bool:
     """Görevin description'ını markdown→ADF olarak günceller. İsteğe bağlı summary de güncellenir.
     `orijinal_koru=True` (varsayılan): yazılacak metin zaten `🤖 Teknik Analiz` işaretini TAŞIMIYORSA mevcut açıklama
@@ -1737,7 +1773,10 @@ def gorev_jiraya_yaz(task_key: str, markdown: str, summary: str | None = None, o
     # Jira'ya giden kopya TEK kapıdan temizlenir (`base.jira_icin_temizle`): Yönetici Özeti +
     # Canlı Gözlem Kapsamı + `<!-- RAG -->` yorumu + kaynak alıntı cümleleri + meta-gerekçe +
     # `[K:]` etiketleri + ardışık bölüm numaraları. Analiz çıktısındaki hâl korunur.
-    markdown = jira_icin_temizle(markdown)
+    # SEGMENTLİ (denetim 2026-11-02 C#7): wrapper'lı gövdede (📌 Orijinal Talep + 🤖 Teknik Analiz) temizleyici ve
+    # yeniden numaralama YALNIZ analiz segmentine uygulanır — eskiden müşterinin kendi ticket metni de temizleniyor
+    # (ortam-ID satırı silinmişti) ve iki bölümün `##` numaraları tek haritada karışıyordu.
+    markdown = _segmentli_temizle(markdown)
     adf_content = markdown_to_adf(markdown)
     if not adf_content:
         # İçerik yalnızca HTML yorumu/boşluktan ibaretse ADF boş kalır — Jira 400 verir.

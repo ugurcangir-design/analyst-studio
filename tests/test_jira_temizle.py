@@ -159,6 +159,29 @@ chk("tek başına ID listesi korunur",
 chk("tek başına negatif cümle korunur",
     "yapılmaz" in B.jira_icin_temizle("## 1. İş\n- Bu akışta soft-delete yapılmaz; hard-delete uygulanır.\n"))
 
+print("6) denetim 2026-11-02 — temizleyici iki yönlü kenar durumları (C#1-C#7)")
+_c = B.jira_icin_temizle("## 1. A\n```json\n{\n  \"eventId\": 1,\n  \"m\": [\n    { \"id\": 1 }\n  ]\n}\n```\n- x `[K: Jira]`\n")
+chk("C#1 kod bloğu girintisi korunur ([K:] temizliği kod çiti dışında)", '  "eventId"' in _c and '    { "id"' in _c and "[K:" not in _c)
+_c = B.jira_icin_temizle("## 1. A\n- **Request:**\n  - `eventId` (zorunlu)\n  - `marketId`\n- **Boş:**\n\n- son\n")
+chk("C#2 alt maddeli `- **Etiket:**` ebeveyni korunur, boş etiket silinir", "**Request:**" in _c and "**Boş:**" not in _c)
+_c = B.jira_icin_temizle("## 11. Kabul\n- AC-3: Test senaryosunda id 5/6 kayıtları silinmez, yalnızca pasife alınır.\n"
+                         "| AC-5 | Prod'da id 7/8 kayıtlarına dokunulmaz |\n- Mevcut yetim kayıtlar: UAT'taki ID 17/18/19 ve dev'deki id 181/182 temizlenmez; yapılmayacaktır.\n")
+chk("C#3 AC-n / tablo satırı korunur, yetim-kayıt ortam-ID satırı silinir", "AC-3" in _c and "AC-5" in _c and "181/182" not in _c)
+_c = B.jira_icin_temizle("## 9. Riskler\n- gerçek risk\n### Açık Sorular\n- Q1?\n### 9.2 Teknik Borç\n- gerçek borç\n## 10. Açık Sorular\n### Q-T-001: s\n- Soru: ?\n## 11. Kabul\n- AC-1\n")
+chk("C#4 numaralı/3.seviye Açık Sorular silinir, komşu `### 9.2` ve Kabul KORUNUR",
+    "Q-T-001" not in _c and "Q1?" not in _c and "gerçek borç" in _c and "AC-1" in _c, _c)
+_c = B.jira_icin_temizle("## 9. Hata\n- **Hata mesajı (Swagger'daki description):** \"Market bulunamadı, lütfen geçerli bir id girin.\"\n"
+                         "- Jira'da tanımlı toast metni: \"Değişiklikler başarıyla kaydedildi\"\n- Analist notu bunu doğrular: \"bu kural her zaman geçerlidir\"\n")
+chk("C#5 hata mesajı/toast metni maddeleri korunur, kaynak alıntısı silinir",
+    "Market bulunamadı" in _c and "başarıyla kaydedildi" in _c and "bunu doğrular" not in _c, _c)
+_c = B.jira_icin_temizle("## 1. A\n- Sürüm v1.2 ile gelen davranış, eski yaklaşımına kıyasla daha hızlıdır. Devam cümlesi.\n- Bu alan FE kontrolü dışıdır; BE doğrular.\n")
+chk("C#6 ondalık sayı cümleyi bölmez (artık yok) + düz 'kontrolü dışıdır' cümlesi korunur",
+    "v1." not in _c and "Devam cümlesi" in _c and "kıyasla" not in _c and "FE kontrolü dışıdır" in _c, _c)
+from skills import jira_gorevleri as _JG  # noqa: E402
+_w = _JG._segmentli_temizle("## 📌 Orijinal Talep\n\n## 2. Kapsam\nUAT'taki ID 3/4 kayıtları temizlenmez; yapılmayacaktır.\n\n---\n\n## 🤖 Teknik Analiz (Analyst Agent)\n\n## 1. Amaç\n- iş `[K: Jira]`\n## 3. Teknik\n- x\n")
+chk("C#7 wrapper'lı gövde: orijinal talep DOKUNULMAZ (ortam-ID satırı kalır, numarası değişmez), analiz temizlenir + ardışık",
+    "ID 3/4" in _w and "## 2. Kapsam" in _w and "[K:" not in _w and "## 2. Teknik" in _w, _w)
+
 print()
 if _hata:
     print(f"JIRA TEMİZLİK TESTLERİ BAŞARISIZ ({_hata} hata)")

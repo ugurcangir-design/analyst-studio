@@ -145,20 +145,31 @@ def bolum_bul(md: str, anahtar: str) -> dict | None:
             continue
         if hedef in b["baslik"].casefold():
             return b
-    # 2) Gövde-içi fallback: ID'yi içeren en derin (eşitse en kısa) bölüm
+    # 2) Gövde-içi fallback: ID'yi içeren bölüm. SORU BLOKLARI (`### Q-001:` / `PO-` / Açık Sorular altı) ADAY DEĞİL —
+    # onlar `- Bağlı ID: PA-001` satırı taşıdığı için 'en derin/en kısa' kuralıyla hep kazanıyor, cevap süreç adımına
+    # değil soru bloğuna uygulanıyordu (denetim 2026-11-02 E#2). Tercih: ID'yi satır-içi tanım olarak (`**PA-001:**`)
+    # içeren bölüm > yalnız atıf olarak içeren; eşitse en derin, sonra en kısa.
     idler = _anahtar_idleri(anahtar)
     if not idler:
         return None
-    en_iyi = None
+    en_iyi, en_iyi_tanim = None, False
     for b in bolumler:
-        if b["seviye"] == 0:
+        if b["seviye"] == 0 or _SORU_BOLUMU.match(b["baslik"] or ""):
             continue
-        if any(_id_govdede(b["icerik"], i) for i in idler):
-            if (en_iyi is None
-                    or b["seviye"] > en_iyi["seviye"]
-                    or (b["seviye"] == en_iyi["seviye"] and len(b["icerik"]) < len(en_iyi["icerik"]))):
-                en_iyi = b
+        if not any(_id_govdede(b["icerik"], i) for i in idler):
+            continue
+        tanim = any(re.search(r"\*\*" + re.escape(i) + r"\s*:?\*\*|^#{1,6}\s*" + re.escape(i) + r"\b", b["icerik"], re.M | re.I)
+                    for i in idler)
+        daha_iyi = (en_iyi is None
+                    or (tanim and not en_iyi_tanim)
+                    or (tanim == en_iyi_tanim and (b["seviye"] > en_iyi["seviye"]
+                        or (b["seviye"] == en_iyi["seviye"] and len(b["icerik"]) < len(en_iyi["icerik"])))))
+        if daha_iyi:
+            en_iyi, en_iyi_tanim = b, tanim
     return en_iyi
+
+
+_SORU_BOLUMU = re.compile(r"(?i)^\s*(?:Q-T?-?\d+|PO-\d+|A[çc][ıi]k Sorular|Cevap Bekleyen)")
 
 
 def _cikti_butcesi(bolum: str) -> int:

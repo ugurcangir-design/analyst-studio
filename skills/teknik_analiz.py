@@ -191,6 +191,10 @@ def teknik_analiz_yap(ozel_atla: bool = False) -> tuple[Path, Path]:
         raise FileNotFoundError("surec-analizi.md bulunamadı. Önce süreç analizi yapın.")
 
     surec_metni = dosya_oku(surec_dosya, MAX_CHARS_GENEL)
+    # SORGU kopyası daha uzun (denetim 2026-11-02 A#4): 30k'lık prompt kopyası süreç analizinin sondaki API/Teknik
+    # Notlar/Açık Sorular bölümlerini düşürüyor → BM25 + servis sözleşmesi o uçları hiç yüzeye çıkaramıyordu.
+    # Sorgu metni PROMPTA GİRMEZ (yalnız retrieval), prompt'a giden kopya 30k kalır.
+    surec_sorgu = dosya_oku(surec_dosya, 120_000)
     ref_dosyalar = referans_dosyalari_hazirla()
     mockup_icerik = mockup_oku_kontekst()
 
@@ -203,7 +207,7 @@ def teknik_analiz_yap(ozel_atla: bool = False) -> tuple[Path, Path]:
     if ref_dosyalar:
         print(f"  {len(ref_dosyalar)} referans dosya dahil ediliyor...")
         # Sorgu = kaynak süreç analizi (teknik varlıklar/ID'ler) → teknik-lezzetli alaka getirimi.
-        ref_bloklari, kullanilan_referanslar = _ref_bloklari_olustur(ref_dosyalar, sorgu_metni=surec_metni)
+        ref_bloklari, kullanilan_referanslar = _ref_bloklari_olustur(ref_dosyalar, sorgu_metni=surec_sorgu)
         stable_bloklar.extend(ref_bloklari)
 
     canli_baglam = canli_uygulama_baglami_hazirla()
@@ -226,7 +230,7 @@ def teknik_analiz_yap(ozel_atla: bool = False) -> tuple[Path, Path]:
     try:
         from . import servis_sozlesme as _ss
         _gm = gozlem_rapor.get("md", "") if isinstance(gozlem_rapor, dict) else ""
-        _sb = _ss.endpoint_baglami(surec_metni, ek_metin=_gm)
+        _sb = _ss.endpoint_baglami(surec_sorgu, ek_metin=_gm)
         if _sb:
             print("  📑 Kayıtlı servis sözleşmeleri (Swagger) teknik analize dahil ediliyor...")
             stable_bloklar.append({"type": "text", "text": _sb})
