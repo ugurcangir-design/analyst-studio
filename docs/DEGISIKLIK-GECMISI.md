@@ -6,6 +6,26 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## Tam denetim 2026-11-02 — "kural ekliyorum, aynı hata geri geliyor" döngüsünün mekanik nedenleri ✅ (CLAUDE.md "TAM DENETİM 2026-11-02")
+- Owner: 'sürekli hata düzeltiyorum, bunların çok önceden düzelmiş olması gerekirdi'. 5 paralel, kod çalıştırarak doğrulayan
+  denetçi (retrieval · gözlem/BFF · Jira temizliği · prompt tutarlılığı · iş/soru hattı) → ~38 kanıtlı bulgu, 3 commit
+  (`4661730` kök mekanizmalar · `3f6e45a` retrieval/temizleyici/ADF/soru hattı · docs).
+- **Kök nedenler:** (1) task'ın kendi hatalı analizi few-shot'a 'onaylı örnek' diye geri besleniyordu (öz-kirlenme filtresi
+  22 Ekim'den beri ölü) → `ornek_bloklari(haric_key)` + örnekten Teknik Borç/Açık Sorular/Kapsam Dışı + künye/punt budama;
+  (2) yeni kurallar yalnız ana analizdeydi, düzelt/cevap/öz-çözümleme turları bilmiyordu → `_TASK_DILI_KURALLARI` tek sabit;
+  (3) ORTAK+domain kuralları görev analizine akmıyordu (belge≠kod); (4) analist notu gözlem fazına hiç gitmiyordu + analiz
+  promptu araçsız çağrıdan tarayıcı istiyordu (punt'a mecbur); (5) BFF task modunda tüm task'lar 7 gün aynı raporu
+  paylaşıyordu, yalnız-GET rapor 'CRUD yapıldı' diye giriyordu, araçsız uydurma rapor/giriş 'ok' sayılıyordu;
+  (6) Swagger'ın yarısı 300k kırpmasıyla corpus'a girmiyordu, Jira açıklaması 250 kc'de kesiliyordu, keyword eşleşmeyince
+  Swagger düşüyordu; (7) Jira temizleyici kod girintisini bozuyor, ebeveyn maddeyi/hata mesajını/AC satırını siliyor,
+  numaralı Açık Sorular'ı kaçırıyor, orijinal ticket metnini ikinci kez temizliyordu; ADF snake_case'i italik yapıyor,
+  iç içe listeyi bölüyordu; (8) 2+ cevaptan yalnız sonuncusu diske yazılıyor, cevap soru bloğuna uygulanıyor, Düzelt
+  önbellekten dönüyor, kesik çıktı kabul ediliyor, 429'da cevapsız sorular siliniyor, FE+BE kardeş soru listesi
+  güncellenmiyor, yalnız-BE yazımında FE analizi yenilemede kayboluyordu.
+- Tüm bulgular `tests/test_*`'e regresyon olarak işlendi; 39 test + smoke yeşil. Analistlere: Güncelleme → Yeniden Başlat;
+  görünür etki: Task analizi artık kendi önceki hatasını örnek almaz, Düzelt/Cevap aynı dili uygular, gözlem analist
+  notundaki parametreyi fiilen dener, Jira kopyası kod/alt madde/hata mesajı kaybetmez.
+
 ## Opt-in Ekran Görüntüsü — FE task'ına canlı ekran eki ✅ (CLAUDE.md "EKRAN GÖRÜNTÜSÜ", MIMARI yok — CLAUDE.md yeterli)
 - `skills/ekran_goruntu.py`: analizin adlandırdığı canlı ekranları Playwright `browser_take_screenshot` (dosya-adsız → `--output-dir`)
   ile çeker, sırayla açıklamalarla eşler, `atlassian_attach` ile Jira task'ına PNG ek koyar. Uç `POST /api/jira/gorev/ekran-goruntu`
