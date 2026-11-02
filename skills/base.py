@@ -378,6 +378,25 @@ _BUTUNLUK_SKILL_IDS = frozenset({
 })
 
 # Bu skill_id'lere prompt_yukle() otomatik olarak _ORTAK_EK_KURALLAR ekler
+# TASK DİLİ — TEK ortak sabit; görev analizinin HER turuna girer (ilk üretim + düzelt + cevap + öz-çözümleme işleme).
+# Denetim 2026-11-02 (D#5): yeni kurallar yalnız ana analiz çağrısındaydı; düzelt/cevap/öz-çözümleme turları
+# (2-3 ek çağrı, 'dokunulmayanı aynen koru' ile) kuralların %70'ini bilmeden gövdeyi yeniden yazıyordu → hata
+# "başka biçimde geri geliyordu". KISA ve POZİTİF (yasaklanan dizgeyi ÖRNEK olarak vermekten kaçınılır).
+_TASK_DILI_KURALLARI = (
+    "\n# TASK DİLİ (çıktı doğrudan Jira task gövdesine gider — geliştirici okur)\n"
+    "1. Her cümle geliştiriciye bir iş/kural söyler. Arka plan, 'analist şunu istedi/bildirdi' aktarımı ve kapsamın "
+    "nereden geldiğini anlatan künye (başlık-vs-not karşılaştırması) YAZILMAZ; kapsamdaki ekranlar §1'de düz liste olarak verilir.\n"
+    "2. Kaynak YALNIZ `[K: …]` etiketiyle gösterilir; alıntı cümlesi, \"…'a göre\" öneki, yaklaşım gerekçesi/karşılaştırması yazılmaz.\n"
+    "3. Doğrulanamayan nokta TEK etiketle işaretlenir: `[K: ❓ Belirsiz]` + kısaca ne denendiği (Swagger/gözlem raporu). "
+    "'BE teyit edilmeli' / 'canlı doğrulanamadı' / 'analist bildirdi' türü punt cümlesi kurulmaz; karar yazılır ya da etiketlenir.\n"
+    "4. Davranış SONUÇ olarak yazılır; gözlenmemiş mühendislik reçetesi (ms cinsinden süre, retry sayısı, yarış-durumu "
+    "stratejisi, cache süresi) uydurulmaz — gerçekten gözlemdeyse `[K:]` ile.\n"
+    "5. Kendi kendine kural koyan meta cümle ('… icat edilmez / eklenmez'), ne yapılmayacağını anlatan negatif kapsam "
+    "cümlesi ve ortama özgü somut kayıt ID listesi yazılmaz; sınır gerekiyorsa `## Kapsam Dışı` altında tek kısa madde.\n"
+    "6. Yalnız bu görevin kendi bağlı issue'su anılır; örnek/referanstan gelen başka task anahtarı kopyalanmaz, "
+    "yetenek SERVİS ADIYLA verilir.\n"
+)
+
 _EK_KURAL_SKILL_IDS = frozenset({
     "surec_analizi",
     "teknik_analiz_bolumler",
@@ -1479,9 +1498,9 @@ added / updated / removed olabilir."""
             "- **KEŞFEDİLEN EKRAN — GİZLEME, YÜZEYE ÇIKAR (owner 2026-11-01):** YALNIZ canlı gözlemde / referansta bulduğun, "
             "görevin istediği değişikliği taşıyan AMA ne görev başlığında, ne isterinde, ne de analist notunda ADI GEÇMEYEN bir "
             "ekran için geçerli (gerçek sürpriz bulgu; notta/ticket'ta geçen ekran buraya GİRMEZ — o üstteki kurala tabidir). "
-            "Böyle bir ekran bulursan gövdeye gömüp geçme: (1) **§1 Amaç ve Hedefler'de AÇIKÇA belirt:** rotasını yaz + 'Ek "
-            "olarak şu ekran da aynı alanı içeriyor: <rota> — ticket/notta adı YOK, kapsama dahil mi teyit edilmeli "
-            "`[K: ❓ Belirsiz]`' satırı. (2) §3/§7'de kendi alt-başlığıyla ele al. (3) Kabul Kriterleri'ne dahil et.\n"
+            "Böyle bir ekran bulursan gövdeye gömüp geçme: (1) **§1'deki ekran listesine rotasıyla ekle ve YALNIZ `[K: ❓ Belirsiz]` "
+            "etiketini koy** — 'ticket'ta adı yok / teyit edilmeli' gibi provenans cümlesi YAZMA (teyit sorusu ayrı adımda etiketten "
+            "üretilir). (2) §3/§7'de kendi alt-başlığıyla ele al. (3) Kabul Kriterleri'ne dahil et.\n"
             "- **HER EKRAN KENDİ ALT-BAŞLIĞIYLA:** 2+ ekran kapsamdaysa §3 Teknik ve §7 FE'de her ekranı `### <Ekran adı — rota>` "
             "alt-başlığı altında AYRI ele al. Ekranları tek tabloya / karışık bullet listesine sıkıştırıp hangi kuralın/akışın "
             "hangi ekrana ait olduğunu BELİRSİZ bırakma (özet tablo olabilir ama ek olarak, alt-başlıkların YERİNE değil).\n"
@@ -1496,10 +1515,10 @@ added / updated / removed olabilir."""
             "Kaynak/domain adıyla tara (ör. nebula id-mapping, definition-service, market). Varsa çözüm ONU KULLANMAKTIR → "
             "method+path+alanları aynen yaz `[K: Swagger:<servis>]`; 'yeni servis eklenmeli' DEME.\n"
             "2. **Swagger'da endpoint VAR ama şeması generic/eksik (ör. `additionalProperties`, alan yok) ya da hiç yoksa:** "
-            "CANLI GÖZLEMle doğrula — ilgili ekranı/aksiyonu tetikle, `browser_network_request` ile o çağrının GERÇEK "
-            "request/response ALANLARINI oku ve sözleşmeyi çıkar `[K: Network:<METHOD> <path>]`. (Canlı gözlem tam bunun için var.)\n"
-            "3. **HEM Swagger'da HEM canlı gözlemde GERÇEKTEN yoksa:** YENİ endpoint TASARLA — method, path (sistemin mevcut "
-            "adlandırma/desenine uygun), request alanları, response alanları SOMUT yaz `[K: 🔍 Türetilmiş — öneri, BE teyidi]`. "
+            "GÖZLEM / BFF RAPORUNDAN doğrula — bu çağrıda tarayıcı aracı YOK; gözlem fazı ilgili çağrının GERÇEK "
+            "request/response alanlarını `[K: Network:<METHOD> <path>]` etiketiyle rapora yazdı. Raporda varsa o sözleşmeyi KULLAN.\n"
+            "3. **HEM Swagger'da HEM gözlem/BFF raporunda GERÇEKTEN yoksa:** YENİ endpoint TASARLA — method, path (sistemin mevcut "
+            "adlandırma/desenine uygun), request alanları, response alanları SOMUT yaz `[K: 🔍 Türetilmiş — öneri]`. "
             "Belirsiz bırakma; geliştiricinin uygulayabileceği net sözleşme ver.\n"
             "- **ANALİSTE SORMA:** 'hangi endpoint / (a) mı (b) mi / bu uç var mı / veri nereden alınacak / hangi yöntem' gibi "
             "TEKNİK TASARIM sorularını AÇIK SORU yapma — bunlar SENİN analiz işin, geliştirme ekibinin değil. Kanıt bir seçeneği "
@@ -1593,12 +1612,12 @@ added / updated / removed olabilir."""
             "reçete verme. İstisna: değer GERÇEKTEN gözlemde/isterde varsa `[K:]` ile yaz.\n"
             "- 'BE TEYİT EDİLMELİ' / 'CANLI YAKALANMADI' / 'ANALİST BİLDİRDİ' BİR SONUÇ DEĞİL (analist BFF/servis kontrolü "
             "istediyse ZORUNLU): bir servis yeteneğini (uç/parametre adı/path/filtre — ör. `id` ile arama, `sportId`/`name` "
-            "filtresi) teyit için önce (1) kayıtlı Swagger'ı (SERVİS SÖZLEŞMELERİ bloğu) tara, (2) ilgili modalı/aksiyonu canlı "
-            "tetikleyip `browser_network_request` ile GERÇEK path+parametreleri yakala — gerekirse parametreyi EKLEYEREK ve "
-            "EKLEMEDEN ayrı çağırıp davranış farkını gözle. 'Analist serviste X parametresi olduğunu bildirdi' CÜMLESİ geçersiz "
-            "bir kaynaktır — analistin dediğini SEN servise isteği atıp dönüşü okuyarak DOĞRULAMALISIN, not'u olduğu gibi aktarma. "
-            "Çözersen parametre adını/davranışını SOMUT yaz `[K: Network:…]`. İkisi de (Swagger+canlı) GERÇEKTEN başarısızsa "
-            "'BE teyit edilmeli'/'analist bildirdi' deme → '⚠ kaynak/gözlemde doğrulanamadı — <ne denendi>' + açık soru (punt geçersiz).\n"
+            "filtresi) teyit için (1) kayıtlı Swagger'ı (SERVİS SÖZLEŞMELERİ bloğu — parametreler orada listelenir) tara, "
+            "(2) gözlem/BFF raporundaki `[K: Network:…]` kanıtını kullan (gözlem fazı analist notundaki parametreyi fiilen "
+            "denedi; bu çağrıda tarayıcı YOK). 'Analist serviste X parametresi olduğunu bildirdi' CÜMLESİ geçersiz bir "
+            "kaynaktır — notu aktarma, Swagger/raporla DOĞRULAYIP parametre adını/davranışını SOMUT yaz `[K: Swagger:…]`/"
+            "`[K: Network:…]`. İkisinde de GERÇEKTEN yoksa 'BE teyit edilmeli'/'analist bildirdi' deme → tek satır "
+            "'⚠ Swagger/gözlem raporunda doğrulanamadı' + `[K: ❓ Belirsiz]` (soru ayrı adımda üretilir; punt geçersiz).\n"
             "- Her cümle geliştiriciye bir iş/kural söylemeli: açıklayıcı arka plan, 'analist şunu istedi' aktarımı, "
             "'hedef: analist elle aramasın' tarzı motivasyon cümlesi YAZMA (Amaç bölümünde tek cümle yeter).\n\n"
             "# ÇIKTI BİÇİMİ\n"
@@ -1688,6 +1707,15 @@ def _prompt_ekleri(skill_id: str, icerik: str) -> str:
         icerik = icerik + _BUTUNLUK_KURALLARI
     if skill_id in _EK_KURAL_SKILL_IDS:
         icerik = icerik + _domain_kurallari_oku()
+    if skill_id == "gorev_teknik_analiz":
+        # Denetim 2026-11-02 (D#4): CLAUDE.md 'ORTAK + domain kuralları görev analizine de akar' diyordu, kodda akmıyordu
+        # → Task analizi kaynak-etiket formatı, entity whitelist ve MBS domain sözlüğü olmadan çalışıyordu. Görev
+        # promptu açık-sorular bölümünü AYRI adımda ürettiği için ORTAK'ın 'Açık Sorular'a taşı' cümlesi uyarlanır.
+        icerik = (icerik
+                  + _ORTAK_EK_KURALLAR.replace("MUTLAKA Açık Sorular'a taşı",
+                                               "metinde etiketle ve geç (ayrı açık-sorular bölümü YAZMA — o ayrı adımda üretilir)")
+                  + _domain_kurallari_oku()
+                  + _TASK_DILI_KURALLARI)
     return icerik
 
 
@@ -2914,7 +2942,10 @@ def canli_uygulama_baglami_hazirla(gorev: bool = False, base_url_override: str =
     else:
         urls = _benzersiz_liste([target_url] + extra_urls)
     if hedef_tarif.strip():
-        gozlem_kapsami = hedef_tarif.strip()   # task-güdümlü hedef → ODAKLI gözlem modu
+        # task-güdümlü hedef → ODAKLI gözlem modu. Analistin Bağlam Filtresi'ndeki gözlem kapsamı EZİLMEZ,
+        # BİRLEŞTİRİLİR (denetim 2026-11-02 B#3: BFF keşfi/mockup hedef verince analistin 'ID filtresi' odağı düşüyordu).
+        gozlem_kapsami = (hedef_tarif.strip() + (f"\n\nAnalistin tanımladığı gözlem kapsamı (bunu da uygula):\n{gozlem_kapsami}"
+                                                 if gozlem_kapsami and gozlem_kapsami not in hedef_tarif else ""))
     if not urls:
         return None
 

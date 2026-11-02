@@ -305,9 +305,14 @@ def rapor_oku_anahtar(anahtar: str | None, _rapor_oku=None) -> dict | None:
     except Exception:
         meta = {}
     ts = float(meta.get("ts") or md_yol.stat().st_mtime)
-    return {"anahtar": anahtar, "md": md_yol.read_text(encoding="utf-8"), "ts": ts,
+    md = md_yol.read_text(encoding="utf-8")
+    # `ok` OKUMA ANINDA yeniden değerlendirilir — bff_kesif.rapor_oku ile AYNI kapı (denetim 2026-11-02 B#7: sohbet yolu
+    # meta'daki bayat ok=True'yu alıp giriş duvarında kalmış/kanıtsız raporu 'GERÇEK gözlem' diye üretime veriyordu).
+    from .bff_kesif import rapor_tam_mi, _giris_hatasi_var
+    ok = bool(meta.get("ok", True)) and rapor_tam_mi(md) and not _giris_hatasi_var(md)
+    return {"anahtar": anahtar, "md": md, "ts": ts,
             "yas_gun": round((time.time() - ts) / 86400, 1), "hedef_url": meta.get("hedef_url", ""),
-            "ekran": meta.get("ekran", ""), "yol": str(md_yol), "ok": bool(meta.get("ok", True))}
+            "ekran": meta.get("ekran", ""), "yol": str(md_yol), "ok": ok}
 
 
 # ─── Ekran bazlı iş: ekran envanteri + ekran başına FE/BE görev girdisi ──────

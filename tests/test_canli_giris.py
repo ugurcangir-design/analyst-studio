@@ -113,6 +113,17 @@ chk("oturum kaydında host varsa doğrudan onunla karşılaştırılır (farklı
     and CG._oturum_bu_host_icin_mi({"host": "uat-ornek.local"}, "https://uat-ornek.local/app/x", None))
 CG.oturum_durumu = lambda: {}
 
+# denetim 2026-11-02 B#6: model tarayıcı aracı çağırmadan {"ok": true} uydurursa makine doğrulaması sonucu geçersiz kılar
+_eski_gdo = CG.gozlem_durum_oku
+CG.gozlem_durum_oku = lambda: {"yapildi": False, "neden": "model araç çağırmadı", "zaman": __import__("datetime").datetime.now().isoformat()}
+_rg = CG.giris_calistir("canlı blok", "gorev", _ai=ai('<giris_sonuc>{"ok": true, "ekran": "/x"}</giris_sonuc>'))
+chk("tarayıcı kullanılmadıysa (gozlem-durum yapildi=False) uydurma 'ok' GEÇERSİZ → ok=False + neden",
+    _rg["ok"] is False and "Tarayıcı aracı kullanılmadı" in _rg["neden"], _rg)
+CG.gozlem_durum_oku = lambda: {"yapildi": True, "zaman": __import__("datetime").datetime.now().isoformat()}
+_rg2 = CG.giris_calistir("canlı blok", "gorev", _ai=ai('<giris_sonuc>{"ok": true, "ekran": "/x"}</giris_sonuc>'))
+chk("tarayıcı kullanıldıysa (yapildi=True) ok korunur", _rg2["ok"] is True)
+CG.gozlem_durum_oku = _eski_gdo
+
 print()
 if _hata:
     print(f"CANLI GİRİŞ TESTLERİ BAŞARISIZ ({_hata} hata)")

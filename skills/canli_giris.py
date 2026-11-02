@@ -23,7 +23,7 @@ from urllib.parse import urlparse
 from .base import (
     OUTPUT_DIR, MAX_TOKENS_KISA,
     _api_cagri, _xml_ayir, _metin_sikistir, load_context_filter, asama_ayarla,
-    canli_uygulama_baglami_hazirla, gorev_live_app_urls, live_app_urls, oturum_durumu,
+    canli_uygulama_baglami_hazirla, gorev_live_app_urls, live_app_urls, oturum_durumu, gozlem_durum_oku,
 )
 
 KAPSAMLAR = ("gorev", "surec")
@@ -147,6 +147,7 @@ def giris_calistir(canli: str, kapsam: str, _ai=None) -> dict:
     asama_ayarla("giris")
     ai = _ai or (lambda s, m, k=kapsam: _api_cagri(s, m, max_tokens=MAX_TOKENS_KISA, thinking=False, onbellek=False,
                                                   canli_uygulama_kapsami=k, katman="yardimci"))
+    baslangic = time.time()
     try:
         yanit = ai(sistem, [{"role": "user", "content": icerik}])
         ham = _xml_ayir(_metin_sikistir(yanit or ""), "giris_sonuc")
@@ -160,6 +161,18 @@ def giris_calistir(canli: str, kapsam: str, _ai=None) -> dict:
                  "menu": [str(x) for x in (d.get("menu") or []) if str(x).strip()][:30]}
         if not d:
             sonuc["neden"] = "Giriş sonucu okunamadı (tarayıcı aracı çalışmamış olabilir)."
+        # MAKİNE DOĞRULAMASI (denetim 2026-11-02 B#6): model tarayıcı aracı HİÇ çağırmadan `{"ok": true}` uydurursa
+        # eskiden giriş 'doğrulandı' sayılıp kapı 1 saat açık kalıyordu ('Wrong Password' geç fark edilir). gozlem.rapor_al
+        # ile aynı kapı: `.gozlem-durum.json` bu çağrıya aitse ve yapildi=False ise sonuç GEÇERSİZ.
+        try:
+            from .gozlem import _durum_bu_cagrinin_mi
+            _durum = gozlem_durum_oku()
+            if sonuc["ok"] and _durum_bu_cagrinin_mi(_durum, baslangic) and not _durum.get("yapildi", True):
+                sonuc["ok"] = False
+                sonuc["neden"] = "Tarayıcı aracı kullanılmadı (" + str(_durum.get("neden") or "model araç çağırmadı")[:120] \
+                                 + ") — giriş sonucu doğrulanamadı, uydurma olabilir."
+        except Exception:
+            pass
     except Exception as e:
         sonuc = {"ok": False, "neden": f"Giriş testi çalıştırılamadı: {str(e)[:200]}", "ekran": "", "menu": []}
     sonuc["ts"] = time.time()

@@ -80,10 +80,12 @@ def uygulama_talimati(cozulen: list[dict]) -> str:
     for c in cozulen:
         sat.append(f"- {c['id']} ({c['bagli'] or 'ilgili bölüm'}): SORU: {c['soru']}\n  CEVAP (kanıtlı): {c['cevap']}"
                    + (f" {c['kanit']}" if c["kanit"] else "") + (f"\n  GÖZLEM: {c['gozlem']}" if c["gozlem"] else ""))
+    from .base import _TASK_DILI_KURALLARI   # öz-çözümleme işleme turu da aynı task dilini bilir (denetim 2026-11-02 D#5)
     return ("Aşağıdaki açık sorular referans/kod/canlı gözlem kanıtıyla CEVAPLANDI. Her cevabı analizin İLGİLİ bölümüne "
             "(Bağlı bölüm) minimal biçimde işle: bu konudaki `[K: ❓ Belirsiz]`/'belirsiz'/'netleştirilmeli'/'varsayım' "
             "ifadelerini kaldırıp kesin ifadeye çevir, kanıt etiketini `[K: …]` olarak koru, gerekiyorsa tek cümle/satır ekle. "
-            "Başka bölümlere DOKUNMA, analizi büyütme, yeni bölüm açma, soru listesi yazma.\n\n" + "\n".join(sat))
+            "Başka bölümlere DOKUNMA, analizi büyütme, yeni bölüm açma, soru listesi yazma.\n"
+            + _TASK_DILI_KURALLARI + "\n" + "\n".join(sat))
 
 
 def cozulen_bolumu(cozulen: list[dict]) -> str:

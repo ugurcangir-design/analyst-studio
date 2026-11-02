@@ -171,10 +171,25 @@ chk("_yapisal_skor: gövde içi 'değişiklik'/'amaç:'/'acceptance' başlık sa
     and not ys["bolumler"]["kabul"], ys)
 ys2 = JG._yapisal_skor({"summary": "x", "description": "## Amaç\nhız\n**Değişiklik**\nx\n### Kabul Kriterleri\n- a\n" + "y" * 150})
 chk("_yapisal_skor: başlık/bold başlık olarak geçince yakalanır", ys2["bolumler"]["amac"] and ys2["bolumler"]["degisiklik"] and ys2["bolumler"]["kabul"] and ys2["hazir_yapisal"])
-chk("_ornek_kendisi_mi: '· MBS-365' / '· MBS-365::FE' etiketli örnek bu task'ın kendisi; başka key değil",
-    JG._ornek_kendisi_mi({"text": "### ONAYLI ÖRNEK · proje: MBS · MBS-365\n\nicerik"}, "MBS-365")
-    and JG._ornek_kendisi_mi({"text": "### ONAYLI ÖRNEK · MBS-365::FE\nx"}, "mbs-365")
-    and not JG._ornek_kendisi_mi({"text": "### ONAYLI ÖRNEK · MBS-3650\nx"}, "MBS-365"))
+# Few-shot öz-kirlenme (denetim 2026-11-02): eleme HAVUZDA `haric_key` ile — etiketten key okuyan eski filtre ölüydü
+import skills.ornek_havuzu as _OH  # noqa: E402
+_eski_oku, _eski_uygun, _eski_yildiz = _OH._oku_hepsi, _OH._egitime_uygun_mu, _OH.yildizlar
+_OH._oku_hepsi = lambda: [
+    {"id": "a", "tip": "teknik", "jira_key": "MBSTRADE-365", "icerik": "## 1. Amaç\nmarket sport outcome eşleme " * 40},
+    {"id": "b", "tip": "teknik", "jira_key": "MBSTRADE-365::FE", "icerik": "## 1. Amaç\nmarket sport outcome ekran " * 40},
+    {"id": "c", "tip": "teknik", "jira_key": "MBSTRADE-3650", "icerik": "## 1. Amaç\nmarket sport outcome diğer " * 40},
+]
+_OH._egitime_uygun_mu = lambda k: True
+_OH.yildizlar = lambda: set()
+_b = _OH.ornek_bloklari("market sport outcome", tip="teknik", n=4, haric_key="mbstrade-365")
+chk("haric_key: task'ın kendi örnekleri (key + key::FE) havuzdan elenir, MBSTRADE-3650 kalır",
+    len(_b) == 1 and "diğer" in _b[0]["text"], [x["text"][:60] for x in _b])
+_b2 = _OH.ornek_bloklari("market sport outcome", tip="teknik", n=4)
+chk("haric_key yokken hepsi aday (3)", len(_b2) == 3)
+_OH._oku_hepsi, _OH._egitime_uygun_mu, _OH.yildizlar = _eski_oku, _eski_uygun, _eski_yildiz
+_t = _OH._temizle("## 1. Amaç\nGörev başlığında yalnız Edit geçiyor.\n- iş\n## 10. Teknik Borç\n- analist bildirdi, canlı doğrulanamadı\n### 10.1 alt\n- y\n## 11. Kabul\n- AC-1: kayıt silinmez")
+chk("_temizle: Teknik Borç (+alt başlığı) ve künye cümlesi budanır, Kabul kalır",
+    "Teknik Bor" not in _t and "10.1" not in _t and "başlığında yalnız" not in _t and "AC-1" in _t, _t)
 
 print("6) '**Bu katmanda iş:**' göstergesi analiz çıktısından çıkar (is_var ayrı taşınır)")
 _m = "## 📋 Yönetici Özeti\n- x\n\n---\n**Bu katmanda iş:** VAR — Market ID input.\n\n## 1. Amaç\nİş."

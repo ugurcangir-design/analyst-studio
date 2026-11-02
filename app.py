@@ -5595,6 +5595,30 @@ _GOREV_IS_LIMIT = 12             # bellek: en yeni N işi tut
 _GOREV_PARALEL = max(1, int(os.getenv("GOREV_PARALEL", "3")))
 
 
+def _bff_hedef(adim: dict, gorev: dict) -> tuple[str, str, bool, str]:
+    """BFF keşfi hedefi — TEK türetim (ilk analiz + cevap/tam-üretim fallback aynı anahtarı kullanır; denetim
+    2026-11-02 B#3/B#5). Dönen: (hedef_url, ekran_tarif, ekran_bazli, odak).
+    Ekran bazlı adım (İnteraktif 'Ekran Task'ları'): canli_hedef + miras live_app ANA adresi. Task modu: live_app_gorev
+    hedefi; tarif = analistin gözlem kapsamı, yoksa task başlığı → anahtar ekran/task bazlı (eskiden '' → aynı URL'e
+    gelen HER task 7 gün ilk raporu devralıyordu). odak = task özeti + gözlem kapsamı + analist notu → keşif planına."""
+    from skills.base import gorev_live_app_urls, live_app_urls, load_context_filter
+    canli_hedef = adim.get("canli_hedef") or (adim.get("gorev") or {}).get("canli_hedef") or ""
+    ekran_bazli = bool(canli_hedef)
+    urls = live_app_urls() if ekran_bazli else gorev_live_app_urls()
+    hedef_url = urls[0] if urls else ""
+    try:
+        ctx = load_context_filter() or {}
+    except Exception:
+        ctx = {}
+    gk = str((ctx.get("live_app_gorev") or {}).get("gozlem_kapsami", "") or "").strip()
+    notu = str(ctx.get("gorev_analist_notu", "") or "").strip()
+    ozet = str((gorev or {}).get("summary", "") or "").strip()
+    tarif = canli_hedef or gk or ozet[:120]
+    odak = "\n".join(x for x in [f"Task: {ozet}" if ozet else "", f"Gözlem kapsamı: {gk}" if gk else "",
+                                 f"Analist notu: {notu}" if notu else ""] if x)
+    return hedef_url, tarif, ekran_bazli, odak
+
+
 def _gorev_is_calistir(job_id: str) -> None:
     from concurrent.futures import ThreadPoolExecutor
     from skills.base import USE_CLAUDE_CLI, aktif_cli_model, MODEL_ANALIZ
@@ -5645,17 +5669,13 @@ def _gorev_is_calistir(job_id: str) -> None:
             if mode in ("analiz", "fe-be-ayir", "bff-kesif"):
                 try:
                     from skills import bff_kesif
-                    from skills.base import gorev_live_app_urls, live_app_urls
-                    _tarif = adim.get("canli_hedef") or (adim.get("gorev") or {}).get("canli_hedef") or ""
-                    _ekran_bazli = bool(_tarif)
-                    _urls = live_app_urls() if _ekran_bazli else gorev_live_app_urls()
-                    _hedef_url = _urls[0] if _urls else ""
+                    _hedef_url, _tarif, _ekran_bazli, _odak = _bff_hedef(adim, gorev)
                     if _hedef_url:
                         _r = bff_kesif.rapor_oku(_hedef_url, _tarif)
                         if mode == "bff-kesif" or ((not bff_kesif.taze_mi(_r)) and bff_kesif.otomatik_acik()):
                             with _gorev_is_lock:
                                 job["aktif_not"] = "BFF keşfi — ekranda CRUD gözlemi (AI-TEST kayıtlarıyla)"
-                            _r = bff_kesif.kesfet(_hedef_url, _tarif, ekran_bazli=_ekran_bazli)
+                            _r = bff_kesif.kesfet(_hedef_url, _tarif, ekran_bazli=_ekran_bazli, odak=_odak)
                             with _gorev_is_lock:
                                 job["aktif_not"] = ""
                         if _r and _r.get("md"):
@@ -5690,12 +5710,13 @@ def _gorev_is_calistir(job_id: str) -> None:
                         sonuc = None
                 if sonuc is None:
                     mode = "analiz"
-                    # Tam üretim: ilk analizin BFF raporu önbellekten (yeniden keşif YOK — kota)
+                    # Tam üretim: ilk analizin BFF raporu önbellekten (yeniden keşif YOK — kota). AYNI anahtar
+                    # türetimi (denetim 2026-11-02 B#5: eskiden `(gorev_url, "")` okunuyordu → ekran bazlı adımda
+                    # ilk analizin raporu bulunamıyor, BFF bloğu sessizce düşüyordu).
                     try:
                         from skills import bff_kesif as _bk
-                        from skills.base import gorev_live_app_urls as _glu
-                        _u = _glu()
-                        _rb = _bk.rapor_oku(_u[0], "") if _u else None
+                        _hu, _ht, _eb, _od = _bff_hedef(adim, gorev)
+                        _rb = _bk.rapor_oku(_hu, _ht) if _hu else None
                         if _rb and _rb.get("md") and _bk.taze_mi(_rb):
                             _bff_blok = _bk.rapor_blogu(_rb)
                     except Exception:

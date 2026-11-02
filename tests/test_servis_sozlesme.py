@@ -80,7 +80,20 @@ SS.SERVICES_DIR = tmp
 # ── Prompt kuralları ──
 gtp = B.VARSAYILAN_PROMPTLAR["gorev_teknik_analiz"]["icerik"]
 chk("prompt: SERVİS/ENDPOINT KARARI bölümü var", "SERVİS / ENDPOINT KARARI" in gtp and "PUNT ETME" in gtp)
-chk("prompt: Swagger→canlı gözlem→tasarla sırası", "browser_network_request" in gtp and "YENİ endpoint TASARLA" in gtp)
+# denetim 2026-11-02 D#3: analiz çağrısı ARAÇSIZ — prompt tarayıcı aracı değil GÖZLEM/BFF RAPORU'nu kaynak gösterir
+chk("prompt: Swagger→gözlem/BFF raporu→tasarla sırası (tarayıcı aracı talimatı YOK)",
+    "GÖZLEM / BFF RAPORUNDAN doğrula" in gtp and "YENİ endpoint TASARLA" in gtp and "browser_network_request" not in gtp)
+chk("prompt: 'Türetilmiş' etiketi punt şablonu taşımaz ('BE teyidi' yok)", "BE teyidi]" not in gtp)
+chk("prompt: keşfedilen ekran provenans cümlesi dikte etmez (yalnız etiket)", "adı YOK, kapsama dahil mi" not in gtp)
+# D#5: task dili tek sabit → düzelt/cevap/öz-çözümleme turlarına da girer
+chk("TASK DİLİ sabiti düzelt sistemine girer", "# TASK DİLİ" in JG._GOREV_DUZELT_SISTEM)
+chk("TASK DİLİ sabiti cevap talimatına girer", "# TASK DİLİ" in JG._CEVAP_TALIMAT)
+import skills.soru_cozumleme as _SC2  # noqa: E402
+chk("TASK DİLİ sabiti öz-çözümleme işleme talimatına girer", "# TASK DİLİ" in _SC2.uygulama_talimati([{"id": "Q-T-001", "bagli": "", "soru": "s", "cevap": "c", "kanit": "", "gozlem": ""}]))
+# D#4: ORTAK + domain kuralları görev analizine de akar (CLAUDE.md iddiası artık kodda)
+_tam = B.prompt_yukle("gorev_teknik_analiz")
+chk("gorev promptu ORTAK ek kuralları + TASK DİLİ içerir (prompt_yukle)", "# TASK DİLİ" in _tam and len(_tam) > len(gtp) + 3000
+    and "ayrı açık-sorular bölümü YAZMA" in _tam, len(_tam))
 chk("prompt: analiste teknik tasarım sorusu YASAK", "ANALİSTE SORMA" in gtp)
 # açık soru üretimi: teknik tasarım sorusu dışlanır
 import inspect  # noqa: E402
@@ -101,7 +114,7 @@ chk("prompt: GENERİC FE/İMPLEMENTASYON REÇETESİ UYDURMA (debounce/race)", "G
 chk("prompt: 'BE TEYİT EDİLMELİ' bir sonuç değil — Swagger/canlı yakala", "BİR SONUÇ DEĞİL" in gtp)
 # owner 2026-11-02: notta/isterde adlandırılan ekran kesin kapsam (künye yazma) + 'analist bildirdi' geçersiz kaynak
 chk("prompt: NOTTA/İSTERDE ADLANDIRILAN EKRAN = KESİN KAPSAM (künye yazma)", "NOTTA/İSTERDE ADLANDIRILAN EKRAN" in gtp)
-chk("prompt: 'ANALİST BİLDİRDİ' geçersiz kaynak — servise isteği atıp doğrula", "ANALİST BİLDİRDİ" in gtp and "DOĞRULAMALISIN" in gtp)
+chk("prompt: 'ANALİST BİLDİRDİ' geçersiz kaynak — Swagger/gözlem raporuyla doğrula", "ANALİST BİLDİRDİ" in gtp and "DOĞRULAYIP" in gtp)
 # owner 2026-11-01: Swagger servis sözleşmesi enjeksiyonu artık task-only DEĞİL — süreç + teknik de kullanır
 import pathlib as _pl  # noqa: E402
 _surec_src = _pl.Path("skills/surec_analizi.py").read_text(encoding="utf-8")

@@ -20,10 +20,9 @@ from .atlassian import env_oku, atlassian_post, atlassian_put
 from .base import (
     _api_cagri, _xml_ayir, _metin_sikistir, asama_ayarla,
     prompt_yukle, extended_thinking_acik,
-    referans_dosyalari_hazirla, _ref_bloklari_olustur, load_context_filter,
-    canli_uygulama_baglami_hazirla,
+    referans_dosyalari_hazirla, _ref_bloklari_olustur, load_context_filter, canli_uygulama_baglami_hazirla,
     yonetici_ozeti_olustur, yonetici_ozetini_cikar, jira_icin_temizle,
-    ai_ara_sozleri_temizle, arac_cagri_temizle,
+    ai_ara_sozleri_temizle, arac_cagri_temizle, _TASK_DILI_KURALLARI,
     MAX_TOKENS_KISA, MAX_TOKENS_COMBINED, MAX_TOKENS_UZUN,
 )
 
@@ -925,10 +924,17 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
     # gözlem RAPORUNU alır, tarayıcı aracı kullanmaz. Cevap turu / düzelt (cevaplar|onceki_sorular) taze raporu yeniden
     # kullanır (6 sa); yeni analiz taze gözler. FE+BE ayrımında rapor dışarıdan (gozlem_rapor) paylaşılır.
     kapsam = canli_kapsam or ("surec" if canli_baglam_override is not None else "gorev")
+    # Analist Notu (Task ekranı) — denetim 2026-11-02 (B#1/D#3): not yalnız ANALİZ çağrısına gidiyordu, GÖZLEM fazı
+    # (ve rapor anahtarı) onu hiç görmüyordu → "BFF'de `?id=` parametresini fiilen dene" isteği gözlemciye ulaşmıyor,
+    # gözlem varsayılan ekranı izliyor, analiz "analist bildirdi, doğrulanamadı" diyordu. Not artık gözlem özetine
+    # (prompt + önbellek anahtarı) ve servis-sözleşme sorgusuna da girer.
+    analist_notu = str(ctx.get("gorev_analist_notu", "") or "").strip()
+    _gozlem_ozet = f"{gorev.get('summary', '')}\n\n{gorev.get('description', '') or ''}"
+    if analist_notu:
+        _gozlem_ozet += f"\n\n### ANALİST NOTU — gözlemde FİİLEN DENE (parametre/filtre/servis isteniyorsa çağır, sonucu yakala)\n{analist_notu}"
     if canli_baglam and gozlem_rapor is None:
         from . import gozlem as _gz
-        gozlem_rapor = _gz.rapor_al(canli_baglam, kapsam,
-                                   gorev_ozet=f"{gorev.get('summary', '')}\n\n{gorev.get('description', '') or ''}",
+        gozlem_rapor = _gz.rapor_al(canli_baglam, kapsam, gorev_ozet=_gozlem_ozet,
                                    yeniden=not bool((cevaplar or "").strip() or (onceki_sorular or "").strip()))
     if canli_baglam:
         from . import gozlem as _gz
@@ -948,7 +954,7 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
         try:
             from . import servis_sozlesme as _ss
             _gm = (gozlem_rapor or {}).get("md", "") if isinstance(gozlem_rapor, dict) else ""
-            _sb = _ss.endpoint_baglami(f"{gorev.get('summary','')} {gorev.get('description','') or ''}",
+            _sb = _ss.endpoint_baglami(f"{gorev.get('summary','')} {gorev.get('description','') or ''} {analist_notu}",
                                        ek_metin=(_gm or "") + " " + (bff_rapor or ""))
             if _sb:
                 print("  📑 Kayıtlı servis sözleşmeleri (Swagger) analize dahil ediliyor...")
@@ -965,9 +971,8 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
                                  f"**Açıklama:**\n{gorev.get('description','') or '(açıklama yok)'}"},
     ]
 
-    # Analist Notu (opsiyonel) — Jira Görevleri ekranından girilir (context_filter.json).
-    # Doluysa mevcut sistem promptuyla BİRLİKTE dikkate alınır; boşsa hiç eklenmez (token yok).
-    analist_notu = str(ctx.get("gorev_analist_notu", "") or "").strip()
+    # Analist Notu (opsiyonel) — Jira Görevleri ekranından girilir (context_filter.json); yukarıda okundu
+    # (gözlem özetine de girdi). Doluysa mevcut sistem promptuyla BİRLİKTE dikkate alınır; boşsa hiç eklenmez.
     if analist_notu:
         print("  📝 Analist notu dikkate alınıyor (teknik analize dahil).")
         icerik.append({"type": "text", "text": (
@@ -1063,9 +1068,9 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
     try:
         from .ornek_havuzu import ornek_bloklari
         _os = (str(gorev.get("summary", "")) + "\n" + str(gorev.get("description", "") or ""))[:4000]
-        # Kendi taslağı (aynı task'ın önceki analizi — key ya da key::FE) örnek olarak GİRMEZ (öz-kirlenme).
-        _kendi = [b for b in ornek_bloklari(_os, tip="teknik", n=4) if not _ornek_kendisi_mi(b, gorev.get("key", ""))]
-        for _blok in _kendi[:2]:
+        # Kendi taslağı (aynı task'ın önceki analizi — key ya da key::FE) örnek olarak GİRMEZ (öz-kirlenme):
+        # eleme HAVUZDA (`haric_key`) yapılır — etiketten key okuyan eski filtre ölüydü (denetim 2026-11-02).
+        for _blok in ornek_bloklari(_os, tip="teknik", n=2, haric_key=str(gorev.get("key", ""))):
             icerik.append(_blok)
     except Exception:
         pass
@@ -1099,15 +1104,6 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
     ozet = yonetici_ozeti_olustur(teknik, acik_sorular=acik)
     teknik = yonetici_ozetini_cikar(teknik)   # modelin kendi özeti gövdeden çıkar (tek blok)
     return {"markdown": ozet + teknik, "acik_sorular": acik}
-
-
-def _ornek_kendisi_mi(blok: dict, key: str) -> bool:
-    """Few-shot bloğu bu task'ın kendi (key ya da key::FE) örneği mi? Etiket satırı '· <jira_key>' ile biter."""
-    key = (key or "").strip().upper()
-    if not key:
-        return False
-    ilk = str((blok or {}).get("text", "")).split("\n", 1)[0].upper()
-    return re.search(r"·\s*" + re.escape(key) + r"(?:::FE)?\s*$", ilk) is not None
 
 
 def _soru_asamasi(teknikler: list[str], gorev: dict, *, cevaplar: str = "", onceki_sorular: str = "",
@@ -1202,8 +1198,12 @@ def gorev_fe_be_analiz(gorev: dict, cevaplar: str = "", onceki_sorular: str = ""
     _canli = canli_baglam_override if canli_baglam_override is not None else canli_uygulama_baglami_hazirla(gorev=True)
     if _canli:
         from . import gozlem as _gz
-        gozlem_rapor = _gz.rapor_al(_canli, kapsam,
-                                   gorev_ozet=f"{gorev.get('summary', '')}\n\n{gorev.get('description', '') or ''}",
+        # Analist notu gözlem özetine de girer (gorev_analiz_et ile aynı — denetim 2026-11-02 B#1/D#3)
+        _fb_ozet = f"{gorev.get('summary', '')}\n\n{gorev.get('description', '') or ''}"
+        _fb_not = str((load_context_filter() or {}).get("gorev_analist_notu", "") or "").strip() if ekran_baglami else ""
+        if _fb_not:
+            _fb_ozet += f"\n\n### ANALİST NOTU — gözlemde FİİLEN DENE (parametre/filtre/servis isteniyorsa çağır, sonucu yakala)\n{_fb_not}"
+        gozlem_rapor = _gz.rapor_al(_canli, kapsam, gorev_ozet=_fb_ozet,
                                    yeniden=not bool((cevaplar or "").strip() or (onceki_sorular or "").strip()))
         if not ((gozlem_rapor or {}).get("md") and (gozlem_rapor or {}).get("ok")):
             gozlem_rapor = {"ok": False, "md": "", "neden": (gozlem_rapor or {}).get("neden", "")}
@@ -1466,6 +1466,9 @@ _GOREV_DUZELT_SISTEM = (
     "altında TEK kısa madde, aynı şeyi iki kez söyleme. Ortama özgü somut kayıt ID'si ('UAT'taki ID 17/18/19', "
     "'dev'deki id 181/182') YAZMA — kuralı genel ifade et (tek tek ID sayma). "
     "Tüm (güncellenmiş) analizi eksiksiz olarak <teknik_analiz>…</teknik_analiz> içinde dön."
+    + _TASK_DILI_KURALLARI   # düzelt turu da aynı task dilini bilir (denetim 2026-11-02 D#5)
+    + "Mevcut analizde bu kurallara aykırı cümle (künye, 'analist bildirdi', punt, meta-eko, reçete) varsa — talimat "
+      "bununla ilgili olmasa bile — DOKUNDUĞUN bölümlerde düzelt; 'aynen koru' bu ihlalleri kapsamaz."
 )
 
 
@@ -1541,8 +1544,9 @@ _CEVAP_TALIMAT = (
     "ne YAPILACAĞINI yaz; sınır gerekiyorsa tek kısa madde, tekrar etme. Cevapta geçse bile ortama özgü somut kayıt "
     "ID'lerini ('UAT ID 17/18/19', 'dev id 181/182') analize yazma — kuralı genel ifade et.\n"
     "- Açık Sorular bölümü varsa cevaplanan soruları oradan ÇIKAR; kalanları aynen bırak.\n"
-    "- Cevapla ilgisiz hiçbir bölüme, başlığa, numaralandırmaya DOKUNMA; analizi kısaltma/genişletme; yeniden yazma.\n\n"
-    "### ANALİSTİN CEVAPLARI\n")
+    "- Cevapla ilgisiz hiçbir bölüme, başlığa, numaralandırmaya DOKUNMA; analizi kısaltma/genişletme; yeniden yazma.\n"
+    + _TASK_DILI_KURALLARI   # cevap turu da aynı task dilini bilir (denetim 2026-11-02 D#5)
+    + "\n### ANALİSTİN CEVAPLARI\n")
 
 
 def gorev_cevap_uygula(gorev: dict, mevcut_markdown: str, cevaplar: str, onceki_sorular: str = "") -> dict:

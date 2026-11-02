@@ -153,6 +153,25 @@ _meta_yol.write_text(json.dumps({"anahtar": "k", "hedef_url": "https://x.test", 
 _r = BK.rapor_oku("https://x.test", "e")
 chk("meta ok=True olsa da giriş hatalı/kanıtsız rapor ok=False → taze değil → otomatik yeniden keşif", _r and _r["ok"] is False and not BK.taze_mi(_r))
 
+print("7) denetim 2026-11-02 — yazma kanıtı / makine doğrulaması / odak")
+_GET_ONLY = "<bff_rapor>\n## Ekran\n- /r\n\n## Açılış / Liste\n- `GET /bff/r` `[K: Network:GET /bff/r → 200]`\n</bff_rapor>"
+_r8 = BK.kesfet("https://uat.ornek/app/r", _ai=sahte_ai(_GET_ONLY))
+chk("yalnız-GET rapor (CREATE bölümü yok) → taze DEĞİL → otomatik yeniden keşif", _r8["ok"] and not BK.taze_mi(BK.rapor_oku("https://uat.ornek/app/r")))
+_GET_CREATE_YOK = _GET_ONLY.replace("</bff_rapor>", "\n## CREATE - Gözlemlenmedi\n- create giriş noktası bulunamadı\n</bff_rapor>")
+_r9 = BK.kesfet("https://uat.ornek/app/r2", _ai=sahte_ai(_GET_CREATE_YOK))
+_o9 = BK.rapor_oku("https://uat.ornek/app/r2")
+chk("yalnız-GET ama CREATE denemesi belgeli → taze (döngü yok) + blok 'YALNIZ OKUMA' uyarısı, 'oluşturdu' demez",
+    BK.taze_mi(_o9) and "YALNIZ OKUMA" in BK.rapor_blogu(_o9) and "kayıt oluşturdu/güncelledi/sildi" not in BK.rapor_blogu(_o9))
+# makine doğrulaması: model araç çağırmadan etiketli rapor uydurdu → .gozlem-durum yapildi=False → ok False, kaydedilmez
+_eski_gdo = BK.gozlem_durum_oku
+BK.gozlem_durum_oku = lambda: {"yapildi": False, "neden": "model araç çağırmadı", "zaman": __import__("datetime").datetime.now().isoformat()}
+_r10 = BK.kesfet("https://uat.ornek/app/sahte", _ai=sahte_ai(RAPOR))
+chk("tarayıcı kullanılmadıysa (gozlem-durum yapildi=False) rapor ok=False + kaydedilmez",
+    _r10["ok"] is False and "Tarayıcı aracı kullanılmadı" in _r10["neden"] and BK.rapor_oku("https://uat.ornek/app/sahte") is None, _r10)
+BK.gozlem_durum_oku = _eski_gdo
+_r11 = BK.kesfet("https://uat.ornek/app/odak", "Ekran X", odak="Analist notu: ?id= parametresini dene", _ai=sahte_ai(RAPOR))
+chk("odak (analist notu/kapsam) keşif planına girer", _r11["ok"] and "?id= parametresini dene" in yakala["metin"] and "ODAK" in yakala["metin"])
+
 print()
 if _hata:
     print(f"BFF KEŞFİ TESTLERİ BAŞARISIZ ({_hata} hata)")

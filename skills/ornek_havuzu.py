@@ -36,6 +36,28 @@ _RAG_YORUM = re.compile(r"<!--\s*RAG:.*?-->\s*", re.S)   # analiz başındaki `<
 # ≥4 büyük harf: gerçek proje anahtarları (MBSTRADE-984, MBSUATEAM-153) yakalanır; dahili analiz ID'leri
 # (AC-1, BR-004, NFR-2, PA-003, FR-12 — en çok 3 harf) KORUNUR, bozulmaz.
 _JIRA_KEY_DESEN = re.compile(r"\b[A-Z]{4,}[A-Z0-9]*-\d+\b")
+# Few-shot'tan BUDANAN bölümler: Teknik Borç / Açık Sorular / Kapsam Dışı (numaralı, emojili, 2-3. seviye; aynı ya da
+# üst seviyedeki bir sonraki başlığa kadar). Bunlar promptun yasakladığı punt/negatif-kapsam dilinin yuvası.
+_BOLUM_BUDA_BASLIK = re.compile(
+    r"(?m)^(#{2,3})\s*(?:\d+(?:\.\d+)*\.?\s*)?[^\w\s]{0,4}\s*"
+    r"(?:Teknik Bor[çc](?:\s+ve\s+Riskler)?|A[çc][ıi]k Sorular|Kapsam D[ıi][şs][ıi]|Cevap Bekleyen Zorunlu Sorular)\b.*$")
+
+
+def _bolum_buda(md: str) -> str:
+    """Yasaklı bölümleri, AYNI ya da ÜST seviyedeki bir sonraki başlığa kadar siler (alt başlıklar da gider)."""
+    while True:
+        m = _BOLUM_BUDA_BASLIK.search(md)
+        if not m:
+            return md
+        seviye = len(m.group(1))
+        son = re.compile(r"(?m)^#{1,%d}\s" % seviye).search(md, m.end())
+        md = md[:m.start()] + (md[son.start():] if son else "")
+# Künye/punt CÜMLE satırları: kapsam provenansı ("görev başlığında yalnız X geçiyor", "analist notuyla kapsama girdi"),
+# 'analist bildirdi', 'BE teyit edilmeli', 'canlı doğrulanamadı', 'teyit edilmeli'. Madde ya da paragraf satırı siler.
+_KUNYE_PUNT_SATIR = re.compile(
+    r"(?mi)^[ \t]*(?:[-*•]\s*)?[^\n]*(?:ba[şs]l[ıi][ğg][ıi]nda yaln[ıi]z|analist notuyla kapsama|analist(?:in)?\s+(?:bildir|belirt)|"
+    r"BE(?:'den|\s+taraf[ıi]ndan|\s+ile)?\s+teyit|teyit edilmeli|canl[ıi](?:\s+olarak)?\s+do[ğg]rulanamad[ıi]|do[ğg]rulanamad[ıi])"
+    r"[^\n]*\n?")
 
 # EĞİTİM HAVUZU BOARD KAPISI (owner 2026-10-23: 'UAT board tasklarını dahil etme; trade/ops analiz+taskları dahil et').
 # Yalnız bu projelerin KEYLİ örnekleri (Task analizi / FE+BE / köprü) havuza girer; UAT (MBSUATEAM) gibi diğer
@@ -102,6 +124,12 @@ def _temizle(md: str) -> str:
     yorumu çıkar; sır/şifre redakte edilir. (Örnek stil referansıdır — etiket/meta/cevapsız-soru
     gürültüsü ve makineye özel gözlem kapsamı few-shot'a girmez.) Her adım bağımsız fail-safe."""
     md = re.sub(r"(?ms)^##\s*❗\s*Cevap Bekleyen Zorunlu Sorular.*?(?=^#{1,2}\s|\Z)", "", md or "")
+    # Few-shot ÖRNEK, promptun YASAKLADIĞI desenleri taşıyorsa model örneği taklit eder (denetim 2026-11-02:
+    # 26 örneğin 18'inde 'Teknik Borç' (10'u punt), 12'sinde 'Kapsam Dışı', 6'sında 'Açık Sorular', 7'sinde
+    # künye, 11'inde 'BE teyit/doğrulanamadı' punt'ı vardı → "kural ekliyorum, aynı hata geri geliyor"
+    # döngüsünün mekanik nedeni). Bu bölümler ve cümleler örnekten BUDANIR (örnek yalnız stil referansı).
+    md = _bolum_buda(md)
+    md = _KUNYE_PUNT_SATIR.sub("", md)
     # Agent iskele artıkları few-shot'a GİRMEZ — yoksa model stil olarak öğrenip üretir (feedback loop):
     # FE+BE katman göstergesi + tekrarlı 'Kaynak Görev' başlıkları.
     md = re.sub(r"(?mi)^\s*[-*•]?\s*\*{0,2}Bu katmanda iş\s*:?\*{0,2}.*$\n?", "", md)
@@ -554,14 +582,24 @@ def ornek_sil(ornek_id: str) -> bool:
         return False
 
 
+def _key_kok(key: str) -> str:
+    return (key or "").strip().upper().split("::")[0]
+
+
 def ornek_bloklari(sorgu_metni: str, tip: str | None = None, n: int = 2,
-                   butce: int = 16000) -> list[dict]:
+                   butce: int = 16000, haric_key: str = "") -> list[dict]:
     """Few-shot: mevcut girdiye (sorgu_metni) EN ALAKALI n örneği BM25 ile seçip prompt
-    içerik bloğu listesi döndürür. Örnek yoksa/alaka yoksa boş liste. Fail-safe (asla patlamaz)."""
+    içerik bloğu listesi döndürür. Örnek yoksa/alaka yoksa boş liste. Fail-safe (asla patlamaz).
+    `haric_key`: BU görevin kendi örnekleri (key ve key::FE) havuzdan ELENİR — öz-kirlenme önleme.
+    (Denetim 2026-11-02: eski `_ornek_kendisi_mi` etiketten key okuyordu, etiketten key 2026-10-22'de
+    kaldırılınca filtre sessizce öldü → task kendi hatalı analizini 'onaylı örnek' diye 1. sırada alıyordu.)"""
     try:
         # Board kapısı (owner 2026-10-23): fix öncesi yakalanmış UAT örnekleri havuzda kalmış olabilir →
         # enjeksiyonda da ele (dosyadan silmeye gerek yok, few-shot'a girmez).
-        havuz = [o for o in _oku_hepsi() if (not tip or o.get("tip") == tip) and _egitime_uygun_mu(o.get("jira_key") or "")]
+        haric = _key_kok(haric_key)
+        havuz = [o for o in _oku_hepsi()
+                 if (not tip or o.get("tip") == tip) and _egitime_uygun_mu(o.get("jira_key") or "")
+                 and not (haric and _key_kok(o.get("jira_key") or "") == haric)]
         if not havuz or not (sorgu_metni or "").strip():
             return []
         # BM25 sıralama (retrieval hazır; yoksa basit örtüşme).
@@ -584,12 +622,15 @@ def ornek_bloklari(sorgu_metni: str, tip: str | None = None, n: int = 2,
                          [i for i in sirali_idx if str(havuz[i].get("id", "")) not in y]
         bloklar: list[dict] = []
         kalan = butce
-        for i in sirali_idx[:max(1, n)]:
+        secilen = sirali_idx[:max(1, n)]
+        # Pay, GERÇEKTEN enjekte edilecek örnek sayısına göre (n=4 istenip 2 varsa 16k/2) — eskiden 16k/4 = 4.000 kc
+        # ile kesilince örnek yalnız §1-2'den ibaret kalıyordu (künye cümlelerinin tam yaşadığı yer taklit ediliyordu).
+        for i in secilen:
             o = havuz[i]
             # Enjeksiyonda da temizle: fix'ten ÖNCE yakalanmış eski kirli örnekler (iskele artıklı) few-shot'a
             # girmeden arınır → model artifact öğrenmez (idempotent; yeni yakalama + çekme zaten temiz).
             icerik = _temizle(o.get("icerik", ""))
-            pay = min(len(icerik), kalan, butce // max(1, n))
+            pay = min(len(icerik), kalan, butce // max(1, len(secilen)))
             if pay < 300:
                 break
             # Örnek BAŞKA bir görevin analizidir → ne BAŞLIK ŞEMASI ne TASK ANAHTARI kopyalanmalı (owner

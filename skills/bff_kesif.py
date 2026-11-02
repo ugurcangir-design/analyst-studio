@@ -27,7 +27,7 @@ from urllib.parse import urlparse
 from .base import (
     LIVE_APP_DIR, MAX_TOKENS_COMBINED,
     _api_cagri, _xml_ayir, _metin_sikistir, load_context_filter, asama_ayarla,
-    canli_uygulama_baglami_hazirla, gorev_live_app_urls, live_app_urls,
+    canli_uygulama_baglami_hazirla, gorev_live_app_urls, live_app_urls, gozlem_durum_oku,
 )
 
 BFF_DIR = LIVE_APP_DIR / "bff"
@@ -75,7 +75,14 @@ def _giris_hatasi_var(md: str) -> bool:
 
 
 def taze_mi(rapor: dict | None, gun: int = ONBELLEK_GUN) -> bool:
-    return bool(rapor and rapor.get("ok") and (time.time() - float(rapor.get("ts") or 0)) < gun * 86400)
+    """7 gün önbellek. YAZMA kanıtı (POST/PUT/PATCH/DELETE) yoksa VE rapor CREATE denemesini belgelememişse
+    (`## CREATE` bölümü yok) rapor 'yarım' sayılır → taze DEĞİL → otomatik yeniden keşif (denetim 2026-11-02 B#4:
+    yalnız-GET rapor 7 gün 'agent oluşturdu/güncelledi/sildi' kesin-sözleşme diye analize giriyordu).
+    Salt-okunur ekranlar için agent `## CREATE` altında 'gözlemlenmedi + neden' yazar → yeniden keşif döngüsü olmaz."""
+    if not (rapor and rapor.get("ok") and (time.time() - float(rapor.get("ts") or 0)) < gun * 86400):
+        return False
+    md = rapor.get("md") or ""
+    return yazma_kaniti_var(md) or bool(re.search(r"(?im)^##\s*CREATE\b", md))
 
 
 def otomatik_acik() -> bool:
@@ -88,10 +95,14 @@ def otomatik_acik() -> bool:
 
 
 # ── Keşif görevi (odaklı gözlem kapsamı olarak verilir) ─────────────────────
-def _kesif_plani(ekran_tarif: str) -> str:
+def _kesif_plani(ekran_tarif: str, odak: str = "") -> str:
     damga = datetime.now().strftime("%m%d-%H%M")
+    # odak: analistin gözlem kapsamı + analist notu + task özeti (denetim 2026-11-02 B#3 — task modunda keşif promptu
+    # ekran/istek bilgisi taşımıyordu; notta istenen parametre keşifte hiç denenmiyordu).
+    odak_blok = (f"\nODAK (analist/task — bunları keşifte FİİLEN dene; adı geçen parametre/filtre/servisi parametreli ve "
+                 f"parametresiz çağırıp isteği yakala):\n{odak.strip()}\n") if (odak or "").strip() else ""
     return (
-        "BFF KEŞFİ (CRUD GÖZLEMİ)" + (f" — hedef ekran: {ekran_tarif}" if ekran_tarif else "") + "\n"
+        "BFF KEŞFİ (CRUD GÖZLEMİ)" + (f" — hedef ekran: {ekran_tarif}" if ekran_tarif else "") + "\n" + odak_blok +
         "Amaç: bu ekranın BFF/servis SÖZLEŞMESİNİ gerçek istek/yanıtlarla çıkarmak. Analiz yazma; yalnız gözlemle. "
         "SIRAYLA uygula, her adımda tetiklenen isteği `browser_network_requests` ile listele ve ANA isteğin tam "
         "detayını `browser_network_request` ile al (method · path · query · request payload · response gövdesi özeti · status):\n"
@@ -167,10 +178,10 @@ Gözlem bitince YALNIZ şu bloğu yaz (blok dışına metin yok, süreç anlatma
 Kurallar: yalnız GÖZLENEN istek/alan/mesaj; token/cookie/şifre/kişisel veri MASKELE; "muhtemelen" yazma."""
 
 
-def _canli_gorev(hedef_url: str, ekran_tarif: str, ekran_bazli: bool) -> tuple[str | None, str | None]:
+def _canli_gorev(hedef_url: str, ekran_tarif: str, ekran_bazli: bool, odak: str = "") -> tuple[str | None, str | None]:
     """(canlı görev metni, _api_cagri kapsamı). ekran_bazli → miras live_app ANA adresi + ekran hedefi ('surec'
-    kapsamı); değilse Task Analizi'nin live_app_gorev hedefi ('gorev' kapsamı)."""
-    plan = _kesif_plani(ekran_tarif)
+    kapsamı); değilse Task Analizi'nin live_app_gorev hedefi ('gorev' kapsamı). `odak` keşif planına girer."""
+    plan = _kesif_plani(ekran_tarif, odak)
     if ekran_bazli:
         p = urlparse(hedef_url or "")
         if not (p.scheme and p.netloc):
@@ -192,13 +203,14 @@ def _ham_kaydet(anahtar: str, yanit: str) -> str:
         return ""
 
 
-def kesfet(hedef_url: str = "", ekran_tarif: str = "", ekran_bazli: bool = False, *, _ai=None) -> dict:
-    """Keşfi çalıştırır, raporu kaydeder, {ok, anahtar, md, ts, yas_gun, yol, neden} döner. Hata → ok False (fırlatmaz)."""
+def kesfet(hedef_url: str = "", ekran_tarif: str = "", ekran_bazli: bool = False, *, odak: str = "", _ai=None) -> dict:
+    """Keşfi çalıştırır, raporu kaydeder, {ok, anahtar, md, ts, yas_gun, yol, neden} döner. Hata → ok False (fırlatmaz).
+    `odak`: analist gözlem kapsamı + notu + task özeti → keşif planına girer (anahtara girmez; anahtar = URL + ekran)."""
     if not hedef_url:
         urls = live_app_urls() if ekran_bazli else gorev_live_app_urls()
         hedef_url = urls[0] if urls else ""
     anahtar = _anahtar(hedef_url, ekran_tarif)
-    canli, kapsam = _canli_gorev(hedef_url, ekran_tarif, ekran_bazli)
+    canli, kapsam = _canli_gorev(hedef_url, ekran_tarif, ekran_bazli, odak)
     if not canli:
         return {"ok": False, "anahtar": anahtar, "md": "", "neden": "Canlı uygulama hedefi tanımlı değil (Bağlam Filtresi)."}
     sistem = ("BFF keşif uzmanısın: canlı uygulamada ekranın servis sözleşmesini KENDİ yaptığın create/update/delete "
@@ -214,10 +226,24 @@ def kesfet(hedef_url: str = "", ekran_tarif: str = "", ekran_bazli: bool = False
         _butce = 70
     ai = _ai or (lambda s, m, k: _api_cagri(s, m, max_tokens=MAX_TOKENS_COMBINED, thinking=False, onbellek=False,
                                             canli_uygulama_kapsami=k, katman="yardimci", max_turns=_butce, tur_devam=1))
+    baslangic = time.time()
     try:
         yanit = ai(sistem, [{"role": "user", "content": icerik}], kapsam)
     except Exception as e:
         return {"ok": False, "anahtar": anahtar, "md": "", "neden": f"Keşif çalıştırılamadı: {str(e)[:200]}"}
+    # MAKİNE DOĞRULAMASI (denetim 2026-11-02 B#6): model tarayıcı aracı HİÇ çağırmadan etiketli rapor uydurursa
+    # (soğuk MCP / araçsız tur) `.gozlem-durum.json` yapildi=False yazılır ama metin döner → eskiden ok=True + 7 gün
+    # 'taze' sayılıyordu. gozlem.rapor_al ile aynı kapı: durum bu çağrıya aitse ve yapılmadıysa rapor GEÇERSİZ.
+    try:
+        from .gozlem import _durum_bu_cagrinin_mi
+        _durum = gozlem_durum_oku()
+        if _durum_bu_cagrinin_mi(_durum, baslangic) and not _durum.get("yapildi", True):
+            ham_yol = _ham_kaydet(anahtar, yanit or "")
+            return {"ok": False, "anahtar": anahtar, "md": "",
+                    "neden": "Tarayıcı aracı kullanılmadı (" + str(_durum.get("neden") or "model araç çağırmadı")[:120]
+                             + ") — rapor uydurma olabilir, kaydedilmedi." + (f" Ham yanıt: {ham_yol}" if ham_yol else "")}
+    except Exception:
+        pass
     if "<bff_rapor>" in (yanit or ""):
         md = _xml_ayir(_metin_sikistir(yanit or ""), "bff_rapor").strip()
     elif re.search(r"^## (Ekran|Açılış|CREATE)\b", _metin_sikistir(yanit or ""), re.M):
@@ -249,12 +275,20 @@ _SERVIS_BOLUM = re.compile(r"(?im)^##\s*(?:CREATE|Açılış|Aksiyon|Servis|List
 _AG_KANIT = re.compile(r"\[K:\s*Network:\s*(?:GET|POST|PUT|PATCH|DELETE)\b")
 
 
+_YAZMA_KANIT = re.compile(r"\[K:\s*Network:\s*(?:POST|PUT|PATCH|DELETE)\b")
+
+
 def rapor_tam_mi(md: str) -> bool:
     """Rapor GERÇEK gözlem içeriyor mu? CREATE/servis bölümü VE en az bir `[K: Network:<METHOD> …]` kanıt etiketi.
     Eski sezgisel (`'POST' in md`) biçim şablonunda zaten 'POST' geçtiği için her zaman doğruydu → boş/yarım rapor
     7 gün 'taze' sayılıp analize gerçek sözleşme diye giriyordu."""
     m = md or ""
     return bool(_SERVIS_BOLUM.search(m)) and bool(_AG_KANIT.search(m))
+
+
+def yazma_kaniti_var(md: str) -> bool:
+    """CRUD gerçekten yapıldı mı (POST/PUT/PATCH/DELETE kanıt etiketi)? Yoksa rapor yalnız OKUMA sözleşmesidir."""
+    return bool(_YAZMA_KANIT.search(md or ""))
 
 
 def rapor_blogu(rapor: dict) -> str:
@@ -267,9 +301,14 @@ def rapor_blogu(rapor: dict) -> str:
     bas = ("### BFF SÖZLEŞME RAPORU — canlı CRUD gözlemi (" + tarih + ", "
            + str(rapor.get("ekran") or rapor.get("hedef_url") or "") + ")\n")
     if tam and taze:
-        return bas + ("Aşağıdaki endpoint/alan/mesajlar GERÇEK gözlemdir (agent kayıt oluşturdu/güncelledi/sildi). API, DB ve "
-                      "validasyon bölümlerini BU sözleşmeye dayandır; `[K: Network:<METHOD> <path>]` etiketiyle atıf ver. "
-                      "Burada olmayan endpoint UYDURMA.\n\n") + md
+        if yazma_kaniti_var(md):
+            return bas + ("Aşağıdaki endpoint/alan/mesajlar GERÇEK gözlemdir (agent kayıt oluşturdu/güncelledi/sildi). API, DB ve "
+                          "validasyon bölümlerini BU sözleşmeye dayandır; `[K: Network:<METHOD> <path>]` etiketiyle atıf ver. "
+                          "Burada olmayan endpoint UYDURMA.\n\n") + md
+        # Yazma kanıtı YOK: yalnız okuma sözleşmesi — 'agent oluşturdu/güncelledi/sildi' deme (B#4: uydurma create iddiası)
+        return bas + ("⚠ YALNIZ OKUMA sözleşmesi: bu raporda CRUD (POST/PUT/DELETE) kanıtı YOK — agent kayıt OLUŞTURMADI/"
+                      "güncellemedi/silmedi. Liste/okuma uçları gerçektir; yazma uçlarını 'canlı doğrulandı' diye YAZMA, "
+                      "`[K: ❓ Belirsiz]` ile işaretle. Burada olmayan endpoint UYDURMA.\n\n") + md
     neden = ("rapor EKSİK (CREATE/servis bölümü ya da ağ kanıtı yok — keşif yarım kalmış olabilir)" if not tam
              else f"rapor ESKİ ({rapor.get('yas_gun', '?')} gün)")
     return bas + ("⚠ UYARI: " + neden + ". Buradaki endpoint/alanları KESİN sözleşme sayma — doğrulanacak ipucu olarak kullan; "

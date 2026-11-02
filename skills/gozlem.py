@@ -49,7 +49,9 @@ def _anahtar(canli_blok: str, kapsam: str, gorev_ozet: str = "") -> str:
     """Önbellek anahtarı = kapsam + canlı blok (URL/hedef) + GÖREV ODAĞI (özetin ilk ~2k karakteri).
     Odak anahtara girmezse aynı URL'e gelen farklı task'lar birbirinin 6 saatlik raporunu devralırdı
     (başka ekranın gözlemi 'taze' sayılırdı)."""
-    odak = hashlib.sha1((gorev_ozet or "").strip()[:_ODAK_KC].encode("utf-8")).hexdigest()[:10]
+    # Odak hash'i TAM özet üzerinden (denetim 2026-11-02 B#2): ilk 2k ile hash'lenince aynı gövdeli ama farklı
+    # istekli/notlu iki görev (istek SONDA) aynı anahtara düşüp birbirinin raporunu 'taze' sayıyordu.
+    odak = hashlib.sha1((gorev_ozet or "").strip().encode("utf-8")).hexdigest()[:10]
     return hashlib.sha1(f"{kapsam}|{(canli_blok or '').strip()}|{odak}".encode("utf-8")).hexdigest()[:12]
 
 
@@ -138,8 +140,13 @@ KURALLAR: yalnız gözlemlenen; UYDURMA yok; her satırda kanıt etiketi; rapor 
 
 
 def _ozet_kirp(metin: str) -> str:
+    """Özet tavanı: BAŞ + SON (denetim 2026-11-02 B#2) — analist isteği/notu çoğunlukla SONDA (BRD alıntılı uzun
+    açıklamanın ardından); yalnız baş alınınca gözlemci isteği hiç görmüyordu."""
     m = (metin or "").strip()
-    return m if len(m) <= _OZET_KC else m[:_OZET_KC] + "\n…(kırpıldı)"
+    if len(m) <= _OZET_KC:
+        return m
+    bas, son = int(_OZET_KC * 0.6), _OZET_KC - int(_OZET_KC * 0.6)
+    return m[:bas] + "\n…(orta kısım kırpıldı)…\n" + m[-son:]
 
 
 def rapor_al(canli_blok: str, kapsam: str, gorev_ozet: str = "", yeniden: bool = True,
