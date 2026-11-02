@@ -449,10 +449,14 @@ TRADE/OPS task'ı geliştirmeye alınınca ilişkili UAT task'ını Jira'da **'D
   `hata_kaydet` (tur zamanını DEĞİŞTİRMEZ) + 10 dk sonra tekrar. `_uat_senkron_lock` tek tur. Taşınan varsa yerel
   bildirim. **Yalnız uygulama açıkken çalışır** (Jira Köprüsü gibi). 0 token.
 - **Uçlar** (kimlik-gate `/api/uat-senkron`): `GET /api/uat-senkron/durum` · `POST /api/uat-senkron/ayar {aktif?, mod?,
-  aralik_sn?}` · `POST /api/uat-senkron/calistir {uygula: true|false|null}` (arka plan; null = ayardaki mod; 409 sürüyorsa).
+  aralik_sn?}` · `POST /api/uat-senkron/calistir {uygula: true|false|null, secilen?:[UAT key…]}` (arka plan; null = ayardaki
+  mod; 409 sürüyorsa). **`secilen` (elle seçim):** verilirse YALNIZ bu UAT key'leri taşınır (`tur(secilen_keys)` planı tam
+  hesaplar ama taşımayı seçilenlerle sınırlar); `uygula && secilen==[]` → 400 (hiçbiri seçilmedi); yoksa plandaki hepsi.
 - **UI:** durum satırı (Kapalı/Rapor/Otomatik · son/sonraki kontrol · son hata) + Aç/Kapat · "Şimdi kontrol et (rapor)" ·
-  "Otomatiğe geç" / "Rapor moduna dön" · rapor listesi varken "Bu listeyi şimdi uygula" (onaylı) · son tur sonuç tablosu ·
-  Geçmiş. Test: `tests/test_uat_senkron.py` (Jira MOCK — rapor modunda yazma YOK doğrulanır).
+  "Otomatiğe geç" / "Rapor moduna dön" · rapor listesinde **her satırda onay kutusu + başlıkta 'Hepsini seç'** (`usToggle`/
+  `usToggleHepsi`; yeni plan → hepsi seçili, seçim pollingde korunur) → "Seçilenleri şimdi uygula (N)" (onaylı, N=0 kapalı;
+  `_usSecilen`/`usCalistir(true)` seçili key'leri gönderir) · son tur sonuç tablosu · Geçmiş. Test: `tests/test_uat_senkron.py`
+  (Jira MOCK — rapor modunda yazma YOK + seçim filtresi + uç doğrulamaları).
 
 ### Kabul Kontrolü (`skills/kabul_kontrolu.py`) — ANALIZ CHECK task'ını testçi gibi CANLI doğrula
 Geliştirmesi biten task'ı analist agent'a verir; agent test ortamında uygulamaya girip task'taki isterleri

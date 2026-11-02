@@ -422,7 +422,7 @@ GET  /api/history              Son 5 çalıştırma arşivi
 | `GET /kilavuz` | Uygulama-içi kullanıcı kılavuzu (`KILAVUZ.html`, iframe) |
 | `GET /api/sources` · `POST/DELETE /api/sources/confluence[/<key>]` · `POST/DELETE /api/sources/jira[/<key>]` | Referans kaynakları (Confluence space / Jira projesi) listele-ekle-sil |
 | `GET /api/sources/sync/status` | Çalışan referans senkronunun durumu |
-| `GET /api/uat-senkron/durum` · `POST /api/uat-senkron/ayar` · `POST /api/uat-senkron/calistir` | UAT Durum Senkronu: durum/ayar/şimdi çalıştır (`{uygula}`; arka plan) |
+| `GET /api/uat-senkron/durum` · `POST /api/uat-senkron/ayar` · `POST /api/uat-senkron/calistir` | UAT Durum Senkronu: durum/ayar/şimdi çalıştır (`{uygula, secilen?:[UAT key…]}` — `secilen` elle seçimle YALNIZ o UAT'ları taşır; arka plan) |
 | `GET /api/ornekler/durum` · `GET /api/ornekler/tani` | Few-shot havuz adedi + son çekim · sink `ornekler` ucunun ham teşhisi (owner) |
 | `POST /api/ornekler/paylas` | Yerel örnekleri merkeze (yeniden) push et (Yol 1) |
 | `POST /api/ornekler/yildiz` | App-sahibi: örneği ★ iyi örnek işaretle/kaldır (`reference/ornek_yildiz.json`, id hex doğrulanır) |

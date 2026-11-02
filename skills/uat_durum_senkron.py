@@ -162,8 +162,11 @@ def tasi(it: dict, hedef_durum: str, cloud_id: str, *, yorum: bool = True) -> di
     return {"ok": True, "yorum": yorum_ok}
 
 
-def tur(uygula: bool | None = None) -> dict:
-    """Bir kontrol turu. uygula=None → ayardaki moda göre (otomatik=uygula). Sonuç durum dosyasına yazılır."""
+def tur(uygula: bool | None = None, secilen_keys: list[str] | None = None) -> dict:
+    """Bir kontrol turu. uygula=None → ayardaki moda göre (otomatik=uygula). Sonuç durum dosyasına yazılır.
+
+    secilen_keys verilirse (elle 'seçilenleri uygula') YALNIZ bu UAT key'leri taşınır;
+    plan (rapor) tam hesaplanır ama taşıma seçilenlerle sınırlanır. None = plandaki hepsi."""
     ayar = ayarlar()
     cloud_id = _cloud_id()
     uat = _uat_gorevlerini_cek(ayar, cloud_id)
@@ -171,7 +174,9 @@ def tur(uygula: bool | None = None) -> dict:
     uygulanacak = (ayar["mod"] == "otomatik") if uygula is None else bool(uygula)
     sonuclar: list[dict] = []
     if uygulanacak:
-        for it in plan:
+        secili = {str(k) for k in secilen_keys} if secilen_keys is not None else None
+        hedef_plan = [it for it in plan if it["uat_key"] in secili] if secili is not None else plan
+        for it in hedef_plan:
             r = tasi(it, ayar["hedef_durum"], cloud_id)
             sonuclar.append({**it, **r})
     d = durum_oku()

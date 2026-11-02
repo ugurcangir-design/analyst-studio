@@ -3110,12 +3110,12 @@ def _analiz_bildirim_baslat() -> None:
 _uat_senkron_lock = threading.Lock()
 
 
-def _uat_senkron_calistir(uygula: bool | None = None) -> dict | None:
+def _uat_senkron_calistir(uygula: bool | None = None, secilen_keys: list[str] | None = None) -> dict | None:
     from skills import uat_durum_senkron as us
     if not _uat_senkron_lock.acquire(blocking=False):
         return None   # tur zaten sürüyor
     try:
-        d = us.tur(uygula=uygula)
+        d = us.tur(uygula=uygula, secilen_keys=secilen_keys)
         if d.get("tasinan"):
             try:
                 from skills import bildirim
@@ -3211,6 +3211,13 @@ def uat_senkron_calistir():
     uygula = data.get("uygula")
     if uygula is not None and not isinstance(uygula, bool):
         return jsonify({"ok": False, "error": "uygula true/false/null olmalı"}), 400
+    secilen = data.get("secilen")   # YALNIZ bu UAT key'leri taşı (elle seçim); yoksa plandaki hepsi
+    if secilen is not None:
+        if not isinstance(secilen, list):
+            return jsonify({"ok": False, "error": "secilen UAT key listesi olmalı"}), 400
+        secilen = [str(k) for k in secilen if k]
+        if uygula and not secilen:
+            return jsonify({"ok": False, "error": "Taşınacak UAT task'ı seçilmedi."}), 400
     hata = _jira_baglanti_eksik()
     if hata:
         return jsonify({"ok": False, "error": hata}), 400
@@ -3219,7 +3226,7 @@ def uat_senkron_calistir():
 
     def _is():
         try:
-            _uat_senkron_calistir(uygula)
+            _uat_senkron_calistir(uygula, secilen_keys=secilen)
         except Exception:
             pass
     threading.Thread(target=_is, daemon=True, name="uat-senkron-elle").start()

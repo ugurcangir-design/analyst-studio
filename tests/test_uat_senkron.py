@@ -116,6 +116,22 @@ chk("POST calistir geçersiz uygula → 400", c.post("/api/uat-senkron/calistir"
 chk("ayar dosyası yerel (gitignore)", "reference/uat_senkron.json" in Path(".gitignore").read_text(encoding="utf-8"))
 json.loads(US.AYAR_DOSYA.read_text(encoding="utf-8"))
 
+print("5) seçilenleri uygula — elle seçim filtresi")
+yazilan.clear()
+yorumlar.clear()
+d = US.tur(uygula=True, secilen_keys=["UAT-1", "UAT-9"])
+chk("SEÇİM: yalnız 2 seçili UAT taşındı", d["tasinan"] == 2 and len(yazilan) == 2, d["tasinan"])
+chk("SEÇİM: taşınanlar tam seçilenler", sorted(s["uat_key"] for s in d["sonuclar"]) == ["UAT-1", "UAT-9"])
+chk("SEÇİM: plan (rapor) yine tam hesaplanır", len(d["plan"]) == 3)
+d = US.tur(uygula=True, secilen_keys=[])
+chk("SEÇİM: boş liste → hiçbiri taşınmaz (hepsi değil)", d["tasinan"] == 0)
+d = US.tur(uygula=True, secilen_keys=None)
+chk("SEÇİM: None → plandaki hepsi taşınır", d["tasinan"] == 3)
+chk("UÇ: uygula+boş secilen → 400",
+    c.post("/api/uat-senkron/calistir", json={"uygula": True, "secilen": []}, headers=H).status_code == 400)
+chk("UÇ: secilen liste değil → 400",
+    c.post("/api/uat-senkron/calistir", json={"uygula": True, "secilen": "abc"}, headers=H).status_code == 400)
+
 print()
 if _hata:
     print(f"UAT SENKRON TESTLERİ BAŞARISIZ ({_hata} hata)")

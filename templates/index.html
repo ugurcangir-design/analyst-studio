@@ -1729,6 +1729,8 @@ html[data-theme="light"] .suspend-overlay { background: rgba(245,247,250,.92); }
 #us-panel .us-tbl th, #us-panel .us-tbl td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; overflow-wrap: anywhere; }
 #us-panel .us-tbl th { font-size: 10px; text-transform: uppercase; letter-spacing: .4px; color: var(--text3); background: var(--surface2); }
 #us-panel .us-ok { color: #16a34a; font-weight: 600; } #us-panel .us-err { color: #dc2626; }
+#us-panel .us-tbl .us-chk-col { text-align: center; padding-top: 8px; }
+#us-panel .us-tbl .us-chk, #us-panel .us-tbl #us-chk-hepsi { cursor: pointer; width: 15px; height: 15px; accent-color: var(--accent, #4F4DD6); }
 #us-panel .bs-m-ek { color: var(--text3); font-size: 11.5px; margin-left: 4px; }
 #us-panel .bs-ko-ozet { color: var(--text2); font-size: 11.5px; line-height: 1.4; margin-top: 2px; }
 .bs-stat { flex: 1 1 120px; min-width: 110px; padding: 14px 16px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; text-align: center; }
@@ -7633,7 +7635,26 @@ async function bsMutabakat() {
 
 // ─── UAT Durum Senkronu ────────────────────────────────────────────────────────
 let _usPoll = null;
+let _usSecilen = new Set();   // elle 'seçilenleri uygula' — işaretli UAT key'leri
+let _usPlanKeys = [];         // o anki rapor planındaki tüm UAT key'leri
+let _usPlanImza = '';         // plan değişince seçim 'hepsi'ne sıfırlanır
 function _usSaat(ts) { return ts ? new Date(ts * 1000).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'; }
+function usToggle(key) {
+  if (_usSecilen.has(key)) _usSecilen.delete(key); else _usSecilen.add(key);
+  _usSecimGuncelle();
+}
+function usToggleHepsi(el) {
+  if (el.checked) _usPlanKeys.forEach(k => _usSecilen.add(k)); else _usSecilen.clear();
+  document.querySelectorAll('.us-chk').forEach(c => { c.checked = _usSecilen.has(c.dataset.key); });
+  _usSecimGuncelle();
+}
+function _usSecimGuncelle() {
+  const n = _usSecilen.size, toplam = _usPlanKeys.length;
+  const btn = document.getElementById('us-uygula-btn');
+  if (btn) { btn.textContent = `Seçilenleri şimdi uygula (${n})`; btn.disabled = (n === 0); }
+  const h = document.getElementById('us-chk-hepsi');
+  if (h) { h.checked = (n > 0 && n === toplam); h.indeterminate = (n > 0 && n < toplam); }
+}
 function _usTetik(it) {
   return (it.tetikleyenler || []).map(t => `${_bsKeyLink(t.key)} <span class="bs-m-ek">${_bsEsc(t.durum)}</span>`).join('<br>');
 }
@@ -7656,7 +7677,15 @@ async function usYukle() {
             + b('Şimdi kontrol et (rapor)', 'usCalistir(false)');
   if (a.aktif && !oto) eylem += b('Otomatiğe geç', "usAyar({mod:'otomatik'}, true)", 'btn-primary');
   if (a.aktif && oto) eylem += b('Rapor moduna dön', "usAyar({mod:'rapor'})");
-  if ((d.plan || []).length && d.son_mod !== 'uygula') eylem += b(`Bu listeyi şimdi uygula (${d.plan.length})`, 'usCalistir(true)', 'btn-success');
+  // Rapor planı → seçim durumunu güncelle (plan değişince 'hepsi'ne sıfırla, aksi halde seçimi koru)
+  const _planVar = (d.plan || []).length && d.son_mod !== 'uygula';
+  if (_planVar) {
+    _usPlanKeys = d.plan.map(it => it.uat_key);
+    const imza = _usPlanKeys.join(',');
+    if (imza !== _usPlanImza) { _usPlanImza = imza; _usSecilen = new Set(_usPlanKeys); }   // yeni plan → hepsi seçili
+    else _usSecilen = new Set([..._usSecilen].filter(k => _usPlanKeys.includes(k)));         // eskiden silinenleri at
+    eylem += `<button id="us-uygula-btn" class="btn btn-success btn-sm" onclick="usCalistir(true)" ${d.calisiyor ? 'disabled' : ''}>Seçilenleri şimdi uygula (${_usSecilen.size})</button>`;
+  } else { _usPlanKeys = []; _usPlanImza = ''; }
   document.getElementById('us-eylemler').innerHTML = eylem;
 
   let ic = '';
@@ -7669,10 +7698,10 @@ async function usYukle() {
           + `<td>${s.ok ? `<span class="us-ok">✓ Devam Ediyor</span>${s.yorum === false ? ' <span class="bs-m-ek">(yorum eklenemedi)</span>' : ''}` : `<span class="us-err">✕ ${_bsEsc(s.hata || '')}</span>`}</td></tr>`).join('')
         + '</tbody></table>';
     } else if ((d.plan || []).length) {
-      ic += `<div class="bs-grup-bas">Taşınacak UAT task'ları — rapor <span class="bs-say">(${d.plan.length} · ${d.taranan ?? '?'} Backlog/Yapılacaklar UAT tarandı · Jira'da değişiklik YAPILMADI)</span></div>`
-        + `<table class="us-tbl"><colgroup><col style="width:40%"><col style="width:16%"><col style="width:44%"></colgroup>`
-        + `<thead><tr><th>UAT</th><th>Şu anki durum</th><th>Geliştirmeye alınan ilişkili task</th></tr></thead><tbody>`
-        + d.plan.map(it => `<tr><td>${_bsKeyLink(it.uat_key)}<div class="bs-ko-ozet">${_bsEsc(it.uat_ozet)}</div></td><td>${_bsEsc(it.uat_durum)} → <b>Devam Ediyor</b></td><td>${_usTetik(it)}</td></tr>`).join('')
+      ic += `<div class="bs-grup-bas">Taşınacak UAT task'ları — rapor <span class="bs-say">(${d.plan.length} · ${d.taranan ?? '?'} Backlog/Yapılacaklar UAT tarandı · Jira'da değişiklik YAPILMADI · işaretlileri taşı)</span></div>`
+        + `<table class="us-tbl"><colgroup><col style="width:36px"><col style="width:40%"><col style="width:16%"><col style="width:44%"></colgroup>`
+        + `<thead><tr><th class="us-chk-col"><input type="checkbox" id="us-chk-hepsi" title="Hepsini seç / kaldır" ${d.calisiyor ? 'disabled' : ''} onclick="usToggleHepsi(this)"></th><th>UAT</th><th>Şu anki durum</th><th>Geliştirmeye alınan ilişkili task</th></tr></thead><tbody>`
+        + d.plan.map(it => `<tr><td class="us-chk-col"><input type="checkbox" class="us-chk" data-key="${_bsEsc(it.uat_key)}" ${_usSecilen.has(it.uat_key) ? 'checked' : ''} ${d.calisiyor ? 'disabled' : ''} onclick="usToggle('${_bsEsc(it.uat_key)}')"></td><td>${_bsKeyLink(it.uat_key)}<div class="bs-ko-ozet">${_bsEsc(it.uat_ozet)}</div></td><td>${_bsEsc(it.uat_durum)} → <b>Devam Ediyor</b></td><td>${_usTetik(it)}</td></tr>`).join('')
         + '</tbody></table>';
     } else {
       ic += `<div class="bs-bos">Son kontrolde taşınacak UAT task'ı yok (${d.taranan ?? 0} Backlog/Yapılacaklar UAT tarandı). 🎉</div>`;
@@ -7685,6 +7714,7 @@ async function usYukle() {
       + '</tbody></table></details>';
   }
   document.getElementById('us-icerik').innerHTML = ic;
+  _usSecimGuncelle();   // başlık onay kutusunun indeterminate durumunu uygula
   clearTimeout(_usPoll);
   if (d.calisiyor) _usPoll = setTimeout(usYukle, 3000);
 }
@@ -7697,8 +7727,14 @@ async function usAyar(degisim, onayla) {
   usYukle();
 }
 async function usCalistir(uygula) {
-  if (uygula && !confirm("Listelenen UAT task'ları Jira'da şimdi 'Devam Ediyor'a taşınacak ve her birine yorum eklenecek. Devam edilsin mi?")) return;
-  const r = await fetch('/api/uat-senkron/calistir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uygula }) });
+  let secilen;
+  if (uygula) {
+    secilen = [..._usSecilen];
+    if (!secilen.length) { toast('Taşınacak UAT task\'ı seçilmedi.', 'error'); return; }
+    if (!confirm(`Seçilen ${secilen.length} UAT task'ı Jira'da şimdi 'Devam Ediyor'a taşınacak ve her birine yorum eklenecek. Devam edilsin mi?`)) return;
+  }
+  const govde = uygula ? { uygula, secilen } : { uygula };
+  const r = await fetch('/api/uat-senkron/calistir', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(govde) });
   const d = await r.json();
   if (!d.ok) { toast(d.error || 'Başlatılamadı', 'error'); return; }
   toast(uygula ? 'UAT task\'ları taşınıyor…' : 'Kontrol başladı (rapor — değişiklik yapılmaz)…', 'info');
