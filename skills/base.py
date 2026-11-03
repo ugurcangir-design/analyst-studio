@@ -4311,7 +4311,7 @@ def cli_durum_probe() -> dict:
         proc = subprocess.run(
             [claude_yolu, "-p", "--model", "haiku", "--output-format", "json"],
             input="OK", capture_output=True, text=True, timeout=60,
-            env=_cli_env_hazirla(claude_yolu),
+            env=_cli_env_hazirla(claude_yolu), cwd=cli_cwd(),
         )
         ham = proc.stdout.strip() or proc.stderr.strip() or "{}"
         try:
@@ -4625,14 +4625,32 @@ def cli_tum_durdur() -> int:
     return n
 
 
+def cli_cwd() -> str:
+    """`claude -p` için ÇALIŞMA DİZİNİ — repo ağacının DIŞINDA, boş bir dizin (owner 2026-11-03, MBSTRADE-1946).
+    Claude CLI, cwd ve TÜM üst dizinlerindeki CLAUDE.md'yi otomatik bağlama alır; alt süreç repo kökünde koştuğundan
+    bu projenin CLAUDE.md'si (agent-içi notlar: 'tradoria Swagger KAYITLI DEĞİL', 'Referanslar → Swagger URL ile Ekle',
+    ekran/endpoint adları…) HER analiz çağrısına sessizce giriyordu → model açık soruya 'reference/services/ altında kayıtlı
+    değil, Swagger URL ile Ekle ile eklenebilir mi' yazdı (deneysel kanıt: aynı prompt repo dizininde 'CLAUDE.md'ye göre
+    port 5003' dedi, boş dizinde bilmedi). `--bare` OAuth'u kapattığından kullanılamaz → cwd sistem temp altına taşınır
+    (`~/.claude/CLAUDE.md` kullanıcı-global dosya YOK; varsa o yine girer — analist makinesinde tutulmamalı).
+    Tüm CLI argümanları (mcp-config, output-dir) mutlak yol olduğundan cwd değişimi onları etkilemez."""
+    import tempfile
+    d = Path(os.getenv("CLI_CWD", "") or (Path(tempfile.gettempdir()) / "analyst-studio-cli-cwd"))
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        return str(Path(tempfile.gettempdir()))
+    return str(d)
+
+
 def _cli_calistir(cmd: list, tam_prompt: str, cli_env: dict, timeout: int = 1200):
     """subprocess.run yerine killable Popen — çalışan süreci thread-keyed registry'ye yazar
     ki 'Durdur' killpg edebilsin. subprocess.CompletedProcess döndürür (çağıran değişmeden çalışır).
-    Signal ile öldürülürse (negatif returncode) DurdurulduError fırlatır."""
+    Signal ile öldürülürse (negatif returncode) DurdurulduError fırlatır. cwd = `cli_cwd()` (repo dışı — CLAUDE.md sızmaz)."""
     tid = threading.get_ident()
     proc = subprocess.Popen(
         cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        text=True, env=cli_env, start_new_session=True,
+        text=True, env=cli_env, start_new_session=True, cwd=cli_cwd(),
     )
     with _cli_lock:
         _CLI_PROC_REG[tid] = proc

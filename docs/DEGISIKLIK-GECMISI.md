@@ -29,6 +29,10 @@
   bildirdi … canlı doğrulanamadı' + Durum hücresi 'Analist cevabı' yazdı → prompt kuralı yerine mekanik kapı:
   `servis_sozlesme.sozlesme_celiskileri` (0 token) + tek hedefli düzelt turu; düzelt/cevap turlarına Swagger bloğu girer;
   TASK DİLİ #7 (Durum hücresi olgusal). Test: `tests/test_servis_sozlesme.py`.
+- **2026-11-03 — CLAUDE.md sızıntısı (sistemik):** `claude -p` repo kökünde koştuğundan Claude CLI bu projenin CLAUDE.md'sini
+  her analiz çağrısına otomatik bağlam olarak alıyordu (MBSTRADE-1946: 'Swagger `reference/services/` altında kayıtlı değil,
+  Swagger URL ile Ekle ile eklenebilir mi' sorusu — app-içi ifadeler). `base.cli_cwd()` ile alt süreç cwd'si repo dışına
+  (sistem temp) taşındı; FE katmanı da Swagger bloğunu alır. Test: `tests/test_canli_tekrar.py`, `tests/test_servis_sozlesme.py`.
 
 ## Opt-in Ekran Görüntüsü — FE task'ına canlı ekran eki ✅ (CLAUDE.md "EKRAN GÖRÜNTÜSÜ", MIMARI yok — CLAUDE.md yeterli)
 - `skills/ekran_goruntu.py`: analizin adlandırdığı canlı ekranları Playwright `browser_take_screenshot` (dosya-adsız → `--output-dir`)

@@ -188,6 +188,9 @@ chk("celiski_talimati: KESİN parametre listesi + gerçek ad (marketId) + Durum 
 chk("celiski_talimati: boş listede boş", SS.celiski_talimati([]) == "")
 import skills.jira_gorevleri as JG  # noqa: E402
 _jg_src = inspect.getsource(JG)
+chk("gorev_analiz_et: Swagger bloğu FE katmanında da enjekte edilir (owner 2026-11-03 — FE 'Swagger kayıtlı değil' sorusu açıyordu)",
+    'if katman != "fe":\n        try:\n            from . import servis_sozlesme' not in _jg_src
+    and '**({"butce": 5000, "azami": 10} if katman == "fe" else {})' in _jg_src)
 chk("gorev_analiz_et: ana çıktı _sozlesme_celiski_duzelt'ten geçer (tespit → hedefli düzelt, SOZLESME_DENETIM ile kapanır)",
     "teknik = _sozlesme_celiski_duzelt(gorev, teknik, _sozlesme_blok)" in _jg_src and "SOZLESME_DENETIM" in _jg_src)
 # düzelt turu: Swagger bloğu çağrıya girer (verilen ya da 0-token türetilen) — yakalanan içerikle doğrula

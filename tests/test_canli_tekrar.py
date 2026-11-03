@@ -47,6 +47,7 @@ def sahte_cli(cmd, prompt, env, timeout=0):
     return subprocess.CompletedProcess(cmd, 0, json.dumps(v), "")
 
 
+_ORJ_CLI_CALISTIR = B._cli_calistir
 B._cli_calistir = sahte_cli
 MSJ = [{"role": "user", "content": [{"type": "text", "text": "Hedef URL'yi gözle"}]}]
 
@@ -193,6 +194,40 @@ if _eski_key is None:
     os.environ.pop("ANTHROPIC_API_KEY", None)
 else:
     os.environ["ANTHROPIC_API_KEY"] = _eski_key
+
+# --- owner 2026-11-03 (MBSTRADE-1946): `claude -p` repo kökünde koşunca CLAUDE.md'yi bağlama alıyordu (agent-içi notlar
+# analize sızdı: 'Swagger kayıtlı değil, Swagger URL ile Ekle ile eklenebilir mi' açık sorusu). cwd repo AĞACININ DIŞINDA.
+import subprocess as _sp  # noqa: E402
+_cwd = B.cli_cwd()
+_repo = str(B.BASE_DIR.resolve())
+chk("cli_cwd: var, dizin, repo ağacının DIŞINDA", os.path.isdir(_cwd) and not os.path.realpath(_cwd).startswith(_repo + os.sep)
+    and os.path.realpath(_cwd) != _repo)
+_p = os.path.realpath(_cwd)
+_claude_md_yok = True
+while True:
+    if os.path.exists(os.path.join(_p, "CLAUDE.md")):
+        _claude_md_yok = False
+    _ust = os.path.dirname(_p)
+    if _ust == _p:
+        break
+    _p = _ust
+chk("cli_cwd: cwd ve ÜST dizinlerinde CLAUDE.md yok (CLI otomatik keşfi boş kalır)", _claude_md_yok)
+_yakalanan = {}
+class _SahteProc:
+    pid = 4242
+    returncode = 0
+    def communicate(self, input=None, timeout=None):
+        return "{}", ""
+def _sahte_popen(cmd, **kw):
+    _yakalanan.update(kw)
+    return _SahteProc()
+_eski_popen = _sp.Popen
+_sp.Popen = _sahte_popen
+try:
+    _ORJ_CLI_CALISTIR(["claude", "-p"], "x", {}, timeout=5)
+finally:
+    _sp.Popen = _eski_popen
+chk("_cli_calistir: Popen cwd=cli_cwd() ile çağrılır", _yakalanan.get("cwd") == _cwd)
 
 print()
 if _hata:

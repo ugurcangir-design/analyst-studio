@@ -951,18 +951,21 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
     # Swagger endpoint'lerini (method+path+şema) enjekte et → agent mevcut servisi GÖRÜR ve kullanır (ister dışı EKLEMEZ;
     # yalnız task'a alakalı). FE katmanında atla (BE sözleşmesi zaten iliskili ile gelir). Hata/boşsa sessiz.
     _sozlesme_blok = ""
-    if katman != "fe":
-        try:
-            from . import servis_sozlesme as _ss
-            _gm = (gozlem_rapor or {}).get("md", "") if isinstance(gozlem_rapor, dict) else ""
-            _sb = _ss.endpoint_baglami(f"{gorev.get('summary','')} {gorev.get('description','') or ''} {analist_notu}",
-                                       ek_metin=(_gm or "") + " " + (bff_rapor or ""))
-            if _sb:
-                print("  📑 Kayıtlı servis sözleşmeleri (Swagger) analize dahil ediliyor...")
-                stable_bloklar.append({"type": "text", "text": _sb})
-                _sozlesme_blok = _sb
-        except Exception as _e:
-            print(f"  ⚠ Servis sözleşmeleri dahil edilemedi: {_e}")
+    # FE katmanı da ALIR (owner 2026-11-03, MBSTRADE-1946): eskiden FE'de atlanıyordu ('BE sözleşmesi iliskili ile gelir')
+    # → tek başına FE task'ı Swagger'ı hiç görmeyince 'definition-service Swagger'ı kayıtlı değil' diye ZORUNLU soru açtı.
+    # FE'de daha küçük bütçe (uç/parametre adları yeter, şema BE'nin işi).
+    try:
+        from . import servis_sozlesme as _ss
+        _gm = (gozlem_rapor or {}).get("md", "") if isinstance(gozlem_rapor, dict) else ""
+        _sb = _ss.endpoint_baglami(f"{gorev.get('summary','')} {gorev.get('description','') or ''} {analist_notu}",
+                                   ek_metin=(_gm or "") + " " + (bff_rapor or ""),
+                                   **({"butce": 5000, "azami": 10} if katman == "fe" else {}))
+        if _sb:
+            print("  📑 Kayıtlı servis sözleşmeleri (Swagger) analize dahil ediliyor...")
+            stable_bloklar.append({"type": "text", "text": _sb})
+            _sozlesme_blok = _sb
+    except Exception as _e:
+        print(f"  ⚠ Servis sözleşmeleri dahil edilemedi: {_e}")
 
     if stable_bloklar:
         stable_bloklar[-1]["cache_control"] = {"type": "ephemeral"}

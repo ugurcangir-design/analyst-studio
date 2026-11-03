@@ -333,6 +333,22 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   türetir → düzelt + cevap + öz-çözümleme işleme turları Swagger sözleşmesini 'KESİN BİLGİ' etiketiyle görür. (3)
   `_CEVAP_TALIMAT` + `_TASK_DILI_KURALLARI` #7: Durum/Kanıt hücresi OLGUSAL ('Swagger'da tanımlı'), kaynak adı hücre
   olmaz, listelenen parametre için punt yazılmaz. Test: `tests/test_servis_sozlesme.py` (sentetik blok + yakalanan düzelt içeriği).
+  **4. koşu (17:04) TEMİZ:** gözlem `name=Match`/`name=34` ile fiilen istek attı, §3.1 Swagger+Network kanıtlı, künye/bildirdi/
+  'Analist cevabı' hücresi 0, çelişki denetimi koşmadı (gerek yoktu). Jira'da eski metnin görünmesi agent değil JİRA-TARAFI
+  ezmeydi: changelog 17:33:31 app temiz sürümü yazdı, 17:33:45 (14 sn sonra, app dışından — açık Jira editörü) eski metin
+  geri yazıldı; 17:45 yeniden yazım tuttu. Tanı aracı: Jira changelog (`expand=changelog`, description from/to uzunlukları).
+  **CLAUDE.md SIZINTISI — `claude -p` CWD REPO DIŞINA TAŞINDI (owner 2026-11-03, MBSTRADE-1946 — KRİTİK, sistemik):** FE
+  task'ı 'tradoria/definition-service Swagger'ı `reference/services/` altında kayıtlı değil, Referanslar → "Swagger URL ile
+  Ekle" ile eklenebilir mi?' diye ZORUNLU soru açtı — bu ifadeler app-içi; corpus/kod kaynağında yok. Kök neden: Claude CLI
+  cwd ve TÜM üst dizinlerindeki CLAUDE.md'yi otomatik bağlama alır; alt süreç repo kökünde koştuğundan BU DOSYA (agent-içi
+  notlar, 'tradoria KAYITLI DEĞİL' gibi bayat iddialar, ekran/endpoint adları) HER CLI çağrısına (analiz/sorular/çözüm/düzelt/
+  gözlem) sessizce giriyordu — prompt_kc ölçümünde görünmez. Deneysel kanıt: aynı soru repo dizininde 'CLAUDE.md'ye göre
+  port 5003', boş dizinde bilinmiyor. `--bare` OAuth'u kapattığından kullanılamaz → `base.cli_cwd()` (sistem temp
+  `analyst-studio-cli-cwd`, env `CLI_CWD`) ve `_cli_calistir`/`cli_durum` Popen/run `cwd=cli_cwd()`. Tüm CLI yolları mutlak
+  (mcp-config, output-dir) → etkilenmez. NOT: MCP teşhis logu `~/Library/Caches/claude-cli-nodejs/<cwd-slug>/` artık temp
+  dizin slug'ında; `~/.claude/CLAUDE.md` (kullanıcı-global) varsa yine girer — analist makinesinde tutulmamalı. İkinci neden:
+  Swagger bloğu `katman=='fe'`de atlanıyordu → FE de alır (butce 5000/azami 10). Test: `tests/test_canli_tekrar.py` (cwd repo
+  dışı + üst dizinlerde CLAUDE.md yok + Popen cwd) · `tests/test_servis_sozlesme.py` (FE enjeksiyon).
   (c) `soru_cozumleme._GOZLEMLE_GEREKSIZ` 'hangi değer … yazılmalı' veri-modeli sorusunu post-değişiklik sanıyordu (Q-T-001'e
   yanlış 'BE sözleşmesinden teyit' notu) → yalnız 'hangi varsayılan değer … atan/türet' + 'hangi kural …'. Test:
   `test_gozlem_fazi` §X, `test_soru_cozumleme`, `test_servis_sozlesme`.
