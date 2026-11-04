@@ -719,6 +719,7 @@ IZIN_VERILEN_CIKTILAR = {
     "mockup.html",
     "gorev-mockup.html",          # Task Analizi → yeni isteye göre ekran mockup'ı (ayrı dosya)
     "gorev-mockup.png",           # mockup'ın PNG görseli (Jira'da satır-içi önizleme için)
+    "mockup.png",                 # süreç/teknik otomatik mockup görseli (mockup_yama)
     "sorular.json",
     "test-senaryolari.md",        # Gherkin (Given/When/Then) — teknik analiz sonrası Haiku pass'i
     "izlenebilirlik-matrisi.md",  # RTM — deterministik (0 token), süreç ID ↔ teknik bölüm eşlemesi
@@ -5145,11 +5146,15 @@ def context_filter_kaydet():
             "extra_urls": live_urls[1:6],
             "use_as_sample": bool(live_app.get("use_as_sample")),
             "gozlem_kapsami": str(live_app.get("gozlem_kapsami", "")).strip(),
+            # Süreç→Teknik analiz bitince otomatik mockup (gerçek ekran + yama; owner 2026-11-04) — opt-in
+            "mockup_otomatik": bool(live_app.get("mockup_otomatik", (mevcut.get("live_app") or {}).get("mockup_otomatik", False))),
         },
         "live_app_gorev": {
             "target_url": gorev_urls[0] if gorev_urls else "",
             "gozlem_kapsami": str(live_app_gorev.get("gozlem_kapsami", "")).strip(),
             "bff_otomatik": live_app_gorev.get("bff_otomatik", True) is not False,
+            # 'Bu task için mockup çalış' — analiz tamamlanınca mockup da hazır (opt-in)
+            "mockup_otomatik": bool(live_app_gorev.get("mockup_otomatik", False)),
         },
         "live_app_auth": {
             "username": str(live_app_auth.get("username", "")).strip(),
@@ -5623,6 +5628,43 @@ def _bff_hedef(adim: dict, gorev: dict) -> tuple[str, str, bool, str]:
     return hedef_url, tarif, ekran_bazli, odak
 
 
+def _otomatik_mockup(adim: dict, gorev: dict, mode: str, sonuc: dict, job: dict) -> dict | None:
+    """Analiz adımı bitince (opt-in) mockup üretir. Dönen küçük özet (iş durumunda taşınır) ya da None (kapalı/analiz yok).
+    Ekran bazlı adım (canli_hedef) miras Süreç hedefini, Task adımı `live_app_gorev` hedefini kullanır (`_bff_hedef` ile aynı türetim)."""
+    from skills import mockup_yama
+    if not mockup_yama.otomatik_acik("gorev"):
+        return None
+    md = ""
+    if mode == "fe-be-ayir":
+        fb = (sonuc.get("fe_be") or {})
+        md = ((fb.get("fe") or {}).get("markdown") or (fb.get("be") or {}).get("markdown") or "")
+    else:
+        md = sonuc.get("markdown") or ""
+    if not md.strip():
+        return None
+    hedef_url, _t, _eb, _o = _bff_hedef(adim, gorev)
+    with _gorev_is_lock:
+        job["aktif_not"] = "Ekran mockup'ı üretiliyor — gerçek ekran yakalanıp değişiklik yaması uygulanıyor"
+    key = adim.get("key", "")
+    r = mockup_yama.otomatik_uret(md, hedef_url, baslik=gorev.get("summary", ""))
+    if r.get("ok"):
+        try:   # /mockup/mevcut + Jira'ya ekle eşleşmesi: hangi task için üretildi
+            (OUTPUT_DIR / _GOREV_MOCKUP_META).write_text(json.dumps({"key": _gorev_gercek_key(key), "baslik": gorev.get("summary", ""),
+                                                                    "iste": "(otomatik — analizdeki değişiklik)", "ts": time.time(),
+                                                                    "otomatik": True}, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
+        _telemetri_olay("mockup", "ok", 0, baglam={"gorev": key, "islem": "otomatik", "kaynak": r.get("tasarim_kaynagi")})
+    else:
+        logger.info("Otomatik mockup üretilemedi (%s): %s", key, r.get("neden"))
+    return {**r, "key": _gorev_gercek_key(key), "otomatik": True}
+
+
+def _gorev_gercek_key(key: str) -> str:
+    """Sentetik FE anahtarı (`KEY::FE`) → gerçek Jira anahtarı."""
+    return str(key or "").split("::")[0].strip().upper()
+
+
 def _gorev_is_calistir(job_id: str) -> None:
     from concurrent.futures import ThreadPoolExecutor
     from skills.base import USE_CLAUDE_CLI, aktif_cli_model, MODEL_ANALIZ
@@ -5771,6 +5813,20 @@ def _gorev_is_calistir(job_id: str) -> None:
             with _gorev_is_lock:
                 job["sonuclar"][key] = {**sonuc, "summary": gorev.get("summary", ""),
                                         "katman": adim.get("katman", "")}
+            # OTOMATİK MOCKUP (owner 2026-11-04): 'Bu task için mockup çalış' işaretliyse analiz bitince mockup da hazır —
+            # gerçek ekran (ekran_yakala) + tek Sonnet yaması (mockup_yama); FE+BE'de FE analizi baz alınır. Best-effort: hata
+            # analizi düşürmez. Yalnız tam analiz modlarında (düzelt/cevap/kabul/formatla/bff/akış DEĞİL).
+            if mode in ("analiz", "fe-be-ayir") and not job.get("iptal"):
+                try:
+                    _mk = _otomatik_mockup(adim, gorev, mode, sonuc, job)
+                    if _mk:
+                        with _gorev_is_lock:
+                            job["sonuclar"][key]["mockup"] = _mk
+                except Exception as _e:
+                    logger.warning("Otomatik mockup atlandı (%s): %s", key, _e)
+                finally:
+                    with _gorev_is_lock:
+                        job["aktif_not"] = ""
             # (C) sunucu deposu + (A) few-shot yakalama — Jira'ya yazılmasa da toplansın (arka plan)
             if mode != "kabul-kontrol":   # kabul raporu eğitim örneği değil
                 _gorev_egitim_topla(key, gorev.get("summary", ""), adim.get("katman", ""), mode, sonuc)
@@ -6877,6 +6933,7 @@ def _gorev_mockup_calistir(job_id: str) -> None:
     _model = aktif_cli_model() if USE_CLAUDE_CLI else MODEL_ANALIZ
     try:
         from skills.html_mockup import gorev_mockup_uret, gorev_mockup_duzelt, GOREV_MOCKUP_DOSYA
+        from skills import mockup_yama as _my
         if job["mode"] == "duzelt":
             # Geri-al için yedek (her düzeltmeden önce güncel hâli sakla)
             try:
@@ -6886,11 +6943,22 @@ def _gorev_mockup_calistir(job_id: str) -> None:
                         _m.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
             except Exception:
                 pass
-            sonuc = gorev_mockup_duzelt(job["talimat"])
+            # Yama tabanlı mockup ise yama listesi güncellenir (ucuz, gerçek ekran korunur); değilse eski HTML-düzelt
+            _yd = _my.duzelt(job["talimat"]) if _my.meta_oku() else {"ok": False}
+            sonuc = _yd if _yd.get("ok") else gorev_mockup_duzelt(job["talimat"])
             sonuc["geri_al"] = True
         else:
-            sonuc = gorev_mockup_uret(job["analiz"], job["iste"], job.get("baslik", ""),
-                                      job.get("hedef_tarif", ""))
+            # ÖNCE gerçek ekran + yama (Faz 2); yakalama/yama düşerse eski sıfırdan üretim (canlı gezinmeli)
+            from skills.base import gorev_live_app_urls as _glu
+            _urls = _glu()
+            _r = _my.uret(job["analiz"], _urls[0], iste=job["iste"], baslik=job.get("baslik", "")) if _urls else {"ok": False, "neden": "hedef yok"}
+            if _r.get("ok"):
+                sonuc = {"dosya": _r["dosya"], "html": _r["html"], "boyut": len(_r["html"]), "tasarim_kaynagi": "canli-baseline",
+                         "ozet": _r.get("ozet", ""), "yama_sayisi": len(_r.get("yamalar") or []), "png": _r.get("png", "")}
+            else:
+                logger.info("Mockup yama yolu düştü (%s) → sıfırdan üretim.", _r.get("neden"))
+                sonuc = gorev_mockup_uret(job["analiz"], job["iste"], job.get("baslik", ""),
+                                          job.get("hedef_tarif", ""))
         job["sonuc"] = sonuc
         job["durum"] = "bitti"
         try:   # hangi task için üretildi → /mockup/mevcut başka task'ın mockup'ını 'bu task'ın' gibi sunmasın
@@ -7099,8 +7167,12 @@ def gorev_mockup_mevcut():
     except Exception:
         meta = {}
     try:
+        from skills import mockup_yama as _my
+        _ym = _my.meta_oku() or {}
         return jsonify({"ok": True, "var": True, "html": m.read_text(encoding="utf-8", errors="replace"),
-                        "key": meta.get("key") or "", "baslik": meta.get("baslik") or "", "ts": meta.get("ts")})
+                        "key": meta.get("key") or "", "baslik": meta.get("baslik") or "", "ts": meta.get("ts"),
+                        "otomatik": bool(meta.get("otomatik")), "tasarim_kaynagi": _ym.get("tasarim_kaynagi") or "",
+                        "yama_sayisi": len(_ym.get("yamalar") or []), "ozet": _ym.get("ozet") or ""})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 

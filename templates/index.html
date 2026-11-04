@@ -2614,6 +2614,7 @@ function temaDegistir() {
             <div class="ctx-field-label">Gözlem Kapsamı <span style="font-weight:400">(opsiyonel)</span></div>
             <div class="ctx-field-sub">Doluysa tüm ekran taranmaz; yalnızca tarif edilen bölüm/akış derinlemesine incelenir. Boşsa tüm tablar + bileşenler sistematik taranır.</div>
             <textarea class="ctx-input" id="ctx-live-scope" rows="2" placeholder="örn: Tablodan bir satır seç, Güncelle butonuna bas, kaydet ve tetiklenen servis istek/yanıtını yakala" oninput="updateCtxBadge()"></textarea>
+            <label class="ctx-field-sub" style="display:flex;align-items:center;gap:7px;margin-top:8px;cursor:pointer"><input type="checkbox" id="ctx-mockup-otomatik" onchange="updateCtxBadge()"> <b>Teknik analiz bitince mockup çalış</b> — ana adresteki gerçek ekran yakalanır (0 token), yalnız değişiklik yaması üretilir → Çıktı Dosyaları'nda <code>mockup.html</code> + <code>mockup.png</code></label>
           </div>
 
           <details class="ctx-more" id="ctx-more-urls">
@@ -2860,6 +2861,7 @@ function temaDegistir() {
           <div class="ctx-field-sub" style="margin-top:8px">Gözlem kapsamı (opsiyonel) — doluysa tüm ekran taranmaz, yalnızca bu akış incelenir</div>
           <textarea class="ctx-input" id="jg-live-scope" rows="2" placeholder="örn: Güncelle butonu akışını uçtan uca uygula ve servis istek/yanıtını yakala" onchange="jgLiveAppKaydet(false)"></textarea>
           <label class="jg-sub" style="display:flex;align-items:center;gap:7px;margin-top:8px;cursor:pointer"><input type="checkbox" id="jg-bff-otomatik" checked onchange="jgLiveAppKaydet(false)"> <b>BFF keşfi otomatik</b> — analiz öncesi agent ekranda kendisi oluştur/güncelle/sil yapıp servis sözleşmesini çıkarır (AI-TEST kayıtları kalır; rapor 7 gün önbellekte, "BFF Keşfi" butonu yeniden gözler)</label>
+          <label class="jg-sub" style="display:flex;align-items:center;gap:7px;margin-top:6px;cursor:pointer"><input type="checkbox" id="jg-mockup-otomatik" onchange="jgLiveAppKaydet(false)"> <b>Bu task için mockup çalış</b> — analiz bitince gerçek ekran yakalanır (0 token) ve yalnız değişiklik yaması üretilir; mockup analizle birlikte hazır gelir (ekran yoksa aynı uygulamanın kabuğu, o da yoksa sıfırdan)</label>
           <div class="la-durum" id="jg-la-durum">
             <div class="la-satir">
               <span class="la-nokta" id="jg-la-nokta"></span>
@@ -3183,6 +3185,7 @@ function temaDegistir() {
         <div id="jg-preview-msg-akis" class="jg-msg" style="padding:0 22px 14px"></div>
         <div id="jg-preview-msg-kabul" class="jg-msg" style="padding:0 22px 14px"></div>
         <div id="jg-preview-msg-bff" class="jg-msg" style="padding:0 22px 14px"></div>
+        <div id="jg-preview-msg-mockup" class="jg-msg" style="padding:0 22px 14px"></div>
       </div>
     </div>
 
@@ -5297,6 +5300,8 @@ async function jgCtxBilgiYukle() {
     if (scopeInput) scopeInput.value = ctx.live_app_gorev?.gozlem_kapsami || '';
     const bffInput = document.getElementById('jg-bff-otomatik');
     if (bffInput) bffInput.checked = ctx.live_app_gorev?.bff_otomatik !== false;
+    const mkInput = document.getElementById('jg-mockup-otomatik');
+    if (mkInput) mkInput.checked = ctx.live_app_gorev?.mockup_otomatik === true;
     const notInput = document.getElementById('jg-analist-notu');
     if (notInput) { notInput.value = ctx.gorev_analist_notu || ''; jgAnalistNotuGorunum(); }
     jgLiveAppDurumYenile();
@@ -5350,7 +5355,8 @@ async function jgLiveAppKaydet(showToastMsg) {
       jira_keys: mevcut.jira_keys || [],
       confluence_pages: mevcut.confluence_pages || [],
       live_app: mevcut.live_app || {target_url:'', extra_urls:[], use_as_sample:false},
-      live_app_gorev: { target_url: url, gozlem_kapsami: kapsam, bff_otomatik: !!(document.getElementById('jg-bff-otomatik') || {checked: true}).checked },
+      live_app_gorev: { target_url: url, gozlem_kapsami: kapsam, bff_otomatik: !!(document.getElementById('jg-bff-otomatik') || {checked: true}).checked,
+                        mockup_otomatik: !!(document.getElementById('jg-mockup-otomatik') || {checked: false}).checked },
     };
     await fetch('/api/context-filter', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(govde)});
     if (showToastMsg) toast('Canlı uygulama URL kaydedildi', 'info');
@@ -5831,10 +5837,11 @@ function _jgSonucGoster(key) {
   const _egBtn = document.getElementById('jg-egitim-btn'); if (_egBtn) _egBtn.disabled = !!s.hata || _kabulOnly;
   _jgMsg('jg-preview-msg', s.hata ? ('Hata: ' + s.hata) : '', s.hata ? 'err' : '');
   // Akış/kabul/BFF raporlarının AYRI mesaj yuvaları var → birbirini ezmez; entry değişince temizlenir
-  ['jg-preview-msg-akis', 'jg-preview-msg-kabul', 'jg-preview-msg-bff'].forEach(id => _jgMsg(id, ''));
+  ['jg-preview-msg-akis', 'jg-preview-msg-kabul', 'jg-preview-msg-bff', 'jg-preview-msg-mockup'].forEach(id => _jgMsg(id, ''));
   if (s.akis_rapor) _jgAkisRaporGoster(key, s.akis_rapor);
   if (s.kabul) _jgKabulGoster(key, s.kabul);
   if (s.bff) _jgBffGoster(key, s.bff);
+  if (s.mockup) _jgMockupOtoGoster(key, s.mockup, s.markdown || '');
   // İçerik bellekte yoksa (güncelleme/yenileme/hata sonrası) → sunucu deposu/Jira'dan geri yükleme sun
   if (!s.kabulOnly && !((s.markdown || '').trim()) && !_jgMesgul() && /^[A-Z][A-Z0-9]+-\d+$/.test(key)) {
     const m = document.getElementById('jg-preview-msg');
@@ -6225,7 +6232,7 @@ async function _jgPollDurumIc() {
                            // Akış kapatma: rapor + Geri Al yedeği (yalnız bu sonuç akış kapatmaysa)
                            akis_rapor: rs.akis_rapor, akis_onceki: rs.akis_rapor ? eski.akis_onceki : undefined,
                            // Yeni TAM analiz (markdown var, kabul/BFF yok) → bayat kabul raporu düşer
-                           kabul: rs.kabul || ((yeniMd && !rs.bff) ? undefined : eski.kabul), bff: rs.bff || eski.bff,
+                           kabul: rs.kabul || ((yeniMd && !rs.bff) ? undefined : eski.kabul), bff: rs.bff || eski.bff, mockup: rs.mockup || eski.mockup,
                            kabulOnly,
                            // Jira yazım izi, agent 'bu katmanda iş' kararı ve girilen cevaplar taşınır
                            jiraYazildi: eski.jiraYazildi, isVar: eski.isVar, cevaplar: eski.cevaplar };
@@ -6886,6 +6893,45 @@ function _jgMockupStaleKontrol(key, md) {
   }
 }
 
+// Analizle birlikte OTOMATİK üretilen mockup (owner 2026-11-04): iş sonucundaki küçük özet → HTML diskten (/mevcut) yüklenir,
+// panel bağlamı bu task'a bağlanır; mesaj satırında 'Mockup'ı aç' düğmesi.
+let _jgMockupOtoYukleniyor = false;
+function _jgMockupOtoGoster(key, mk, md) {
+  const slot = 'jg-preview-msg-mockup';
+  if (!mk || !mk.ok) {
+    if (mk && mk.neden) _jgMsg(slot, '🧩 Otomatik mockup üretilemedi — ' + escHtml(mk.neden), 'warn');
+    return;
+  }
+  const kaynak = mk.tasarim_kaynagi === 'canli-baseline' ? 'gerçek ekran + ' + (mk.yama_sayisi || 0) + ' yama'
+    : mk.tasarim_kaynagi === 'kabuk-baseline' ? 'uygulama kabuğu + yeni ekran' : 'sıfırdan (' + (mk.tasarim_kaynagi || 'jenerik') + ')';
+  const uyari = mk.eslesmeyen ? ' · ⚠ ' + mk.eslesmeyen + ' yama ekranda eşleşmedi' : '';
+  const not = mk.neden ? ' · ' + escHtml(mk.neden) : '';
+  _jgMsg(slot, `🧩 Mockup analizle birlikte hazır (${kaynak}${uyari})${not} <button class="btn btn-primary btn-xs" type="button" onclick="_jgMockupOtoAc('${escHtml(key)}')" style="margin-left:6px">Mockup'ı aç</button>`, 'ok');
+  // Panel bağlamı: bu task'a ait, güncel analize göre (stale takibi çalışsın)
+  if (_jgGercekKey(_jgMockupEntryKey || '') !== _jgGercekKey(key)) {
+    _jgMockupEntryKey = key; _jgMockupIste = '(otomatik — analizdeki değişiklik)'; _jgMockupBaseAnaliz = md; _jgMockupStale = false;
+    _jgMockupHtml = ''; _jgMockupDiskKey = ''; _jgMockupYabanci = false;
+  }
+}
+async function _jgMockupOtoAc(key) {
+  if (_jgMockupOtoYukleniyor) return;
+  _jgMockupOtoYukleniyor = true;
+  try {
+    if (!_jgMockupHtml) {
+      const d = await (await fetch('/api/jira/gorev/mockup/mevcut')).json();
+      if (!(d && d.var && d.html)) { toast('Mockup dosyası bulunamadı', 'error'); return; }
+      _jgMockupHtml = d.html; _jgMockupDiskKey = ''; _jgMockupYabanci = false;
+      const km = document.getElementById('jg-mockup-kaynak');
+      if (km) km.textContent = (d.tasarim_kaynagi === 'canli-baseline' ? '🧩 gerçek ekran + değişiklik yaması' : d.tasarim_kaynagi === 'kabuk-baseline' ? '🧩 uygulama kabuğu + yeni ekran' : '🌐 ' + (d.tasarim_kaynagi || 'mockup')) + (d.yama_sayisi ? ' · ' + d.yama_sayisi + ' yama' : '') + ' · otomatik';
+    }
+    jgMockupPanelAc();
+    document.getElementById('jg-mockup-sonuc').style.display = '';
+    _jgMockupJiraKilit(false);
+    jgMockupAc();
+  } catch (e) { toast('Mockup açılamadı: ' + _jgHataMetni(e), 'error'); }
+  finally { _jgMockupOtoYukleniyor = false; }
+}
+
 function jgMockupPanelAc() {
   if (!_jgCurrent) return;
   if (_jgMesgul()) { toast('İşlem sürüyor — bitince mockup üretilebilir', 'info'); return; }
@@ -7045,7 +7091,9 @@ async function _jgMockupPoll(isDuzelt) {
   document.getElementById('jg-mockup-sonuc').style.display = '';
   document.getElementById('jg-mockup-geri-btn').style.display = d.geri_al ? '' : 'none';
   // tasarim_kaynagi: canli (gerçek gözlem) · canli_basarisiz (hedef vardı ama gezilemedi → jenerik) · jenerik (hedef yok)
-  const kaynak = d.tasarim_kaynagi === 'canli' ? '🌐 canlı tasarım baz alındı'
+  const kaynak = d.tasarim_kaynagi === 'canli-baseline' ? ('🧩 gerçek ekran + değişiklik yaması' + (d.yama_sayisi ? ' · ' + d.yama_sayisi + ' yama' : ''))
+    : d.tasarim_kaynagi === 'kabuk-baseline' ? '🧩 uygulama kabuğu + yeni ekran içeriği'
+    : d.tasarim_kaynagi === 'canli' ? '🌐 canlı tasarım baz alındı'
     : d.tasarim_kaynagi === 'canli_basarisiz' ? '⚠ canlı gözlem BAŞARISIZ — jenerik tasarım (gerçek ekran gezilemedi)'
     : '⚠ jenerik tasarım (canlı hedef yok)';
   document.getElementById('jg-mockup-kaynak').textContent = kaynak;
@@ -8672,6 +8720,7 @@ function buildContextFilter() {
       extra_urls: splitCtx(liveExtras.join(',')),
       use_as_sample: _ctxUseAsSample,
       gozlem_kapsami: document.getElementById('ctx-live-scope').value.trim(),
+      mockup_otomatik: !!(document.getElementById('ctx-mockup-otomatik') || {checked: false}).checked,
     },
     // live_app_gorev buraya KASITLI olarak dahil edilmiyor — bu ekranda alanı yok.
     // Backend /api/context-filter artık PATCH semantiği kullanıyor: bu anahtar
@@ -11375,6 +11424,8 @@ async function ctxFilterYukle() {
     const authDetails = document.getElementById('ctx-more-auth');
     if (authDetails && (d.live_app_auth?.username || d.live_app_auth?.has_password)) authDetails.open = true;
     ctxSampleToggle(d.live_app?.use_as_sample === true);
+    const _mko = document.getElementById('ctx-mockup-otomatik');
+    if (_mko) _mko.checked = d.live_app?.mockup_otomatik === true;
     updateCtxBadge();
   } catch {}
 }

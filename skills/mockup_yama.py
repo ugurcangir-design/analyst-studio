@@ -287,3 +287,133 @@ def uret(analiz_md: str, url: str, iste: str = "", baslik: str = "", yeni_ekran:
     return {"ok": True, "dosya": yol.name, "yol": str(yol), "html": html, "png": png, "ozet": y["ozet"], "yamalar": y["yamalar"],
             "kaynak_url": yak.get("url", url), "tasarim_kaynagi": "canli-baseline", "eslesmeyen": supheli,
             "yakalama_onbellek": bool(yak.get("yeniden_kullanildi")), "neden": ""}
+
+
+# ── otomatik üretim (Faz 3) ─────────────────────────────────────────────────────────────────────────────
+def otomatik_acik(kapsam: str = "gorev") -> bool:
+    """Bağlam Filtresi: `live_app_gorev.mockup_otomatik` (Task) / `live_app.mockup_otomatik` (Süreç→Teknik). Varsayılan KAPALI
+    (opt-in — owner 2026-11-04: 'bu task için mockup çalış' seçeneği işaretliyse analiz bitince mockup da hazır olsun)."""
+    try:
+        from .base import load_context_filter
+        ctx = load_context_filter() or {}
+        return bool((ctx.get("live_app_gorev" if kapsam == "gorev" else "live_app") or {}).get("mockup_otomatik"))
+    except Exception:
+        return False
+
+
+def sifirdan_fallback_acik() -> bool:
+    return os.getenv("MOCKUP_SIFIRDAN_FALLBACK", "true").strip().lower() not in ("0", "false", "hayir", "no")
+
+
+def otomatik_uret(analiz_md: str, url: str, baslik: str = "", dosya: str = GOREV_MOCKUP_DOSYA, kapsam: str = "gorev",
+                  _uret=None, _kabuk=None, _sifirdan=None) -> dict:
+    """Analiz bitince çağrılır. Sıra: (1) gerçek ekran + yama · (2) ekran yakalanamadı ama aynı uygulamadan taze bir baseline varsa
+    onu KABUK alıp yeni-ekran modu · (3) `MOCKUP_SIFIRDAN_FALLBACK` açıksa eski sıfırdan üretim (Task: `html_mockup.gorev_mockup_uret`).
+    Dönen KÜÇÜK özet (iş durumunda taşınır): {ok, yol, dosya, tasarim_kaynagi, ozet, yama_sayisi, eslesmeyen, png, neden}."""
+    if not (analiz_md or "").strip():
+        return {"ok": False, "neden": "Analiz boş — mockup üretilmedi."}
+    uret_f = _uret or uret
+    if url:
+        r = uret_f(analiz_md, url, baslik=baslik, dosya=dosya)
+        if r.get("ok"):
+            return _ozet(r, "canli-baseline")
+        neden = r.get("neden", "")
+        kabuk = (_kabuk or EY.herhangi_baseline)(url)
+        if kabuk and kabuk.get("baseline"):
+            try:
+                base = Path(kabuk["baseline"]).read_text(encoding="utf-8")
+                y = yama_uret(analiz_md, base, baslik=baslik, yeni_ekran=True)
+                if y["ok"]:
+                    html = mockup_olustur(base, y["yamalar"], y["ozet"], baslik, kabuk.get("url", url))
+                    yol = _kaydet(dosya, html)
+                    png = _png(yol, dosya)
+                    _meta_yaz(dosya, {"kaynak_url": kabuk.get("url", url), "baseline": kabuk["baseline"], "png": png, "ozet": y["ozet"],
+                                      "yamalar": y["yamalar"], "yeni_ekran": True, "baslik": baslik, "ts": time.time(),
+                                      "tasarim_kaynagi": "kabuk-baseline", "yakalama_neden": neden})
+                    return _ozet({"yol": str(yol), "dosya": yol.name, "ozet": y["ozet"], "yamalar": y["yamalar"], "png": png,
+                                  "eslesmeyen": selector_on_kontrol(y["yamalar"], base)}, "kabuk-baseline",
+                                 f"ekran yakalanamadı ({neden}) → aynı uygulamanın kabuğu kullanıldı")
+            except Exception as e:
+                neden = f"{neden}; kabuk modu da düştü: {e}"
+    else:
+        neden = "canlı uygulama hedefi yok"
+    if sifirdan_fallback_acik() and kapsam == "gorev":
+        try:
+            sifirdan = _sifirdan
+            if sifirdan is None:
+                from .html_mockup import gorev_mockup_uret
+                sifirdan = lambda md, b: gorev_mockup_uret(md, b or "Analizdeki değişikliği gösteren ekran", b)  # noqa: E731
+            r = sifirdan(analiz_md, baslik)
+            return {"ok": True, "yol": str(OUTPUT_DIR / r.get("dosya", dosya)), "dosya": r.get("dosya", dosya),
+                    "tasarim_kaynagi": r.get("tasarim_kaynagi", "jenerik"), "ozet": "", "yama_sayisi": 0, "eslesmeyen": [],
+                    "png": "", "neden": f"gerçek ekran kullanılamadı ({neden}) → sıfırdan üretildi"}
+        except Exception as e:
+            return {"ok": False, "neden": f"{neden}; sıfırdan üretim de düştü: {e}"}
+    return {"ok": False, "neden": neden}
+
+
+def _ozet(r: dict, kaynak: str, not_: str = "") -> dict:
+    return {"ok": True, "yol": r.get("yol", ""), "dosya": r.get("dosya", ""), "tasarim_kaynagi": kaynak, "ozet": r.get("ozet", ""),
+            "yama_sayisi": len(r.get("yamalar") or []), "eslesmeyen": len(r.get("eslesmeyen") or []), "png": r.get("png", ""),
+            "neden": not_}
+
+
+def _png(yol: Path, dosya: str) -> str:
+    try:
+        from .html_render import html_to_png
+        p = OUTPUT_DIR / (Path(dosya).stem + ".png")
+        return str(p) if html_to_png(yol, p, genislik=1560, yukseklik=1100) else ""
+    except Exception:
+        return ""
+
+
+def _meta_yaz(dosya: str, meta: dict) -> None:
+    try:
+        (OUTPUT_DIR / (Path(dosya).stem + ".yama.json")).write_text(json.dumps(meta, ensure_ascii=False, indent=1), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def meta_oku(dosya: str = GOREV_MOCKUP_DOSYA) -> dict | None:
+    p = OUTPUT_DIR / (Path(dosya).stem + ".yama.json")
+    try:
+        return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+    except Exception:
+        return None
+
+
+_DUZELT_SISTEM = """\
+Deneyimli UI/UX tasarımcısısın. Elinde bir ekranın GERÇEK HTML'i ve ona uygulanan MEVCUT yama listesi var. Analist bir düzeltme
+istiyor. Yama listesini güncelle: ilgili yamaları değiştir/çıkar, gerekiyorsa yeni yama ekle, ilgisiz yamalara DOKUNMA.
+ÇIKTI — yalnız şu blok (TAM liste, mevcutlar dahil):
+<mockup_yama>{"ozet":"…","yamalar":[{"op":"add|remove|replace|disable|enable|text|attr|style","selector":"…","konum":"…","html":"…",
+"text":"…","attr":{},"style":"…","ac":"…","not":"…"}]}</mockup_yama>
+Kurallar: selector gerçek HTML'e dayanır; mevcut component desenini kopyala; yeni CSS yazma; en fazla 40 yama; geçerli JSON.\
+"""
+
+
+def duzelt(talimat: str, dosya: str = GOREV_MOCKUP_DOSYA, _ai=None) -> dict:
+    """Yama tabanlı mockup'ı analizden AYRI düzeltir: mevcut yama listesi + talimat → yeni liste → yeniden kurulur.
+    Dönen: {ok, dosya, html, boyut, ozet, yamalar, tasarim_kaynagi} ya da {ok:False, neden}."""
+    meta = meta_oku(dosya)
+    if not meta or not meta.get("baseline") or not Path(meta["baseline"]).exists():
+        return {"ok": False, "neden": "Yama tabanlı mockup meta/baseline yok."}
+    base = Path(meta["baseline"]).read_text(encoding="utf-8")
+    dom = EY.sadelestir(base)
+    parcalar = [{"type": "text", "text": "### MEVCUT YAMA LİSTESİ\n```json\n" + json.dumps(
+        {"ozet": meta.get("ozet", ""), "yamalar": meta.get("yamalar", [])}, ensure_ascii=False) + "\n```"},
+        {"type": "text", "text": f"### DÜZELTME TALİMATI\n{talimat.strip()[:1500]}"},
+        {"type": "text", "text": "### EKRAN HTML (sadeleştirilmiş)\n```html\n" + dom + "\n```"}]
+    asama_ayarla("mockup:duzelt")
+    ai = _ai or (lambda s, m: _api_cagri(s, m, max_tokens=_max_tokens(), thinking=False, katman="yardimci", onbellek=False))
+    ham = ai(_DUZELT_SISTEM, [{"role": "user", "content": parcalar}])
+    yamalar, ozet, neden = _yama_ayikla(ham)
+    if not yamalar:
+        return {"ok": False, "neden": neden or "Düzeltme yaması üretilmedi."}
+    html = mockup_olustur(base, yamalar, ozet or meta.get("ozet", ""), meta.get("baslik", ""), meta.get("kaynak_url", ""))
+    yol = _kaydet(dosya, html)
+    png = _png(yol, dosya)
+    _meta_yaz(dosya, {**meta, "ozet": ozet or meta.get("ozet", ""), "yamalar": yamalar, "png": png, "ts": time.time(),
+                      "son_talimat": talimat.strip()[:300]})
+    return {"ok": True, "dosya": yol.name, "html": html, "boyut": yol.stat().st_size, "ozet": ozet, "yamalar": yamalar,
+            "tasarim_kaynagi": meta.get("tasarim_kaynagi", "canli-baseline")}

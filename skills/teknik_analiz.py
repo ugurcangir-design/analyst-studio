@@ -390,6 +390,20 @@ def teknik_analiz_yap(ozel_atla: bool = False) -> tuple[Path, Path]:
         except Exception as _e:
             print(f"  ⚠ Akış kapatma atlandı: {_e}")
 
+    # OTOMATİK MOCKUP (owner 2026-11-04): Bağlam Filtresi `live_app.mockup_otomatik` işaretliyse teknik analiz bitince
+    # gerçek ekran (ana adres) + yama ile output/mockup.html (+png). Best-effort — analizi düşürmez.
+    try:
+        from .mockup_yama import otomatik_acik as _mk_acik, otomatik_uret as _mk_uret, SUREC_MOCKUP_DOSYA as _MK_DOSYA
+        if _mk_acik("surec"):
+            from .base import live_app_urls as _lau
+            _u = _lau()
+            print("  🧩 Otomatik mockup üretiliyor (gerçek ekran + yama)…")
+            _mk = _mk_uret(teknik_yol.read_text(encoding="utf-8"), _u[0] if _u else "", baslik="Teknik analiz",
+                           dosya=_MK_DOSYA, kapsam="surec")
+            print(f"  {'✓' if _mk.get('ok') else '⚠'} Mockup: {_mk.get('dosya') or ''} {_mk.get('tasarim_kaynagi') or ''} {_mk.get('neden') or ''}".rstrip())
+    except Exception as _e:
+        print(f"  ⚠ Otomatik mockup atlandı: {_e}")
+
     return teknik_yol, sorular_yol
 
 

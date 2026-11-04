@@ -223,3 +223,30 @@ def ozet(kayit: dict) -> str:
         return (f"ekran yakalandı ({'önbellek' if kayit.get('yeniden_kullanildi') else 'taze'} · "
                 f"{kayit.get('title', '')[:40]})")
     return f"ekran yakalanamadı — {kayit.get('neden', '')}"
+
+
+def herhangi_baseline(url: str) -> dict | None:
+    """Aynı origin'den en TAZE başarılı yakalamayı döndürür (yeni-ekran KABUĞU için). Yoksa None."""
+    from urllib.parse import urlparse
+    try:
+        origin = urlparse(_url_normalize(url)).netloc
+    except Exception:
+        return None
+    if not origin or not MOCKUP_KAYNAK_DIR.exists():
+        return None
+    adaylar = []
+    for d in MOCKUP_KAYNAK_DIR.iterdir():
+        m = d / "meta.json"
+        if not (m.exists() and (d / "baseline.html").exists()):
+            continue
+        try:
+            k = json.loads(m.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if k.get("ok") and urlparse(str(k.get("url", ""))).netloc == origin:
+            adaylar.append((m.stat().st_mtime, d, k))
+    if not adaylar:
+        return None
+    mt, d, k = max(adaylar, key=lambda a: a[0])
+    return {**k, "dizin": str(d), "baseline": str(d / "baseline.html"), "png": str(d / "live.png") if (d / "live.png").exists() else "",
+            "yas_sn": max(0.0, time.time() - mt)}

@@ -6,7 +6,7 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
-## Otomatik mockup — Faz 1 ekran yakalama + Faz 2 yama üretimi ✅ · Faz 3 akış bağlama 🔄 (owner 2026-11-04)
+## Otomatik mockup — Faz 1 ekran yakalama + Faz 2 yama üretimi + Faz 3 akışa bağlama ✅ (owner 2026-11-04)
 - **Hedef:** Task/Süreç-Teknik analizi bitince mockup OTOMATİK hazır olsun; mockup sıfırdan çizdirilmek yerine mevcut ekranın
   gerçek HTML/CSS/PNG'si baz alınıp model yalnız DEĞİŞİKLİK yamasını üretsin (zaman + token). CLI modu görsel kabul etmediğinden
   PNG modele gitmez; gerçek DOM metin olarak gider.
@@ -33,6 +33,13 @@
   **Gerçek koşu (dev Sports + MBSTRADE-2006):** 17 sn (yakalama önbellek), 7 yama, `tr:has(a[aria-label="Open the matched internal
   record"]) button[aria-label="Assign"]` gibi doğru selector'lar, 5/7 eşleşti (eşlenmemiş satır 1. sayfada yok → legend 'eşleşmedi').
   Test: `tests/test_mockup_yama.py` (AI/yakalama MOCK, 0 token).
+- **Faz 3 — akışa bağlama (opt-in):** Task ekranı 'Bu task için mockup çalış' (`live_app_gorev.mockup_otomatik`) → `_adim_isle` analiz/
+  fe-be-ayir sonunda `_otomatik_mockup` → `mockup_yama.otomatik_uret` (gerçek ekran+yama → kabuk → sıfırdan fallback `MOCKUP_SIFIRDAN_FALLBACK`)
+  → `sonuclar[key].mockup` özeti + meta `otomatik:true`; UI `_jgMockupOtoGoster` satırı + 'Mockup'ı aç' (HTML `/mockup/mevcut`'tan).
+  Süreç ekranı 'Teknik analiz bitince mockup çalış' (`live_app.mockup_otomatik`) → `teknik_analiz_yap` sonunda `output/mockup.html`+`.png`.
+  Manuel 'Ekran Mockup'ı' ve 'Düzelt' de yama-öncelikli (`mockup_yama.uret/duzelt`), eski yol fallback. Test: `tests/test_mockup_akis.py`.
+  **Kaza + ders:** test `/api/context-filter`'a gerçek `reference/`'a yazdı → `context_filter.json` ezildi (parola kaybı, owner yeniden
+  girer); test artık `A.REF_DIR`/`B.CONTEXT_FILTER_PATH`'i geçici dizine alır — bu uca vuran her test aynısını yapmalı.
 
 ## Tam denetim 2026-11-02 — "kural ekliyorum, aynı hata geri geliyor" döngüsünün mekanik nedenleri ✅ (CLAUDE.md "TAM DENETİM 2026-11-02")
 - Owner: 'sürekli hata düzeltiyorum, bunların çok önceden düzelmiş olması gerekirdi'. 5 paralel, kod çalıştırarak doğrulayan
