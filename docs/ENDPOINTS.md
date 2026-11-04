@@ -89,6 +89,8 @@ POST /api/jira/gorev/analiz        Özellik 2: görevi teknik analizle detayland
                                    Analist Notu (context_filter → gorev_analist_notu) doluysa dikkate alır
 POST /api/jira/gorev/is/baslat     ARKA PLAN iş başlat: {adimlar:[{key, mode:analiz|duzelt|formatla|fe-be-ayir|akis-kapat|
                                    kabul-kontrol|bff-kesif, katman?, cevaplar?, canli_hedef?,
+                               mode 'cevap' adımı ayrıca `kardes:{key, katman, markdown, acik_sorular}` taşıyabilir (FE+BE: ortak
+                               sorular kardeş katmana da işlenir → sonuclar[key].kardes); sonuçta `mockup` (otomatik mockup özeti) olabilir
                                    iliskili_keys?, onceki_sorular?, markdown?, talimat?, gorev?}]} → thread; {ok, job}. Panel kapansa/geçilse de sürer.
                                    `onceki_sorular` (cevaplar ile) → soru YAKINSAMASI: cevaplanan sorular tekrar sorulmaz.
 GET  /api/jira/gorev/is/durum      ?job=<id> → {durum:calisiyor|bitti|durduruldu, aktif_key, aktif_index, toplam, sonuclar{}}
@@ -107,7 +109,8 @@ POST /api/jira/gorev/kabul-yorum   {key, markdown} → Kabul Kontrolü raporunu 
 POST /api/jira/gorev/mockup        {iste, analiz, baslik, hedef_tarif} → ARKA PLAN ekran mockup'ı (output/gorev-mockup.html) → {job_id}
 GET  /api/jira/gorev/mockup/durum/<job_id>  polling {durum, gecen_sn, adim_gecen_sn, tasarim_kaynagi}
 POST /api/jira/gorev/mockup/duzelt {talimat} → yalnız mockup'ı düzeltir (analize dokunmaz) · POST …/mockup/geri-al (yedekten)
-GET  /api/jira/gorev/mockup/mevcut diskteki son mockup (restart/yenileme sonrası) · POST …/mockup/jira {key, mode:ek|yeni-task,
+GET  /api/jira/gorev/mockup/mevcut diskteki son mockup (restart/yenileme sonrası) + {tasarim_kaynagi: canli-baseline|kabuk-baseline|…,
+                                   yama_sayisi, ozet, otomatik} (yama tabanlı mockup meta — mockup_yama) · POST …/mockup/jira {key, mode:ek|yeni-task,
                                    baslik?, ust?} → PNG + HTML attachment (ek) ya da ilişkili "Tasarım - …" Task'ı
 POST /api/jira/gorev/fe-be-olustur FE+BE ayrı analizi yazar (Option A): BE→ORİJİNAL task ('BE - '), FE→YENİ Task ('FE - '),
                                    BE→FE Blocks bağı. {key, be_markdown, fe_markdown, summary?, katmanlar?:['be','fe']}
@@ -398,7 +401,8 @@ POST /api/prompts/<id>         Prompt özelleştirme kaydet
 POST /api/prompts/<id>/reset   Varsayılana dön
 GET  /api/context-filter
 POST /api/context-filter       PATCH semantiği (eksik üst-anahtar korunur): keyword/jira/confluence
-                               + live_app + live_app_gorev (target_url/gozlem_kapsami)
+                               + live_app (… + mockup_otomatik: teknik analiz bitince otomatik mockup)
+                               + live_app_gorev (target_url/gozlem_kapsami/bff_otomatik/mockup_otomatik: 'bu task için mockup çalış')
                                + live_app_auth + ozel_prompt + gorev_analist_notu
 GET  /api/history              Son 5 çalıştırma arşivi
 ```

@@ -291,6 +291,39 @@ analizinin **GEREKSİNİMLER → Ekranlar** (EK-XXX, Alan/Buton tabloları) böl
   `/api/mockup/duzelt` + `/api/mockup/geri-al` (yedek/undo), görüntüleyicide "Sohbetle düzelt" satırı — analist
   istediği hâle gelene kadar düzeltir, "✓ Onayla" ile kabul eder; teknik analiz `mockup.html`'i kaynak alır.
 
+## Otomatik mockup — gerçek ekran + yama (`skills/ekran_yakala.py` + `skills/ekran_yakala.js` + `skills/mockup_yama.py`, 2026-11-04)
+Owner isteri: Task / Süreç-Teknik analizi bitince mockup OTOMATİK hazır olsun; sıfırdan çizdirmek yerine mevcut ekran görselleri
+kullanılsın (zaman + token). CLI modu görsel kabul etmediğinden PNG modele gitmez — gerçek **DOM** metin olarak gider.
+- **`ekran_yakala` (0 token):** `yakala(url, bekle, yeniden)` → agent'ın oturumlu profil slotu (`base._slot_al`) + Playwright-core
+  (npx önbelleği; `@playwright/mcp` kurulumuyla gelir, env `PLAYWRIGHT_CORE_DIR`) + kurulu Chrome `channel` → `ekran_yakala.js`
+  sayfayı açar, hedef selector'ü (tablo satırı/form/login/`:text("Access Denied")`) bekler (**`networkidle` kullanılmaz** — SPA
+  polling'i yüzünden gelmez), sayfa İÇİNDE `document.styleSheets` kurallarını serileştirir (**`chrome --dump-dom` yetmez**: MUI/emotion
+  prod `insertRule` → `<style>` boş), `outerHTML` + ekran görüntüsü → `output/mockup-kaynak/<sha1(url|bekle)[:12]>/{baseline.html,
+  live.png, meta.json}`. `baseline.html` script'siz, CSS gömülü, varlık yolları mutlak → çevrimdışı birebir render. Login / Access
+  Denied / boş DOM → `ok=False` + neden (giriş kapısı çağıranın işi). 7 gün önbellek (`EKRAN_YAKALA_ONBELLEK_GUN`). `sadelestir()`
+  model girdisi (~13k token: script/svg/data-/aria-/style atılır, `aria-label`+`disabled`+`class` korunur, tbody 3 örnek satır).
+  `herhangi_baseline(url)` aynı origin'in en taze başarılı yakalaması (yeni-ekran KABUĞU).
+- **`mockup_yama`:** `uret(analiz_md, url, iste, baslik, yeni_ekran, dosya)` → yakala → sadeleştir → TEK Sonnet çağrısı (`yama_uret`,
+  aşama `mockup:yama`, `MOCKUP_YAMA_MAX_TOKENS`=6000; girdi = `ilgili_bolumler()` UI başlıklı bölümler ≤12k + DOM) → `<mockup_yama>`
+  JSON `{ozet, yamalar[{op: add|remove|replace|disable|enable|text|attr|style, selector, konum, html, text, attr, style, ac, not}]}`
+  (≤40, geçersiz elenir) → `mockup_olustur`: baseline + gömülü JSON + **tarayıcı-tarafı uygulayıcı JS** (`querySelectorAll` — tam
+  selector desteği, cssselect bağımlılığı yok; iframe `allow-scripts` ve headless PNG'de çalışır) + redline CSS (yeni yeşil / değişti
+  turuncu / kaldırıldı; rozet yama başına ilk öğede; legend: özet, AC, öğe sayısı, eşleşmeyen kırmızı; `R` vurguyu kapatır) →
+  `output/gorev-mockup.html` + `.png` (`html_render`) + `.yama.json` (meta: yamalar, baseline yolu, kaynak). `selector_on_kontrol`
+  0-token: selector'daki id/class/aria ipucu baseline'da yoksa şüpheli. `yeni_ekran=True`: baseline kabuk, yalnız `main` replace.
+  `duzelt(talimat)`: mevcut yama listesi + talimat → yeni liste (aşama `mockup:duzelt`). `otomatik_uret(md, url, baslik, dosya,
+  kapsam)`: gerçek ekran+yama (`canli-baseline`) → aynı origin kabuğu (`kabuk-baseline`) → `MOCKUP_SIFIRDAN_FALLBACK` (vars. açık,
+  yalnız Task) ile eski `html_mockup.gorev_mockup_uret`. Dönen KÜÇÜK özet (HTML iş durumunda taşınmaz).
+- **Akışa bağlama (opt-in, varsayılan kapalı):** Bağlam Filtresi `live_app_gorev.mockup_otomatik` ('Bu task için mockup çalış') →
+  `app._adim_isle` analiz/fe-be-ayir sonunda `_otomatik_mockup` (FE+BE'de FE md, TEK üretim; `aktif_not`) → `sonuclar[key].mockup`
+  `{ok, tasarim_kaynagi, yama_sayisi, eslesmeyen, neden, key, otomatik}` + `.gorev-mockup-meta.json` `otomatik:true`; UI
+  `_jgMockupOtoGoster` satırı + 'Mockup'ı aç' (HTML `/api/jira/gorev/mockup/mevcut`'tan). `live_app.mockup_otomatik` ('Teknik analiz
+  bitince mockup çalış') → `teknik_analiz_yap` sonunda `output/mockup.html` + `mockup.png`. Manuel 'Ekran Mockup'ı' ve 'Düzelt' de
+  yama-öncelikli (`_gorev_mockup_calistir`), eski yol fallback. Ölçüm (dev Sports + MBSTRADE-2006): 17 sn, 7 yama, 5/7 eşleşti.
+- **Bilinen sınırlar:** kayıtlı agent hesabının ekrana yetkisi yoksa 'Access Denied' (2.6 sn'de tespit); modal içi değişiklikler ilk
+  sürümde liste ekranından türetilir (modal yakalama sonraki adım); baseline şirket UI içeriği taşır → `output/` gitignore.
+- Test: `tests/test_ekran_yakala.py` · `tests/test_mockup_yama.py` · `tests/test_mockup_akis.py` (AI/Node/slot MOCK, 0 token).
+
 ## ID Şeması (aşamalar arası izlenebilirlik)
 ```
 BRD Analizi   : FR-XXX NFR-XXX US-XXX AC-XXX I-XXX
@@ -1056,7 +1089,13 @@ cevap boşsa `ValueError` (çağıran tam üretime düşer). `cevap_hedefli_acik
 mode `cevap`:** adım `markdown` (editör içeriği) doluysa hedefli; boşsa/kapalıysa `mode="analiz"` tam üretim (eski yol, BFF bloğu
 olmadan). Eğitim toplama/telemetri diğer modlarla aynı. **UI:** `jgCevaplariIsle` → `mode:'cevap'` + editör markdown'ı; düğme
 "Cevapları İşle → Analize Uygula"; `jgCevaplariBastanUret` (`_jgCevapBastan`) → `mode:'analiz'` bilinçli tam üretim. FE+BE
-setinde `::FE` sentetik anahtar `_jgGorevCoz` ile gerçek göreve çözülür (duzelt ile aynı). **Köprü `cevap`:** `son_analiz[key].md`
+setinde `::FE` sentetik anahtar `_jgGorevCoz` ile gerçek göreve çözülür (duzelt ile aynı). **Kardeş katman (owner 2026-11-04,
+MBSUATEAM-105):** FE+BE setinde adım `kardes{key, katman, markdown, acik_sorular}` taşır; `ortak_cevaplari_suz(cevaplar, kardes_acik)`
+cevap satırlarını kardeşin KENDİ listesindeki ID'lere göre süzer (ortak soru yoksa kardeşe dokunulmaz — 'aynı sorular için geçerli,
+farklı sorular için değil'); `gorev_cevap_uygula(…, sorular_uret=False)` ikinci soru üretimi yapmadan kardeş md'yi işler, kardeşin
+listesi deterministik yakınsar → `sonuc.kardes` + kardeş deposu (`<key>::FE`) `_gorev_egitim_topla` ile yazılır; UI merge kardeş
+entry'yi günceller, `tsEpoch` ileri damgalar (depo tazelemesi bayat kaydı geri getirmesin). Eskiden yalnız aktif katman işleniyor,
+FE deposu bayat kalıp aynı soruyu geri getiriyordu. **Köprü `cevap`:** `son_analiz[key].md`
 ya da gövdeden `_analiz_bolumu_ayikla` varsa `gorev_cevap_uygula(_orijinal_gorev(gorev), …)`; hata/yoksa `_bridge_uret` (tam).
 **Faz 3 — model katmanları (yalnız CLI modu):** `base.KATMANLAR=("ana","yardimci","hafif")`, `cli_model_katman(k)`: ana →
 `aktif_cli_model()` (CLAUDE_CLI_MODEL) · yardimci → `CLI_MODEL_YARDIMCI` (vars. `sonnet`) · hafif → `CLI_MODEL_HAFIF` (vars.

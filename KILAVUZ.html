@@ -753,6 +753,10 @@ Doküman yükle <span class="arr">→</span> Süreç Analizi <span class="arr">�
       <div class="num">1</div>
       <h4>Onay ekranında HTML Prototip Oluştur</h4>
       <p>Süreç analizindeki <strong>Ekranlar (EK-XXX)</strong> bölümünden tıklanabilir tek dosyalık <code>mockup.html</code> üretir. Paydaşlarla tasarımı kodlama öncesi görsel doğrulamak için ideal.</p>
+      <p><span class="pill new">Yeni</span> <strong>Otomatik mockup (teknik analiz bitince).</strong> Bağlam Filtresi → Canlı Uygulama bölümündeki
+        <em>"Teknik analiz bitince mockup çalış"</em> kutusunu işaretlerseniz teknik analiz tamamlanınca ana adresteki gerçek ekran yakalanır
+        (0 token) ve yalnız değişiklik yaması üretilir → Çıktı Dosyaları'nda <code>mockup.html</code> + <code>mockup.png</code> hazır olur.
+        Değişen öğeler çerçeve + numaralı legend ile işaretlidir (Task Analizi'ndeki Ekran Mockup'ı ile aynı yöntem).</p>
       <p><span class="pill new">Yeni</span> <strong>Canlı uygulamayı baz alır.</strong> Bağlam Filtresi'nde <em>Canlı Uygulama (Chrome MCP)</em> URL'i (ve alt URL'ler) tanımlıysa, prototip önce o ekran(lar)ı <strong>Chrome MCP ile gezip gözlemler</strong> → gerçek uygulamanın <strong>tasarım dilini</strong> (palet, tipografi, spacing) ve <strong>component desenlerini</strong> (sidebar/nav, tablo, form, buton, modal, tab, chip) çıkarır; prototip bunlara <strong>birebir uyar</strong>. Ayrıca <strong>tüm component'ler çalışır</strong>: navigasyon ekran değiştirir, formlar submit'te doğrulama + sonuç gösterir, tablolar örnek veriyle dolar, modal'lar açılıp kapanır. URL yoksa makul bir varsayılan tasarımla üretir (fallback).</p>
     </div>
 
@@ -1074,7 +1078,10 @@ Doküman yükle <span class="arr">→</span> Süreç Analizi <span class="arr">�
             analizin <em>ilgili bölümlerine işlenir</em> (belirsizlik işaretleri kalkar, cevap <code>[K: Analist cevabı]</code> etiketiyle
             kesin bilgi olur), kalan sorular yeniden toplanır. Canlı gözlem ve referans taraması tekrarlanmaz: eskiden ~4 büyük
             çağrı olan tur şimdi 2 küçük çağrıdır (dakikalar yerine ~1 dk). Analiz baştan üretilmeli diyorsanız (örn. cevap akışı
-            kökten değiştirdi) yanındaki <strong>Baştan üret (pahalı)</strong> düğmesini kullanın.</li>
+            kökten değiştirdi) yanındaki <strong>Baştan üret (pahalı)</strong> düğmesini kullanın.
+            <span class="pill new">Yeni</span> <strong>FE+BE setinde kardeş katmana da işlenir:</strong> BE sekmesinde cevapladığınız bir soru
+            FE'de de varsa (aynı soru ID'si), cevap FE analizine de işlenir ve soru iki listeden de düşer — aynı soruyu iki kez
+            cevaplamazsınız. Yalnız bir katmana özgü sorular diğer katmana taşınmaz (FE'ye özel soru FE'de kalır).</li>
         <li><strong>Model katmanları <span class="pill new">Yeni</span></strong> — ana analizler (süreç/teknik/task, FE+BE bölme) seçili
             ana modelle (Opus) çalışır; gözlem fazı, giriş testi, BFF keşfi, kabul kontrolü, soru araştırma ve hedefli düzeltmeler
             daha hafif bir modelle (Sonnet), biçimleme/test senaryosu/açık soru toplama en hafifiyle (Haiku) koşar. Çıktı kalitesi
@@ -1110,7 +1117,18 @@ Doküman yükle <span class="arr">→</span> Süreç Analizi <span class="arr">�
         <li><strong>Akışı Kapat</strong> — analizdeki akış boşluklarını tespit edip bilgi kaynakta varsa ilgili bölümü minimal düzeltir,
             yoksa açık soru açar (tek revizyon, Geri Al mümkün).</li>
         <li><strong>🎨 Ekran Mockup'ı</strong> — yeni isteyi yazın; mevcut uygulamanın tasarım dilini koruyan çalışan HTML mockup üretilir,
-            sohbetle düzeltilir, Jira'ya PNG+HTML ek olarak ya da "Tasarım Task'ı" olarak eklenir.</li>
+            sohbetle düzeltilir, Jira'ya PNG+HTML ek olarak ya da "Tasarım Task'ı" olarak eklenir.
+            <span class="pill new">Yeni</span> <strong>Gerçek ekran + değişiklik yaması:</strong> mockup artık sıfırdan çizilmez — agent canlı
+            uygulamadaki gerçek ekranı (HTML/CSS/PNG) <em>0 token</em> ile yakalar, model yalnız analizin gerektirdiği <em>değişiklikleri</em>
+            küçük bir yama olarak üretir; değişen öğeler mockup'ta renkli çerçeve + sağ altta numaralı legend ile işaretlenir
+            (<kbd>R</kbd> vurguyu açar/kapatır; "eşleşmedi" yazan yama ekranda uygulanamamıştır). Ekran hiç yoksa aynı uygulamanın
+            kabuğu (menü/üst bar) alınıp içerik alanı yeni ekranla doldurulur; o da yoksa eski sıfırdan üretim. Çok daha hızlı (~20 sn)
+            ve ucuz; "Düzelt" de yalnız yama listesini günceller.</li>
+        <li><strong>🧩 Bu task için mockup çalış <span class="pill new">Yeni</span></strong> — Task ekranındaki canlı uygulama ayarlarının
+            altındaki kutuyu işaretlerseniz <em>Teknik Analiz Et</em> / <em>FE+BE Ayrı</em> bittiğinde mockup <strong>otomatik</strong> hazır
+            gelir (FE+BE'de FE analizi baz alınır): analiz panelinde "🧩 Mockup analizle birlikte hazır (gerçek ekran + N yama)" satırı ve
+            <em>Mockup'ı aç</em> düğmesi. Gerçek ekran yakalanamazsa (oturum yok / yetki yok) neden yazılır; üretim analizi düşürmez.
+            Canlı hedefe giriş yapılamıyorsa önce <em>Girişi Doğrula</em>.</li>
         <li><strong>🖥 Ekran Görüntüsü Ekle <span class="pill new">Yeni</span></strong> — analizin adlandırdığı canlı ekranların/modallerin
             görüntüsünü alır (örn. 181'de alanların kalkacağı dört modal) ve bu task'a <strong>PNG ek</strong> olarak yükler; Jira'da
             Attachments'ta görünür. Agent ekranları yalnız görüntüler, hiçbir değişiklik/kayıt yapmaz. Gerçek Jira task'ı gerektirir
