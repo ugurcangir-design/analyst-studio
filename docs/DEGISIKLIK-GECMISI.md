@@ -6,6 +6,22 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## Otomatik mockup — Faz 1: canlı ekran yakalama (`skills/ekran_yakala`) 🔄 (owner 2026-11-04; Faz 2 yama üretimi + Faz 3 akış bağlama sırada)
+- **Hedef:** Task/Süreç-Teknik analizi bitince mockup OTOMATİK hazır olsun; mockup sıfırdan çizdirilmek yerine mevcut ekranın
+  gerçek HTML/CSS/PNG'si baz alınıp model yalnız DEĞİŞİKLİK yamasını üretsin (zaman + token). CLI modu görsel kabul etmediğinden
+  PNG modele gitmez; gerçek DOM metin olarak gider.
+- **Faz 0 spike bulguları:** `chrome --dump-dom` yetmez (MUI/emotion prod `insertRule` → `<style>` boş) → Playwright-core (npx
+  önbelleği, @playwright/mcp ile gelir) + Chrome `channel` + agent'ın oturumlu profil slotu; `networkidle` SPA polling'i yüzünden
+  gelmez → selector beklenir; oturum localStorage'da (ana profil çerezsiz); `document.styleSheets` serileştirilip tek `<style>`
+  olarak gömülünce baseline ÇEVRİMDIŞI birebir render edildi (1560×1100, 3 sn, ham DOM 297k, CSS 206k, sadeleştirilmiş ~13k token).
+- **Faz 1:** `skills/ekran_yakala.js` (Node, `launchPersistentContext(slot)` → goto → selector/Access-Denied bekle → CSSOM + outerHTML +
+  screenshot → `baseline.html`/`live.png`/`meta.json`) + `skills/ekran_yakala.py` (`yakala(url, bekle, yeniden)`: `_slot_al/_slot_birak`,
+  7 gün önbellek `EKRAN_YAKALA_ONBELLEK_GUN`, login/Access-Denied/boş DOM → `ok=False`+neden; `sadelestir()` script/svg/data-/aria-/style
+  atar, `aria-label`+`disabled`+`class` korur, tbody N örnek satır; `hazir()` Node+playwright-core keşfi, env `PLAYWRIGHT_CORE_DIR`).
+  Çıktı `output/mockup-kaynak/<sha1(url|bekle)[:12]>/` (gitignore). Test: `tests/test_ekran_yakala.py` (Node/slot MOCK, 0 token).
+- **Bulgu (ortam):** kayıtlı agent hesabı (`live_app_auth.username`) UAT'ta DEFAULT rolde → mapping ekranları 'Access Denied' (2.6 sn'de
+  tespit, ok=False); owner UAT'ta yetki vermeli ya da hesap değiştirmeli.
+
 ## Tam denetim 2026-11-02 — "kural ekliyorum, aynı hata geri geliyor" döngüsünün mekanik nedenleri ✅ (CLAUDE.md "TAM DENETİM 2026-11-02")
 - Owner: 'sürekli hata düzeltiyorum, bunların çok önceden düzelmiş olması gerekirdi'. 5 paralel, kod çalıştırarak doğrulayan
   denetçi (retrieval · gözlem/BFF · Jira temizliği · prompt tutarlılığı · iş/soru hattı) → ~38 kanıtlı bulgu, 3 commit
