@@ -5754,6 +5754,33 @@ def _gorev_is_calistir(job_id: str) -> None:
                     except ValueError as _ve:   # sözleşme: ValueError → tam üretime düş (hata sayma)
                         logger.warning("Hedefli cevap uygulanamadı (%s): %s — tam üretime düşülüyor", key, _ve)
                         sonuc = None
+                # FE+BE SETİ — KARDEŞ KATMAN (owner 2026-11-04, MBSUATEAM-105): açık sorular iki katmanda ORTAK, cevap da
+                # ikisine işlenmeli. Eskiden yalnız aktif katman (BE) işleniyor, FE analizi + FE sunucu deposu bayat kalıyor →
+                # FE sekmesi/yenileme/depo tazeleme aynı soruyu geri getiriyordu (ve FE metni cevapsız kalıyordu).
+                # YALNIZ ORTAK SORULAR (owner: 'FE ve BE'de aynı sorular için geçerli, farklı sorular için değil'): cevap metni
+                # kardeşin kendi açık soru listesine göre süzülür; ortak soru yoksa kardeşe dokunulmaz, kardeşin listesi kendi
+                # deterministik yakınsamasıyla güncellenir (ana katmanın listesi kardeşe KOPYALANMAZ).
+                _kd = adim.get("kardes") if isinstance(adim.get("kardes"), dict) else None
+                if sonuc is not None and _kd and (_kd.get("markdown") or "").strip():
+                    from skills.jira_gorevleri import ortak_cevaplari_suz
+                    _ortak = ortak_cevaplari_suz(adim.get("cevaplar", ""), _kd.get("acik_sorular", ""))
+                    if not _ortak:
+                        sonuc["kardes"] = {"key": str(_kd.get("key") or ""), "atlandi": "kardeş katmanda ortak soru yok"}
+                        _kd = None
+                if sonuc is not None and _kd and (_kd.get("markdown") or "").strip():
+                    with _gorev_is_lock:
+                        job["aktif_not"] = "Ortak sorular kardeş katmana (" + str(_kd.get("katman") or "").upper() + ") da işleniyor"
+                    try:
+                        _ks = gorev_cevap_uygula(gorev, _kd.get("markdown", ""), _ortak,
+                                                 _kd.get("acik_sorular", ""), sorular_uret=False)
+                        sonuc["kardes"] = {"key": str(_kd.get("key") or ""), "katman": str(_kd.get("katman") or ""),
+                                           "markdown": _ks.get("markdown", ""), "acik_sorular": _ks.get("acik_sorular", "")}
+                    except Exception as _ke:
+                        logger.warning("Kardeş katmana cevap uygulanamadı (%s): %s", _kd.get("key"), _ke)
+                        sonuc["kardes"] = {"key": str(_kd.get("key") or ""), "hata": str(_ke)[:200]}
+                    finally:
+                        with _gorev_is_lock:
+                            job["aktif_not"] = ""
                 if sonuc is None:
                     mode = "analiz"
                     # Tam üretim: ilk analizin BFF raporu önbellekten (yeniden keşif YOK — kota). AYNI anahtar
@@ -5830,6 +5857,10 @@ def _gorev_is_calistir(job_id: str) -> None:
             # (C) sunucu deposu + (A) few-shot yakalama — Jira'ya yazılmasa da toplansın (arka plan)
             if mode != "kabul-kontrol":   # kabul raporu eğitim örneği değil
                 _gorev_egitim_topla(key, gorev.get("summary", ""), adim.get("katman", ""), mode, sonuc)
+                _kr = sonuc.get("kardes") if isinstance(sonuc.get("kardes"), dict) else None
+                if _kr and _kr.get("key") and (_kr.get("markdown") or "").strip():   # kardeş katmanın deposu da tazelensin
+                    _gorev_egitim_topla(_kr["key"], gorev.get("summary", ""), _kr.get("katman", ""), mode,
+                                        {"markdown": _kr["markdown"], "acik_sorular": _kr.get("acik_sorular", "")})
             _telemetri_olay("gorev_analiz", "ok", int((time.time() - _bas) * 1000),
                             model=_model, ai_modu=_ai_modu, baglam={"gorev": key, "islem": adim.get("mode", "analiz")},
                             token_bas=_tbas, kalite=_kalite_vekili(sonuc, mode))
@@ -5911,6 +5942,10 @@ def jira_gorev_is_baslat():
                       "markdown": a.get("markdown", ""), "talimat": a.get("talimat", ""),
                       "gorev": a.get("gorev") if isinstance(a.get("gorev"), dict) else None,
                       "canli_hedef": str(a.get("canli_hedef") or "").strip(),
+                      # FE+BE kardeş katman (mode cevap): {key, katman, markdown, acik_sorular} — yalnız ORTAK sorular işlenir
+                      "kardes": ({"key": str(a["kardes"].get("key") or "").strip(), "katman": str(a["kardes"].get("katman") or "").lower(),
+                                  "markdown": str(a["kardes"].get("markdown") or ""), "acik_sorular": str(a["kardes"].get("acik_sorular") or "")}
+                                 if isinstance(a.get("kardes"), dict) else None),
                       "summary": (a.get("gorev") or {}).get("summary", "")})
     if not temiz:
         return jsonify({"ok": False, "error": "Geçerli adım yok"}), 400

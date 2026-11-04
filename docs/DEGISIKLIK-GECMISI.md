@@ -6,6 +6,16 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## FE+BE 'Cevapları İşle' kardeş katmana da işlenir — yalnız ORTAK sorular ✅ (owner 2026-11-04, MBSUATEAM-105)
+- **Bulgu:** BE'de cevaplanan Q-T-001 FE sekmesinde tekrar çıkıyordu. İş yalnız aktif katmanı işliyor; FE analizi + FE deposu
+  (`MBSUATEAM-105::FE`, 13:23) bayat; UI kardeş senkronu depo tazelemesine yeniliyor; FE metni cevapsız (Competition–Set Market
+  Multiplier arası yazıyordu, cevap Sport–Group arası).
+- **Düzeltme:** adım `kardes{key,katman,markdown,acik_sorular}` → `ortak_cevaplari_suz` (yalnız kardeşte bulunan ID'ler; yoksa atlanır)
+  → `gorev_cevap_uygula(sorular_uret=False)` → `sonuc.kardes` + kardeş deposu; UI merge kardeş entry + `tsEpoch`. Owner kriteri: aynı
+  sorular için geçerli, farklı sorular için değil. Test: `tests/test_cevap_kardes.py` (12 kontrol).
+- **105 onarımı:** owner'ın BE cevabı (seçenek a) FE analizine `gorev_cevap_uygula` ile uygulanıp FE deposu güncellendi (13:33); UI'da FE
+  sekmesi açılınca depo tazelemesi yeni içeriği getirir, Q-T-001 düşer.
+
 ## Otomatik mockup — Faz 1 ekran yakalama + Faz 2 yama üretimi + Faz 3 akışa bağlama ✅ (owner 2026-11-04)
 - **Hedef:** Task/Süreç-Teknik analizi bitince mockup OTOMATİK hazır olsun; mockup sıfırdan çizdirilmek yerine mevcut ekranın
   gerçek HTML/CSS/PNG'si baz alınıp model yalnız DEĞİŞİKLİK yamasını üretsin (zaman + token). CLI modu görsel kabul etmediğinden

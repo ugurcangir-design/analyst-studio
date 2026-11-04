@@ -1613,11 +1613,14 @@ _CEVAP_TALIMAT = (
     + "\n### ANALİSTİN CEVAPLARI\n")
 
 
-def gorev_cevap_uygula(gorev: dict, mevcut_markdown: str, cevaplar: str, onceki_sorular: str = "") -> dict:
+def gorev_cevap_uygula(gorev: dict, mevcut_markdown: str, cevaplar: str, onceki_sorular: str = "",
+                       sorular_uret: bool = True) -> dict:
     """Kota Faz 2 — 'Cevapları İşle' HEDEFLİ: analizi baştan üretmek (tam bağlam + gözlem + öz-çözümleme = ~3-4 büyük
     çağrı) yerine (1) mevcut analize cevapları `gorev_analiz_duzelt` ile işler (yardımcı katman, küçük prompt),
     (2) kalan açık soruları `_gorev_acik_sorular_uret` ile YAKINSAR (hafif katman). Canlı gözlem/RAG YENİDEN YAPILMAZ —
     cevaplar yeni gözlem gerektirmeyen analist bilgisidir. Mevcut analiz yoksa ValueError → çağıran tam üretime düşer.
+    `sorular_uret=False` (FE+BE KARDEŞ katman — owner 2026-11-04: BE'de cevaplanan soru FE'de tekrar çıkıyordu): soru üretimi
+    yapılmaz, yalnız deterministik yakınsama (`_cevaplanan_sorulari_dus`); çağıran ana katmanın listesini paylaştırır.
     Dönen: {markdown, acik_sorular, hedefli: True}."""
     cevaplar = (cevaplar or "").strip()
     if not cevaplar:
@@ -1630,6 +1633,10 @@ def gorev_cevap_uygula(gorev: dict, mevcut_markdown: str, cevaplar: str, onceki_
         raise ValueError("Cevap uygulama boş sonuç döndü.")
     yeni = yonetici_ozetini_cikar(yeni)
     acik = ""
+    if not sorular_uret:
+        acik = _cevaplanan_sorulari_dus(onceki_sorular or "", cevaplar) if (onceki_sorular or "").strip() else ""
+        ozet = yonetici_ozeti_olustur(yeni, acik_sorular=acik) if ozet_vardi else ""
+        return {"markdown": rag + ozet + yeni, "acik_sorular": acik, "hedefli": True}
     try:
         acik = _gorev_acik_sorular_uret(yeni, gorev, cevaplar=cevaplar, onceki_sorular=onceki_sorular or "")
     except Exception as e:
@@ -1723,6 +1730,25 @@ def _gorev_acik_sorular_uret(teknik_metni: str, gorev: dict,
 _SORU_BASLIK = re.compile(r"(?mi)^#{1,4}\s*(Q-?T?-?\d+)\b")
 # Ayraç opsiyonel (E#8): tek-kutu serbest metin `Q-T-001 cevabım` (iki nokta/tire yok) de cevap sayılır
 _CEVAP_ID = re.compile(r"(?mi)^\s*[-*•]?\s*\*{0,2}(Q-?T?-?\d+)\*{0,2}\s*(?:[:\-–]|\s(?=\S))")
+
+
+def ortak_cevaplari_suz(cevaplar: str, kardes_acik: str) -> str:
+    """FE+BE KARDEŞ katman için cevap metnini süzer: yalnız kardeşin açık soru listesinde `### <ID>:` başlığıyla BULUNAN
+    (ID normalize: Q-T-001 == Q-001 == QT1) soruların cevap satırları kalır. Owner 2026-11-04: 'FE ve BE'de AYNI sorular için
+    geçerli olmalı, farklı sorular için değil' — kardeşte olmayan soruya cevap taşınmaz. Boş → kardeş işlenmez."""
+    def _norm(i: str) -> str:
+        m = re.search(r"(\d+)", i.upper().replace(" ", ""))
+        return f"Q{int(m.group(1))}" if m else i.upper()
+
+    kardes_idler = {_norm(m.group(1)) for m in re.finditer(r"(?mi)^#{1,4}\s*(Q-?T?-?\d+)\b", kardes_acik or "")}
+    if not kardes_idler:
+        return ""
+    satirlar = []
+    for sat in (cevaplar or "").splitlines():
+        m = _CEVAP_ID.match(sat)
+        if m and _norm(m.group(1)) in kardes_idler:
+            satirlar.append(sat)
+    return "\n".join(satirlar).strip()
 
 
 def _cevaplanan_sorulari_dus(acik: str, cevaplar: str, onceki_sorular: str = "") -> str:

@@ -6243,6 +6243,17 @@ async function _jgPollDurumIc() {
         const kardes = /::FE$/.test(k) ? eski.feBeKaynak : (k + '::FE');
         if (_jgAnalizSeti[kardes]) _jgAnalizSeti[kardes].acik_sorular = rs.acik_sorular;
       }
+      // Kardeş katmana da işlenmiş cevap (mode 'cevap', FE+BE): kardeşin markdown'ı + soruları güncellenir; tsEpoch ileri
+      // damgalanır ki depo tazelemesi (_jgDepodanTazele) eski kaydı geri getirmesin (depo da aynı işte yazıldı).
+      if (rs.kardes && rs.kardes.key && _jgAnalizSeti[rs.kardes.key]) {
+        const ke = _jgAnalizSeti[rs.kardes.key];
+        if ((rs.kardes.markdown || '').trim()) {
+          ke.markdown = rs.kardes.markdown; ke.acik_sorular = rs.kardes.acik_sorular || ''; ke.cevaplar = eski.cevaplar;
+          ke.tsEpoch = Math.floor(Date.now() / 1000) + 2;
+        } else if (rs.kardes.hata) {
+          toast('Kardeş katmana cevap işlenemedi: ' + rs.kardes.hata, 'warn');
+        }   // rs.kardes.atlandi: kardeşte ortak soru yok → sessiz (kardeşin listesi/metni olduğu gibi kalır)
+      }
     }
   }
   if (d.durum === 'calisiyor') {
@@ -6498,9 +6509,18 @@ async function jgCevaplariIsle() {
   const markdown = (document.getElementById('jg-preview-editor').value || '').trim();
   const bastan = !!window._jgCevapBastan; window._jgCevapBastan = false;
   const hedefli = !!markdown && !bastan;
+  // FE+BE seti: açık sorular ORTAK → cevaplar KARDEŞ katmanın analizine de işlenir (owner 2026-11-04: BE'de cevaplanan
+  // soru FE sekmesinde tekrar çıkıyordu; FE metni cevapsız kalıyordu). Kardeşin güncel markdown'ı adımla gönderilir.
+  let kardes = null;
+  if (hedefli && s.feBeKaynak) {
+    const kk = /::FE$/.test(key) ? s.feBeKaynak : (key + '::FE');
+    const ks = _jgAnalizSeti[kk];
+    if (ks && (ks.markdown || '').trim() && !ks.hata) kardes = { key: kk, katman: ks.katman || (/::FE$/.test(kk) ? 'fe' : 'be'), markdown: ks.markdown, acik_sorular: ks.acik_sorular || '' };   // yalnız ORTAK sorular işlenir (sunucu süzer)
+  }
   _jgIsBaslat([{ key: key, mode: hedefli ? 'cevap' : 'analiz', katman: s.katman || '', iliskili_keys: digerleri,
                  markdown: hedefli ? markdown : '',
                  cevaplar: cev, onceki_sorular: s.acik_sorular || '',   // YAKINSAMA: önceki soruları geç
+                 kardes,
                  gorev: _jgGorevCoz(key) }],   // GERÇEK görev (routing sentetik key'de kalır)
              hedefli ? 'Cevaplar analize işleniyor' : 'Cevaplara göre baştan yazılıyor', key, false);   // seti korunur (merge)
 }
