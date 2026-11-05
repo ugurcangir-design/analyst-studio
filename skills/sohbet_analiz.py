@@ -109,6 +109,11 @@ _SOHBET_SISTEM = (
     "butonlarıyla formal analizi üretebileceğini HATIRLAT.\n"
     "- Türkçe yaz; teknik terimler İngilizce kalabilir.\n\n"
     "ÇALIŞMA BİÇİMİ (analist adım adım ilerler — bunlara UY):\n"
+    "- İSTENEN ÇIKTIYI ÜRET: analist somut bir çıktı istediyse (örnek analiz, tespit listesi, karşılaştırma tablosu, kabul "
+    "kriterleri, ekran listesi) 'kısa yanıt' kuralı o tur için GEÇERSİZDİR — istenen çıktıyı eldeki kanıtla (gözlem raporu, "
+    "referans, BFF raporu) EKSİKSİZ üret; 'bir sonraki turda yapalım' deme, bilinmeyeni `[K: ❓ Belirsiz]` işaretle.\n"
+    "- KARAR VER: analist 'karar ver / karar vererek ilerleyelim' dediyse soru sormak yerine kararı ver (ne, neden, kanıt); "
+    "yalnız kararı GERÇEKTEN değiştirecek tek belirsizlik varsa onu sor.\n"
     "- SIRAYLA SOR: aynı anda EN FAZLA BİR (zorunluysa iki) netleştirici soru sor; analist cevaplayınca "
     "bir sonrakine geç. Soru listesi dökme.\n"
     "- BRD YÜKLENMEZ, REFERANSTA HAZIRDIR: 'BRD'deki X isteri' dendiğinde REFERANS BAĞLAM'daki BRD "
@@ -215,6 +220,24 @@ def _cevaplanan_sorular_metni() -> str:
 
 
 # ─── Sohbet gözlem hedefi ────────────────────────────────────────────────────
+
+# Gözlem turu yanıt talimatı (owner 2026-11-05: 'isteklerimi yapmıyor — tespit ve örnek analiz istedim'): eski talimat
+# 'raporu KISA sohbet yanıtına çevir, sonunda bir sonraki adımı öner' diyordu → model analistin asıl isteğini (tespit +
+# örnek analiz + karar) bırakıp özet + yeni tur önerisiyle yetiniyordu. Rapor KANIT'tır, çıktı analistin İSTEĞİ'dir.
+_GOZLEM_TURU_TALIMAT = (
+    "### 🌐 CANLI GÖZLEM TURU\nYukarıdaki gözlem raporu analistin SON mesajı için az önce yapıldı. Rapor senin KANIT kaynağındır; "
+    "yanıtın ise analistin SON MESAJINDA İSTEDİĞİ ÇIKTIDIR — raporu özetlemekle yetinme.\n"
+    "- Analist ne istediyse onu TAM üret: 'tespit' dediyse gözlenen ekran/alan/davranışların tespit listesi; 'örnek analiz' "
+    "dediyse bulunan HER ekran için örnek analiz (aşağıdaki şablon); 'tablo' dediyse tablo; 'kabul kriteri' dediyse kriterler. "
+    "İstek birden çok parçaysa hepsini yaz, hiçbirini sonraki tura erteleme.\n"
+    "- 'Karar vererek ilerleyelim' dediyse KARARI SEN VER (değişiklik gerekli/gerekmez + gerekçe + kanıt); soruyla geri atma.\n"
+    "- Raporda olmayanı uydurma; gözlenemeyen noktayı o maddede `[K: ❓ Belirsiz]` ile işaretle, 'gözlenemedi' de ve geç — "
+    "yanıtı 'hâlâ eksik' bölümüne çevirme.\n"
+    "- Yeni gözlem turu önerisi EN SONDA en fazla 1-2 satır (hangi ekran, ne denenecek); yanıtın ana gövdesi istenen çıktıdır.\n"
+    "- ÖRNEK ANALİZ ŞABLONU (ekran başına, kısa ama eksiksiz): **Ekran** (ad · rota · modal/alan) · **Mevcut durum** (gözlem + "
+    "`[K:]`) · **İster** (bu ekranda ne değişmeli) · **FE değişikliği** · **BE değişikliği** (uç/alan/validasyon; Swagger/gözlem "
+    "kanıtı) · **Kabul kriterleri** (2-4 madde) · **Açık sorular** (varsa) · **Karar** (değişiklik gerekli / gerekmez)."
+)
 
 _PLAN_KC = 1_800   # önceki agent yanıtından taşınan plan (SON kısmı — öneri genelde sonda)
 
@@ -329,10 +352,7 @@ def sohbet_mesaj(metin: str, gozlem: bool = False, ekler: list[str] | None = Non
                                      max_turns=_sohbet_gozlem_tur(), tur_devam=_sohbet_gozlem_devam())
         if gozlem_raporu.get("ok") and gozlem_raporu.get("md"):
             mesajlar.append({"role": "user", "content": [{"type": "text", "text": _gz.rapor_blogu(gozlem_raporu)},
-                {"type": "text", "text": (
-                    "### 🌐 CANLI GÖZLEM TURU\nYukarıdaki gözlem raporu analistin SON mesajı için az önce yapıldı. Raporu KISA "
-                    "sohbet yanıtına çevir: ekran/kolon/buton/servis ne gözlendiyse onu yaz; raporda olmayanı yazma. Rapor "
-                    "biçimi değil, sohbet tonu; sonunda bir sonraki adımı öner.")}]})
+                {"type": "text", "text": _GOZLEM_TURU_TALIMAT}]})
         else:
             mesajlar.append({"role": "user", "content": [{"type": "text", "text": _gz.gozlem_yok_blogu(gozlem_raporu.get("neden", ""))},
                 {"type": "text", "text": "(Analist canlı gözlem istedi ama gözlem yapılamadı — nedenini kısaca belirt, referanslara dayanarak yanıtla.)"}]})

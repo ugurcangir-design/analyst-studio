@@ -98,6 +98,12 @@ chk("sohbet_mesaj(gozlem=True): rapor_al özeti + canlı bloğu planı taşır, 
     "Edit Sport aç" in gz_kw.get("ozet", "") and "Edit Sport aç" in gz_kw.get("canli", "")
     and gz_kw.get("max_turns") == 70 and gz_kw.get("tur_devam") == 1, gz_kw.keys())
 
+# 6) gözlem turu yanıt talimatı: rapor = kanıt, yanıt = analistin isteği (tespit/örnek analiz/karar) — özetle yetinme
+chk("gözlem turu talimatı isteği yerine getirmeyi ve kararı şart koşar",
+    "İSTEDİĞİ ÇIKTIDIR" in SA._GOZLEM_TURU_TALIMAT and "KARARI SEN VER" in SA._GOZLEM_TURU_TALIMAT
+    and "ÖRNEK ANALİZ ŞABLONU" in SA._GOZLEM_TURU_TALIMAT and "KISA sohbet yanıtına çevir" not in SA._GOZLEM_TURU_TALIMAT)
+chk("sistem promptu: istenen çıktıyı üret + karar ver", "İSTENEN ÇIKTIYI ÜRET" in SA._SOHBET_SISTEM and "KARAR VER" in SA._SOHBET_SISTEM)
+
 # 4) URL yoksa override None → motor kendi (gözlemsiz) yoluna düşer
 B.CONTEXT_FILTER_PATH.write_text(json.dumps({"live_app": {}}), encoding="utf-8")
 chk("URL yoksa sohbet üretim canlı bloğu None", SA._uretim_canli_baglami(oturum) is None)

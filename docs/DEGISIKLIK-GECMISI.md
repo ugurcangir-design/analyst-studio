@@ -6,6 +6,7 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## İnteraktif Analiz — gözlem turu yanıtı analistin isteğini üretir (2026-11-05): `_GOZLEM_TURU_TALIMAT` rapor=kanıt, yanıt=istenen çıktı (tespit / ekran başına örnek analiz şablonu / karar); sistem promptuna 'İSTENEN ÇIKTIYI ÜRET' + 'KARAR VER'.
 ## İnteraktif Analiz — sohbete ekran görüntüsü eki (2026-11-05): 📎 / ⌘V ile görsel eklenir (`POST /api/sohbet/ek`, `GET /api/sohbet/ek/<ad>`, mesajda `ekler:[ad]`); API modunda image bloğu, CLI modunda yalnız o çağrıda `--tools Read --allowedTools Read --add-dir` ile model dosyayı Read'le açar (`_api_cagri(okunur_dosyalar=)`); yalnız son mesajın eki gider. Test: `tests/test_sohbet_ek.py`.
 ## İnteraktif Analiz — 🌐 turu agent'ın önerdiği planı taşır + modal gözlem kuralı + tur bütçesi (2026-11-05): gözlemciye yalnız analist mesajı gidiyordu, önceki turda önerilen 'Edit Sport aç → 1,111111 yaz' planı hiç gitmiyordu; gözlemci modal açmayı yazma işlemi sayıp atlıyordu; 40 tur 8 ekranı listelemeye gidiyordu. `sohbet_analiz._gozlem_hedefi` (mesaj + önceki agent yanıtı), `gozlem._RAPOR_FORMAT` 'MODAL/FORM = GÖZLEM HEDEFİ' + 'ÖNCE DERİNLİK', `_dogrulama_listesi` modal maddesi, `SOHBET_GOZLEM_MAX_TUR`=70 / `SOHBET_GOZLEM_TUR_DEVAM`=1, `rapor_al(tur_devam=)`. Test: `tests/test_sohbet_gozlem_hedef.py`.
 ## İnteraktif Analiz — canlı gözlem hedefi SOHBETTEN, Süreç ekranının gözlem kapsamı karışmaz ✅ (owner 2026-11-05)
