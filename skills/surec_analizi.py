@@ -37,11 +37,14 @@ def _surec_prompt_olustur(ozel_atla: bool = False) -> str:
 
 
 def surec_analizi_yap(icerik_override: list | None = None,
-                      dosya_adi_override: str = "", ozel_atla: bool = False) -> Path:
+                      dosya_adi_override: str = "", ozel_atla: bool = False,
+                      canli_baglam_override: str | None = None) -> Path:
     """Süreç analizi üretir. Normalde `input/` dokümanını okur; `icerik_override`
     verilirse (İnteraktif Analiz ekranı — sohbet metni) onu girdi kabul eder ve
     doküman yüklemesini atlar. `ozel_atla` özel promptu yok sayar (varsayılan prompt).
-    RAG (otomatik alaka), canlı gözlem, domain kuralları, post-işleme AYNEN korunur."""
+    RAG (otomatik alaka), canlı gözlem, domain kuralları, post-işleme AYNEN korunur.
+    `canli_baglam_override` verilirse canlı gözlem görevi olarak o kullanılır (İnteraktif Analiz — hedef sohbetten,
+    Süreç ekranının gözlem kapsamı miras alınmaz); None → Bağlam Filtresi `live_app` (doküman akışı aynen)."""
     print("Süreç analizi başlatılıyor...")
     if icerik_override is not None:
         icerik = icerik_override
@@ -62,7 +65,7 @@ def surec_analizi_yap(icerik_override: list | None = None,
         if ref_bloklari:
             icerik_parcalari.extend(ref_bloklari)
 
-    canli_baglam = canli_uygulama_baglami_hazirla()
+    canli_baglam = canli_baglam_override if canli_baglam_override is not None else canli_uygulama_baglami_hazirla()
     if canli_baglam:
         # Faz 1 (kota): gözlem ayrı küçük-promptlu fazda → rapor; analiz çağrısı tarayıcı kullanmaz.
         from . import gozlem as _gz

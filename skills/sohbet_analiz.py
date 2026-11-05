@@ -116,8 +116,12 @@ def _canli_tabanli_baglam(hedef_tarif: str) -> str | None:
     p = urlparse(urls[0])
     if not (p.scheme and p.netloc):
         return None
+    # kapsam_birlestir=False: sohbet mesajı kapsamın KENDİSİ — Süreç ekranının Bağlam Filtresi'ndeki (başka doküman için
+    # girilmiş) 'gözlem kapsamı' EKLENMEZ. Aksi hâlde gözlemci analistin istediği ekran yerine o eski kapsamı arıyordu
+    # (bulgu 2026-11-05: 'Sport Basic Data ekranlarını tara' dendi, rapor 'Match Status filtresi / Match Info kolonu' aradı).
     return canli_uygulama_baglami_hazirla(base_url_override=f"{p.scheme}://{p.netloc}",
-                                          hedef_tarif=(hedef_tarif or "").strip() or "Ana ekran")
+                                          hedef_tarif=(hedef_tarif or "").strip() or "Ana ekran",
+                                          kapsam_birlestir=False)
 
 
 def _cevaplanan_sorular_metni() -> str:
@@ -433,19 +437,41 @@ def _uretim_girdisi(oturum: dict) -> list:
         + (("\n\n### Analistin kesin cevapları (Sorular defteri — açık soru olarak TEKRAR SORMA)\n" + cevaplar) if cevaplar else ""))}]
 
 
+_HEDEF_MESAJ_KC = 400
+
+
+def _sohbet_hedef_tarifi(oturum: dict) -> str:
+    """Üretim gözlemi için hedef tarifi SOHBETTEN: analistin mesajları (son 6, her biri kırpılmış). Süreç ekranının
+    Bağlam Filtresi'ndeki gözlem kapsamı (başka doküman için girilmiş olabilir) KULLANILMAZ."""
+    mesajlar = [m.get("metin", "").strip() for m in (oturum.get("mesajlar") or []) if m.get("rol") == "analist"]
+    mesajlar = [m[:_HEDEF_MESAJ_KC] for m in mesajlar if m][-6:]
+    if not mesajlar:
+        return ""
+    return ("Sohbette analistin tarif ettiği ekranlar/alanlar (hedef bunlardır; menüden bul):\n"
+            + "\n".join(f"- {m}" for m in mesajlar))
+
+
+def _uretim_canli_baglami(oturum: dict) -> str | None:
+    """Sohbetten üretimde canlı görev bloğu: miras ANA adres + sohbet hedefi (kapsam_birlestir=False).
+    URL yoksa None → motor gözlemsiz üretir (doküman akışındaki davranışla aynı)."""
+    return _canli_tabanli_baglam(_sohbet_hedef_tarifi(oturum))
+
+
 def surec_uret(oturum: dict | None = None) -> Path:
-    """Sohbetten süreç analizi üretir (özel prompt YOK, canlı gözlem VAR — miras config).
+    """Sohbetten süreç analizi üretir (özel prompt YOK, canlı gözlem VAR — miras ANA adres, hedef SOHBETTEN).
     surec-analizi.md yazar → Çıktılar/Revizyon/Teknik devreye girer."""
     oturum = oturum or oturum_oku()
     from .surec_analizi import surec_analizi_yap
     return surec_analizi_yap(icerik_override=_uretim_girdisi(oturum),
-                             dosya_adi_override="interaktif-analiz", ozel_atla=True)
+                             dosya_adi_override="interaktif-analiz", ozel_atla=True,
+                             canli_baglam_override=_uretim_canli_baglami(oturum))
 
 
-def teknik_uret() -> tuple[Path, Path]:
-    """surec-analizi.md → teknik-analiz.md (özel prompt YOK, canlı gözlem VAR)."""
+def teknik_uret(oturum: dict | None = None) -> tuple[Path, Path]:
+    """surec-analizi.md → teknik-analiz.md (özel prompt YOK, canlı gözlem VAR — hedef SOHBETTEN)."""
+    oturum = oturum or oturum_oku()
     from .teknik_analiz import teknik_analiz_yap
-    return teknik_analiz_yap(ozel_atla=True)
+    return teknik_analiz_yap(ozel_atla=True, canli_baglam_override=_uretim_canli_baglami(oturum))
 
 
 def _oturuma_ait_mi(dosya: str, oturum: dict | None = None) -> bool:

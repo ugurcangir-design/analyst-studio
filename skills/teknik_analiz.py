@@ -182,9 +182,10 @@ def _denetim_bolumu_olustur(kapsam: dict, denetim_notlari: str) -> str:
     )
 
 
-def teknik_analiz_yap(ozel_atla: bool = False) -> tuple[Path, Path]:
+def teknik_analiz_yap(ozel_atla: bool = False, canli_baglam_override: str | None = None) -> tuple[Path, Path]:
     """surec-analizi.md → teknik-analiz.md + acik-sorular.md (+ RTM/test). `ozel_atla`
-    özel promptu yok sayar (İnteraktif Analiz ekranı — hep varsayılan prompt)."""
+    özel promptu yok sayar (İnteraktif Analiz ekranı — hep varsayılan prompt). `canli_baglam_override`
+    verilirse canlı gözlem görevi o olur (sohbet hedefi; Süreç ekranı gözlem kapsamı miras alınmaz)."""
     print("Teknik analiz başlatılıyor...")
     surec_dosya = OUTPUT_DIR / "surec-analizi.md"
     if not surec_dosya.exists():
@@ -210,7 +211,7 @@ def teknik_analiz_yap(ozel_atla: bool = False) -> tuple[Path, Path]:
         ref_bloklari, kullanilan_referanslar = _ref_bloklari_olustur(ref_dosyalar, sorgu_metni=surec_sorgu)
         stable_bloklar.extend(ref_bloklari)
 
-    canli_baglam = canli_uygulama_baglami_hazirla()
+    canli_baglam = canli_baglam_override if canli_baglam_override is not None else canli_uygulama_baglami_hazirla()
     gozlem_rapor: dict | None = None
     if canli_baglam:
         # Faz 1 (kota): gözlem ayrı küçük-promptlu fazda → rapor; analiz çağrısı tarayıcı kullanmaz.

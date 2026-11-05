@@ -14,7 +14,7 @@ akar** (Jira aktarma Çıktı Dosyaları ekranındaki mevcut butonlarla — ekra
 Bağlam Filtresi + uygulama giriş bilgileri (paylaşılan `context_filter.json`). **YOK:** doküman yükleme · Süreç/Teknik **özel
 promptu** (hep varsayılan — `ozel_atla=True` özel promptu yok sayar) · manuel gözlem kapsamı alanı. **VAR:** analiz üretiminde
 **canlı uygulama gözlemi** (miras `live_app` config; hedef sohbetten türetilir). Sohbet turu canlı gözlem YAPMAZ (hızlı Q&A);
-gözlem yalnız üretim adımlarında. **Global süreç workflow'una DOKUNMAZ** (kendi içinde inline — iki ekran tek state çakışmaz).
+gözlem yalnız üretim adımlarında. **GÖZLEM HEDEFİ = SOHBET (owner 2026-11-05):** `_canli_tabanli_baglam` `canli_uygulama_baglami_hazirla(kapsam_birlestir=False)` → Süreç ekranı Bağlam Filtresi'ndeki `live_app.gozlem_kapsami` (başka doküman için girilmiş) sohbet gözlemine KARIŞMAZ (bulgu: 'Sport Basic Data'yı tara dendi, gözlemci miras 'Match Status filtresi'ni aradı). Sohbetten üretim de aynı: `surec_uret/teknik_uret` → `_uretim_canli_baglami` (analist mesajlarından `_sohbet_hedef_tarifi`) → `surec_analizi_yap/teknik_analiz_yap(canli_baglam_override=…)`; override None iken doküman akışı AYNEN. Task/BFF/mockup yolları `kapsam_birlestir=True` (varsayılan, B#3 birleştirme korunur). Test: `tests/test_sohbet_gozlem_hedef.py`. **Global süreç workflow'una DOKUNMAZ** (kendi içinde inline — iki ekran tek state çakışmaz).
 Oturum `output/sohbet/oturum.json` (gitignore). Endpoint: `/api/sohbet/{oturum,mesaj,sifirla,uret,uret/durum}` (kimlik-gate,
 üretim arka plan iş). **Tazelik:** `surec_var_mi/teknik_var_mi(oturum)` çıktıyı YALNIZ mtime ≥ oturumun ilk mesajı (yoksa
 `created`) ise "var" sayar → önceki doküman/sohbet akışının bayat çıktısı sohbetin ürünü gibi GÖSTERİLMEZ (hata: 12 Eylül

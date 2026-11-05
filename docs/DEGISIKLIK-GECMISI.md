@@ -6,6 +6,17 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## İnteraktif Analiz — canlı gözlem hedefi SOHBETTEN, Süreç ekranının gözlem kapsamı karışmaz ✅ (owner 2026-11-05)
+- **Bulgu:** sohbette 🌐 'Sport Basic Data menüsü altını tara' denince gözlem raporu 'Match Status filtresi / Match Info kolonu'
+  aradı; Edit modalı/multiplier input'u hiç açılmadı. Kök neden: `canli_uygulama_baglami_hazirla(hedef_tarif)` hedefe Bağlam
+  Filtresi'ndeki `live_app.gozlem_kapsami`'nı "bunu da uygula" diye EKLİYORDU (B#3 birleştirme, Task/BFF için doğru) — sohbette
+  bu kapsam başka bir doküman/analiz için girilmişti ve gözlemciyi o alana yöneltti.
+- **Düzeltme:** `canli_uygulama_baglami_hazirla(kapsam_birlestir=True)` yeni parametre; `sohbet_analiz._canli_tabanli_baglam`
+  `False` geçer (mesaj = kapsamın kendisi). Sohbetten üretim de miras kapsamı almaz: `surec_uret/teknik_uret` →
+  `_uretim_canli_baglami` (analist mesajlarından `_sohbet_hedef_tarifi`, son 6 × 400 kc) → `surec_analizi_yap/teknik_analiz_yap
+  (canli_baglam_override=…)`; override None iken doküman akışı AYNEN. Task Analizi / BFF keşfi / mockup yolları değişmedi.
+- Test: `tests/test_sohbet_gozlem_hedef.py` (offline, 0 token).
+
 ## FE+BE 'Cevapları İşle' kardeş katmana da işlenir — yalnız ORTAK sorular ✅ (owner 2026-11-04, MBSUATEAM-105)
 - **Bulgu:** BE'de cevaplanan Q-T-001 FE sekmesinde tekrar çıkıyordu. İş yalnız aktif katmanı işliyor; FE analizi + FE deposu
   (`MBSUATEAM-105::FE`, 13:23) bayat; UI kardeş senkronu depo tazelemesine yeniliyor; FE metni cevapsız (Competition–Set Market

@@ -3009,7 +3009,7 @@ def _context_filter_normalize(ctx: dict | None) -> dict:
 
 
 def canli_uygulama_baglami_hazirla(gorev: bool = False, base_url_override: str = "",
-                                   hedef_tarif: str = "") -> str | None:
+                                   hedef_tarif: str = "", kapsam_birlestir: bool = True) -> str | None:
     """Bağlam filtresindeki canlı uygulama URL'lerinden Claude MCP/Chrome görevi üretir.
 
     `gorev=True` → Jira Görevleri (task bazlı) ekranının KENDİ `live_app_gorev` hedefini
@@ -3021,6 +3021,10 @@ def canli_uygulama_baglami_hazirla(gorev: bool = False, base_url_override: str =
     araçları tanımlıysa modelin ekranı gezip network/DOM gözlemini analize kaynak
     yapması için net ve sınırlı bir görev verir. MCP yoksa URL'ler yalnızca
     doğrulanmamış hedef sayılır; model varsayım üretmemelidir.
+
+    `kapsam_birlestir=False` → `hedef_tarif` TEK kapsamdır; Bağlam Filtresi'ndeki `gozlem_kapsami`
+    EKLENMEZ (İnteraktif Analiz: analistin sohbet mesajı zaten kapsamın kendisidir — Süreç ekranının
+    başka bir doküman için girilmiş kapsamı gözlemciyi yanlış ekrana/kolona yöneltiyordu).
     """
     ctx = load_context_filter() or {}
     if gorev:
@@ -3047,7 +3051,7 @@ def canli_uygulama_baglami_hazirla(gorev: bool = False, base_url_override: str =
         # task-güdümlü hedef → ODAKLI gözlem modu. Analistin Bağlam Filtresi'ndeki gözlem kapsamı EZİLMEZ,
         # BİRLEŞTİRİLİR (denetim 2026-11-02 B#3: BFF keşfi/mockup hedef verince analistin 'ID filtresi' odağı düşüyordu).
         gozlem_kapsami = (hedef_tarif.strip() + (f"\n\nAnalistin tanımladığı gözlem kapsamı (bunu da uygula):\n{gozlem_kapsami}"
-                                                 if gozlem_kapsami and gozlem_kapsami not in hedef_tarif else ""))
+                                                 if kapsam_birlestir and gozlem_kapsami and gozlem_kapsami not in hedef_tarif else ""))
     if not urls:
         return None
 
