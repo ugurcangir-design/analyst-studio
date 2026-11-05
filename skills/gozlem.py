@@ -126,6 +126,16 @@ _RAPOR_FORMAT = """
 
 ## Validasyon ve Mesajlar
 - Hangi alan/aksiyonda hangi mesaj AYNEN · istek gitti mi · errorCode
+- **MODAL/FORM = GÖZLEM HEDEFİ, YAZMA İŞLEMİ DEĞİL (owner 2026-11-05):** Edit / Add / View Details / Düzenle / Yeni
+  butonuyla açılan modal veya form SALT-OKUNUR gözlem kapsamındadır — AÇ (kaydetmeden) ve rapora yaz: alanların tipi,
+  maske/format, ondalık/basamak kabulü, max uzunluk, zorunluluk işareti, disabled bağımlılıkları. Hedef belirli bir alan
+  için 'şu değeri yaz' diyorsa (ör. Odds Multiplier'a `1,111111`) o değeri alana FİİLEN YAZ ve ne olduğunu gözle (kesildi mi,
+  virgül→nokta oldu mu, hata mesajı çıktı mı); sonra Cancel/kapat. Modal açıp alan yazmak kayıt DEĞİŞTİRMEZ → 'Gezilemeyen'e
+  'yazma işlemi' diye KOYMA. Save/Kaydet'e YALNIZ hedef açıkça 'kaydet / payload'ı yakala' diyorsa bas; bastıysan isteğin
+  payload'ını yakala ve kaydı eski değerine GERİ AL.
+- **ÖNCE DERİNLİK, SONRA GENİŞLİK:** hedef belirli bir ekran/modal/alan adlandırıyorsa ÖNCE ona git ve modal gözlemini
+  TAMAMLA; menü altındaki diğer ekranları listelemek ikincildir (bütçe kalırsa). Yalnız liste kolonlarını sayıp modalı
+  'açılmadı' bırakan rapor hedefi karşılamaz.
 
 ## Boş / Hata Durumları
 - Kayıt yokken · hata dönünce ekran davranışı
@@ -151,6 +161,9 @@ def _ozet_kirp(metin: str) -> str:
 
 _PARAM_ADAY = re.compile(r"`?\b([a-z][A-Za-z0-9]*(?:Id|ID|Name|Code)|id|name|q|page|size|sportId|marketId)\b`?")
 _UC_ADAY = re.compile(r"(?:GET|POST|PUT|PATCH|DELETE)?\s*(/(?:bff|api)/[A-Za-z0-9_./{}-]+)")
+# Hedef modal/form gözlemi istiyor mu (Edit/Add/modal/input'a değer yaz…) → zorunlu doğrulama listesine modal maddesi girer.
+_MODAL_ADAY = re.compile(r"(?i)\b(edit|add|düzenle|modal|form|yeni kayıt|input|alan[a-zı]* (?:yaz|gir)|yaz(?:ıp|ın)?\b|gir(?:ip|in)?\b|"
+                         r"popup|drawer|detail)")
 
 
 def _dogrulama_listesi(gorev_ozet: str) -> str:
@@ -167,7 +180,8 @@ def _dogrulama_listesi(gorev_ozet: str) -> str:
     for u in _UC_ADAY.findall(m):
         if u not in ucler:
             ucler.append(u)
-    if not not_bolumu and not params:
+    modal_istek = bool(_MODAL_ADAY.search(kaynak))
+    if not not_bolumu and not params and not modal_istek:
         return ""
     # Kayıtlı Swagger'daki GERÇEK parametre adları (1254 koşusu: gözlemci nottaki 'id'/'q' ile uğraşıp `name`/`marketId`'yi
     # hiç denemedi) — uç adı eşleşen kayıtlı endpoint'lerin query parametreleri listeye eklenir.
@@ -201,15 +215,20 @@ def _dogrulama_listesi(gorev_ozet: str) -> str:
                    "Servis Çağrıları'na `[K: Network:GET …?<param>=…]` satırı olarak yaz (parametresiz/parametreli toplam kayıt farkını belirt).")
         sat.append("- Parametrenin GERÇEK adı notta yazandan farklıysa gerçek adı yaz; UI'da o filtre alanı yoksa 'Gezilemeyen'e "
                    "'UI'da tetiklenemedi: <alan yok>' + Swagger'daki adı yaz (400/401 denemesi kanıt değildir).")
+    if modal_istek:
+        sat.append("- Hedefte Edit/Add/modal/form/alan yazımı geçiyor → ilgili satırın Edit (ya da Add/View Details) düğmesine bas, "
+                   "modalı AÇ, alanları ve istenen değerin girişini (maske, ondalık, mesaj) gözle; bu salt-okunur gözlemdir, "
+                   "Save'e basmadan kapat (hedef 'kaydet/payload' demiyorsa). Modalı açmadan 'yazma işlemi yapılmadı' diye bitirme.")
     sat.append("- Bu listedeki her madde rapora 'denendi' ya da 'denenemedi + neden' olarak girmeden raporu BİTİRME.")
     return "\n".join(sat)
 
 
 def rapor_al(canli_blok: str, kapsam: str, gorev_ozet: str = "", yeniden: bool = True,
-             max_turns: int | None = None, _ai=None) -> dict:
+             max_turns: int | None = None, _ai=None, tur_devam: int | None = None) -> dict:
     """Gözlem fazını çalıştırır (ya da taze raporu yeniden kullanır).
     canli_blok: `canli_uygulama_baglami_hazirla(...)` çıktısı (URL + hedef + giriş + kurallar) — motorun zaten ürettiği blok.
     kapsam: 'gorev' | 'surec' (profil/URL seti). yeniden=False → taze önbellek varsa gözlem YAPILMAZ (cevap turu vb.).
+    max_turns / tur_devam: tur tavanı ve tavana takılınca bütçe yenileme hakkı (None → base varsayılanları).
     Dönen: {ok, md, anahtar, ts, yas_sn, yeniden_kullanildi, yapildi(num_turns>1), neden}."""
     anahtar = _anahtar(canli_blok, kapsam, gorev_ozet)
     if not (canli_blok or "").strip():
@@ -231,7 +250,8 @@ def rapor_al(canli_blok: str, kapsam: str, gorev_ozet: str = "", yeniden: bool =
         icerik.append({"type": "text", "text": _dl})
     icerik.append({"type": "text", "text": "Gözlemi uygula ve raporu yaz."})
     ai = _ai or (lambda s, m: _api_cagri(s, m, max_tokens=MAX_TOKENS_COMBINED, thinking=False, onbellek=False,
-                                         canli_uygulama_kapsami=kapsam, max_turns=max_turns, katman="yardimci"))
+                                         canli_uygulama_kapsami=kapsam, max_turns=max_turns, katman="yardimci",
+                                         tur_devam=tur_devam))
     baslangic = time.time()      # durum dosyası tazeliği: bu çağrıdan önce yazılmış kalıntı 'yapıldı' sayılmaz
     try:
         yanit = ai(_SISTEM, [{"role": "user", "content": icerik}])

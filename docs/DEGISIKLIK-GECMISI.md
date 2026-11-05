@@ -6,6 +6,7 @@
 > Büyük bir faz/özellik tamamlandığında buraya özet ekle; olgunlaşınca (yeni işler üstüne
 > geldikçe) detayı arşive taşıyıp burada index satırına indir.
 
+## İnteraktif Analiz — 🌐 turu agent'ın önerdiği planı taşır + modal gözlem kuralı + tur bütçesi (2026-11-05): gözlemciye yalnız analist mesajı gidiyordu, önceki turda önerilen 'Edit Sport aç → 1,111111 yaz' planı hiç gitmiyordu; gözlemci modal açmayı yazma işlemi sayıp atlıyordu; 40 tur 8 ekranı listelemeye gidiyordu. `sohbet_analiz._gozlem_hedefi` (mesaj + önceki agent yanıtı), `gozlem._RAPOR_FORMAT` 'MODAL/FORM = GÖZLEM HEDEFİ' + 'ÖNCE DERİNLİK', `_dogrulama_listesi` modal maddesi, `SOHBET_GOZLEM_MAX_TUR`=70 / `SOHBET_GOZLEM_TUR_DEVAM`=1, `rapor_al(tur_devam=)`. Test: `tests/test_sohbet_gozlem_hedef.py`.
 ## İnteraktif Analiz — canlı gözlem hedefi SOHBETTEN, Süreç ekranının gözlem kapsamı karışmaz ✅ (owner 2026-11-05)
 - **Bulgu:** sohbette 🌐 'Sport Basic Data menüsü altını tara' denince gözlem raporu 'Match Status filtresi / Match Info kolonu'
   aradı; Edit modalı/multiplier input'u hiç açılmadı. Kök neden: `canli_uygulama_baglami_hazirla(hedef_tarif)` hedefe Bağlam

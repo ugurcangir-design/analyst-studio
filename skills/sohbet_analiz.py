@@ -12,6 +12,7 @@ gözlem kapsamı alanı (canlı gözlem yine yapılır — hedef sohbetten/miras
 """
 
 import json
+import os
 import time
 from pathlib import Path
 
@@ -152,6 +153,47 @@ def _cevaplanan_sorular_metni() -> str:
         return ""
 
 
+# ─── Sohbet gözlem hedefi ────────────────────────────────────────────────────
+
+_PLAN_KC = 1_800   # önceki agent yanıtından taşınan plan (SON kısmı — öneri genelde sonda)
+
+
+def _gozlem_hedefi(oturum: dict, metin: str) -> str:
+    """🌐 turunun gözlem hedefi = analistin mesajı + agent'ın BİR ÖNCEKİ turda önerdiği somut plan.
+    Bulgu 2026-11-05: agent 'Edit Sport aç → Odds Multiplier'a 1,111111 yaz' diye plan önerdi, analist bunu 🌐 ile
+    onayladı ('tara ve karar vererek ilerleyelim') ama gözlemciye YALNIZ analist mesajı gidiyordu → plan hiç
+    uygulanmadı, 40 tur menü listelemeye gitti, hiçbir modal açılmadı. Önceki agent yanıtı yoksa yalnız mesaj."""
+    m = (metin or "").strip()
+    mesajlar = oturum.get("mesajlar") or []
+    onceki = ""
+    for x in reversed(mesajlar[:-1] if mesajlar and mesajlar[-1].get("metin") == m and mesajlar[-1].get("rol") == "analist"
+                      else mesajlar):
+        if x.get("rol") == "agent":
+            onceki = (x.get("metin") or "").strip()
+            break
+    if not onceki:
+        return m
+    if len(onceki) > _PLAN_KC:
+        onceki = "…" + onceki[-_PLAN_KC:]
+    return (m + "\n\n### Önceki turda agent'ın önerdiği gözlem planı (analist bu mesajla 🌐 gözlem istedi → plandaki "
+            "somut adımları — ekran/rota, açılacak modal, yazılacak değer — ÖNCE uygula)\n" + onceki)
+
+
+def _sohbet_gozlem_tur() -> int:
+    """Sohbet gözlem turu tavanı: menü taraması + modal açma tek turda sığsın diye genel LIVE_APP_MAX_TUR'dan (40) yüksek."""
+    try:
+        return max(10, int(os.getenv("SOHBET_GOZLEM_MAX_TUR", "70")))
+    except (TypeError, ValueError):
+        return 70
+
+
+def _sohbet_gozlem_devam() -> int:
+    try:
+        return max(0, int(os.getenv("SOHBET_GOZLEM_TUR_DEVAM", "1")))
+    except (TypeError, ValueError):
+        return 1
+
+
 # ─── Sohbet turu ─────────────────────────────────────────────────────────────
 
 def sohbet_mesaj(metin: str, gozlem: bool = False) -> dict:
@@ -198,13 +240,15 @@ def sohbet_mesaj(metin: str, gozlem: bool = False) -> dict:
         rol = "user" if m.get("rol") == "analist" else "assistant"
         mesajlar.append({"role": rol, "content": [{"type": "text", "text": m.get("metin", "")}]})
 
-    canli = _canli_tabanli_baglam(metin) if gozlem else None
+    hedef = _gozlem_hedefi(oturum, metin) if gozlem else metin
+    canli = _canli_tabanli_baglam(hedef) if gozlem else None
     gozlem_raporu = None
     if gozlem and canli:
         # Kota: gözlem, tam bağlamlı sohbet çağrısının İÇİNDE değil, küçük promptlu AYRI fazda (skills/gozlem.py) yapılır;
         # sohbet yanıtı TARAYICISIZ üretilir ve rapora dayanır (eskiden her araç turu RAG+BFF+konuşma bağlamını yeniden okuyordu).
         from . import gozlem as _gz
-        gozlem_raporu = _gz.rapor_al(canli, "surec", gorev_ozet=metin, yeniden=True)
+        gozlem_raporu = _gz.rapor_al(canli, "surec", gorev_ozet=hedef, yeniden=True,
+                                     max_turns=_sohbet_gozlem_tur(), tur_devam=_sohbet_gozlem_devam())
         if gozlem_raporu.get("ok") and gozlem_raporu.get("md"):
             mesajlar.append({"role": "user", "content": [{"type": "text", "text": _gz.rapor_blogu(gozlem_raporu)},
                 {"type": "text", "text": (
