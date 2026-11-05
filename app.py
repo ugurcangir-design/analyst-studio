@@ -6442,22 +6442,48 @@ def sohbet_oturum():
     return jsonify({"ok": True, "oturum": _sohbet_ozet(oturum_oku())})
 
 
+@app.route("/api/sohbet/ek", methods=["POST"])
+def sohbet_ek_yukle():
+    """Sohbete ekran görüntüsü eki (multipart `file`, PNG/JPG/WEBP/GIF ≤ 8 MB) → {ad, boyut, url}. Mesaj gönderilirken
+    `ekler:[ad]` ile bağlanır; dosya `output/sohbet/ekler/` (gitignore)."""
+    if "file" not in request.files:
+        return jsonify({"ok": False, "error": "Dosya seçilmedi"}), 400
+    f = request.files["file"]
+    try:
+        from skills.sohbet_analiz import ek_kaydet
+        ek = ek_kaydet(f.filename or "", f.read())
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+    return jsonify({"ok": True, "ek": {"ad": ek["ad"], "boyut": ek["boyut"], "url": f"/api/sohbet/ek/{ek['ad']}"}})
+
+
+@app.route("/api/sohbet/ek/<ad>", methods=["GET"])
+def sohbet_ek_goster(ad: str):
+    """Kayıtlı sohbet ekini döndürür (ad deseni sunucu tarafında doğrulanır — yol gezinmesi yok)."""
+    from skills.sohbet_analiz import ek_yolu
+    y = ek_yolu(ad)
+    if not y:
+        abort(404)
+    return send_file(str(y), max_age=3600)
+
+
 @app.route("/api/sohbet/mesaj", methods=["POST"])
 def sohbet_mesaj_gonder():
-    """Analistin mesajını işler, RAG'li yanıt üretir (canlı gözlem YOK — hızlı sohbet)."""
+    """Analistin mesajını işler, RAG'li yanıt üretir (canlı gözlem YOK — hızlı sohbet). `ekler:[ad]` → ekran görüntüsü."""
     data = request.get_json(silent=True) or {}
     metin = (data.get("metin") or "").strip()
-    if not metin:
+    ekler = [a for a in (data.get("ekler") or []) if isinstance(a, str)][:6]
+    if not metin and not ekler:
         return jsonify({"ok": False, "error": "Boş mesaj gönderilemez."}), 400
     if data.get("gozlem"):
         # 🌐 Gözlemli tur: canlı uygulama gezilir (dakikalar) → arka plan iş; UI üretim gibi izler.
-        r = _sohbet_is_baslat("gozlem", metin=metin)
+        r = _sohbet_is_baslat("gozlem", metin=metin, ekler=ekler)
         return (jsonify(r), 409) if not r.get("ok") else jsonify(r)
     _bas = time.time()
     _tbas = _token_bas()
     try:
         from skills.sohbet_analiz import sohbet_mesaj
-        oturum = sohbet_mesaj(metin)
+        oturum = sohbet_mesaj(metin, ekler=ekler)
         _telemetri_olay("sohbet", "ok", int((time.time() - _bas) * 1000),
                         baglam={"proje": "interaktif", "dokuman": oturum.get("baslik", "")[:60]},
                         token_bas=_tbas)
@@ -6495,7 +6521,8 @@ def _sohbet_uret_calistir(job_id: str, hedef: str) -> None:
         elif hedef == "gozlem":
             with _sohbet_is_lock:
                 _metin = _sohbet_isler[job_id].get("metin", "")
-            sohbet_mesaj(_metin, gozlem=True)
+                _ekler = _sohbet_isler[job_id].get("ekler") or []
+            sohbet_mesaj(_metin, gozlem=True, ekler=_ekler)
             sonuc = {"gozlem": True}
         elif hedef == "ekranlar":
             sonuc = {"ekranlar": ekran_listesi_cikar()}
@@ -6549,13 +6576,14 @@ def _sohbet_is_kes(job_id: str, yeni_durum: str) -> dict | None:
     return {"hedef": hedef, "cli_oldurdu": oldurdu}
 
 
-def _sohbet_is_baslat(hedef: str, metin: str = "") -> dict:
+def _sohbet_is_baslat(hedef: str, metin: str = "", ekler: list | None = None) -> dict:
     """Sohbet arka plan işi (giris / gozlem / ekranlar) — tek seferde tek iş."""
     with _sohbet_is_lock:
         if any(j.get("durum") == "calisiyor" for j in _sohbet_isler.values()):
             return {"ok": False, "error": "Bir üretim/gözlem zaten sürüyor — bitmesini bekleyin."}
         job_id = f"sohbet-uret-{int(time.time() * 1000)}"
-        _sohbet_isler[job_id] = {"durum": "calisiyor", "hedef": hedef, "bas_ts": time.time(), "metin": metin}
+        _sohbet_isler[job_id] = {"durum": "calisiyor", "hedef": hedef, "bas_ts": time.time(), "metin": metin,
+                                 "ekler": list(ekler or [])}
         if len(_sohbet_isler) > 24:   # bellek: yalnız bitmiş işleri düş (koşan iş düşerse worker KeyError alır)
             for eski in [k for k in sorted(_sohbet_isler, key=lambda k: _sohbet_isler[k].get("bas_ts", 0))
                          if _sohbet_isler[k].get("durum") != "calisiyor"][:max(0, len(_sohbet_isler) - 24)]:
@@ -6741,7 +6769,8 @@ def sohbet_uret_devam():
         hedef = job.get("hedef") or "surec"
         job["durum"] = "devam_etti"   # eski kayıt artık 'durdurulmuş' sayılmaz (çift devam / bayat Devam Ettir önlenir)
         job_id = f"sohbet-uret-{int(time.time() * 1000)}"
-        _sohbet_isler[job_id] = {"durum": "calisiyor", "hedef": hedef, "bas_ts": time.time(), "devam": True}
+        _sohbet_isler[job_id] = {"durum": "calisiyor", "hedef": hedef, "bas_ts": time.time(), "devam": True,
+                                 "metin": job.get("metin", ""), "ekler": list(job.get("ekler") or [])}
     threading.Thread(target=_sohbet_uret_calistir, args=(job_id, hedef), daemon=True).start()
     return jsonify({"ok": True, "job": job_id, "hedef": hedef})
 

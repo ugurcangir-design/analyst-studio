@@ -2812,9 +2812,12 @@ def docx_oku(path: Path) -> str:
         return f"[DOCX okuma hatası: {e}]"
 
 
+_GORSEL_MEDIA = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif"}
+
+
 def gorsel_hazirla(path: Path) -> dict:
     suffix = path.suffix.lower()
-    mt = "image/png" if suffix == ".png" else "image/jpeg"
+    mt = _GORSEL_MEDIA.get(suffix, "image/jpeg")
     data = base64.standard_b64encode(path.read_bytes()).decode()
     return {"type": "image", "source": {"type": "base64", "media_type": mt, "data": data}}
 
@@ -4780,12 +4783,17 @@ def cagri_ozeti(gun: int = 7) -> dict:
 MCP_BOS_CONFIG = BASE_DIR / ".mcp.bos.json"     # canlı olmayan çağrılar: hiçbir MCP sunucusu yüklenmesin
 
 
-def _yalin_cli_argumanlari(mcp_verildi: bool, araclar_kapali: bool = True) -> list[str]:
+def _yalin_cli_argumanlari(mcp_verildi: bool, araclar_kapali: bool = True, araclar: list[str] | None = None) -> list[str]:
     """Yerleşik araçları + slash komutlarını kapat; MCP verilmediyse boş strict config → sabit bağlam ~%35 küçülür.
-    `CLI_YALIN=false` → eski davranış (teşhis için). araclar_kapali=False → yalnız slash kapalı (canlı tekrar denemesi)."""
+    `CLI_YALIN=false` → eski davranış (teşhis için). araclar_kapali=False → yalnız slash kapalı (canlı tekrar denemesi).
+    araclar=["Read"] → YALNIZ bu yerleşik araçlar açık + izinli (sohbet ekran görüntüsü eki: model dosyayı Read ile görür;
+    diğer ~35k'lık araç şemaları yine yüklenmez)."""
     if (os.getenv("CLI_YALIN", "true") or "true").strip().lower() in ("false", "0", "hayir", "no"):
-        return []
-    args = (["--tools", ""] if araclar_kapali else []) + ["--disable-slash-commands"]
+        return (["--allowedTools", ",".join(araclar)] if araclar else [])
+    if araclar:
+        args = ["--tools", ",".join(araclar), "--allowedTools", ",".join(araclar), "--disable-slash-commands"]
+    else:
+        args = (["--tools", ""] if araclar_kapali else []) + ["--disable-slash-commands"]
     if not mcp_verildi:
         try:
             if not MCP_BOS_CONFIG.exists():
@@ -4921,7 +4929,8 @@ def _cli_limit_hatasi(v, model: str | None = None) -> "CliLimitError | None":
 
 def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | None = None,
                    _tekrar: int = 0, max_turns: int | None = None, katman: str = "ana",
-                   tur_devam: int | None = None, _son_an: float | None = None) -> str:
+                   tur_devam: int | None = None, _son_an: float | None = None,
+                   okunur_dosyalar: list[str] | None = None) -> str:
     """_tekrar: araç-çağırmama tekrarı sayacı (0 = ilk deneme; en fazla `_LIVE_APP_TEKRAR_SAYISI` ek deneme). Tekrarlar
     yerleşik araçları KAPATMAZ (`--tools ""` yok) — teşhis 2026-10-19: ilk tur bazen MCP araçları görünmeden gidiyor
     (model araç çağrısını METİN olarak yazıyor), özellikle soğuk npx başlangıcında; tekrar 2 sn gecikmeyle yapılır.
@@ -5080,8 +5089,17 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
             # tur araçsız gidebiliyor; araçsız-tur tespiti zaten tekrarı tetikler). LIVE_APP_YERLESIK_ARACLAR=true →
             # canlıda hep açık (eski davranış).
             _canli_araclar_acik = os.getenv("LIVE_APP_YERLESIK_ARACLAR", "false").strip().lower() in ("1", "true", "yes")
+            # Sohbet ekran görüntüsü eki (CLI görsel bloğu alamaz): YALNIZ `Read` aracı açılır + ek dizini `--add-dir` ile
+            # okunabilir yapılır; model promptta verilen mutlak yolu Read ile açıp görseli görür (canlı çağrıda uygulanmaz).
+            _ek_args: list[str] = []
+            if okunur_dosyalar and not _live_args:
+                _ek_dizinler = sorted({str(Path(d).resolve().parent) for d in okunur_dosyalar})
+                for _d in _ek_dizinler:
+                    _ek_args += ["--add-dir", _d]
             _yalin_args = _yalin_cli_argumanlari(bool(_live_args or _analiz_mcp_args),
-                                                 araclar_kapali=(not _live_args) or (_tekrar == 0 and not _canli_araclar_acik))
+                                                 araclar_kapali=(not _live_args) or (_tekrar == 0 and not _canli_araclar_acik),
+                                                 araclar=(["Read"] if _ek_args else None))
+            _yalin_args = _yalin_args + _ek_args
             _durdur_kontrol()
             proc = _cli_calistir(
                 [claude_yolu, "-p", "--output-format", "json", *_model_args, *_yalin_args, *_live_args, *_tur_args, *_analiz_mcp_args],
@@ -5222,6 +5240,7 @@ def _api_cagri_cli(sistem: str, mesajlar: list, canli_uygulama_kapsami: str | No
                     time.sleep(2)
                     _durdur_kontrol()
                     return _api_cagri_cli(sistem, mesajlar, canli_uygulama_kapsami, _tekrar=_tekrar + 1, max_turns=max_turns,
+                                          okunur_dosyalar=okunur_dosyalar,
                                           katman=katman, tur_devam=tur_devam, _son_an=_son_an)
             _neden = ("izinli tarayıcı aracı reddedildi" if _browser_reddi
                       else ((("model araç çağrısını metin olarak yazdı — araçlar ilk turda görünmedi" if _sahte_arac
@@ -5471,8 +5490,11 @@ def _api_cagri(
     max_turns: int | None = None,
     katman: str = "",
     tur_devam: int | None = None,
+    okunur_dosyalar: list[str] | None = None,
 ) -> str:
     """onbellek=False → önbellek OKUMAZ (taze çağrı), ama sonucu yine YAZAR.
+    okunur_dosyalar: CLI modunda modelin `Read` ile açabileceği dosya yolları (sohbet ekran görüntüsü eki) — yalnız o
+    çağrıda `Read` aracı açılır; API modunda etkisiz (görsel zaten image bloğu olarak gider).
     CANLI GÖZLEM (`canli_uygulama_kapsami` dolu) → önbellek NE OKUNUR NE YAZILIR: gözlem = uygulamanın o anki
     durumu; 7 günlük kayıt bayat ortam/ekranı 'gözlemlendi' diye döndürürdü. CLI limiti (429) → API fallback'i de
     canlı kapsamda YAPILMAZ (API yolunda tarayıcı yok → 'gözlemlendi' diye uydurma rapor çıkardı) — hata yükselir.
@@ -5501,7 +5523,7 @@ def _api_cagri(
     if USE_CLAUDE_CLI:
         try:
             sonuc = _api_cagri_cli(sistem, mesajlar, canli_uygulama_kapsami=canli_uygulama_kapsami, max_turns=max_turns,
-                                   katman=katman, tur_devam=tur_devam)
+                                   katman=katman, tur_devam=tur_devam, okunur_dosyalar=okunur_dosyalar)
         except CliLimitError:
             # P1-B dayanıklılık: CLI limiti (429) doldu → API anahtarı varsa bu çağrıyı otomatik
             # API moduyla tamamla (analistin işi kesilmesin). Anahtar yoksa (analist CLI makinesi)

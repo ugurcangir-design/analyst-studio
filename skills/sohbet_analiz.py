@@ -13,6 +13,8 @@ gözlem kapsamı alanı (canlı gözlem yine yapılır — hedef sohbetten/miras
 
 import json
 import os
+import re
+import secrets
 import time
 from pathlib import Path
 
@@ -24,9 +26,65 @@ from .base import (
     _domain_kurallari_oku, canli_uygulama_baglami_hazirla, live_app_urls,
     MAX_TOKENS_COMBINED, MAX_TOKENS_KISA,
 )
+from . import base as _base
 
 _SOHBET_DIR = OUTPUT_DIR / "sohbet"
 _OTURUM_DOSYA = _SOHBET_DIR / "oturum.json"
+_EK_DIR = _SOHBET_DIR / "ekler"          # analistin sohbete eklediği ekran görüntüleri (gitignore: output/)
+_EK_UZANTILAR = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+_EK_AZAMI_BAYT = 8 * 1024 * 1024
+_EK_AD = re.compile(r"^ek-\d+-[0-9a-f]{6}\.(png|jpg|jpeg|webp|gif)$")
+
+
+# ─── Ekran görüntüsü ekleri (owner 2026-11-05: 'sohbete ekran görüntüsü ekleyebilmek istiyorum') ───
+
+def ek_kaydet(dosya_adi: str, veri: bytes) -> dict:
+    """Görseli `output/sohbet/ekler/` altına güvenli adla yazar → {ad, yol, boyut}. PNG/JPG/WEBP/GIF, ≤8 MB."""
+    uz = Path(dosya_adi or "").suffix.lower()
+    if uz not in _EK_UZANTILAR:
+        raise ValueError("Yalnız görsel eklenebilir (PNG/JPG/WEBP/GIF).")
+    if not veri:
+        raise ValueError("Boş dosya.")
+    if len(veri) > _EK_AZAMI_BAYT:
+        raise ValueError("Görsel 8 MB'tan büyük olamaz.")
+    _EK_DIR.mkdir(parents=True, exist_ok=True)
+    ad = f"ek-{int(time.time() * 1000)}-{secrets.token_hex(3)}{uz}"
+    yol = _EK_DIR / ad
+    yol.write_bytes(veri)
+    return {"ad": ad, "yol": str(yol), "boyut": len(veri)}
+
+
+def ek_yolu(ad: str) -> Path | None:
+    """Kayıtlı ek adı → dosya yolu (ad deseni dışı / olmayan → None; yol gezinmesi imkânsız)."""
+    if not ad or not _EK_AD.match(ad):
+        return None
+    y = _EK_DIR / ad
+    return y if y.is_file() else None
+
+
+def _ekleri_dogrula(ekler) -> list[str]:
+    return [a for a in (ekler or []) if isinstance(a, str) and ek_yolu(a)]
+
+
+def _ek_icerik(ekler: list[str], gorsel_olarak: bool) -> tuple[list[dict], list[str]]:
+    """Mesajın eklerini model içeriğine çevirir. gorsel_olarak=True (API modu) → image bloğu; False (CLI) → mutlak yol
+    notu (model `Read` ile açar). Dönen: (içerik blokları, Read'e açılacak yollar)."""
+    bloklar: list[dict] = []
+    yollar: list[str] = []
+    for ad in ekler:
+        y = ek_yolu(ad)
+        if not y:
+            continue
+        if gorsel_olarak:
+            try:
+                bloklar.append(_base.gorsel_hazirla(y))
+                bloklar.append({"type": "text", "text": f"(Yukarıdaki görsel: analistin eklediği ekran görüntüsü `{ad}`)"})
+                continue
+            except Exception:
+                pass
+        yollar.append(str(y.resolve()))
+        bloklar.append({"type": "text", "text": f"[EKRAN GÖRÜNTÜSÜ EKİ — `Read` aracıyla AÇ ve gördüğünü yanıtında kullan: {y.resolve()}]"})
+    return bloklar, yollar
 
 
 # ─── Sohbet asistanı sistem promptu ──────────────────────────────────────────
@@ -58,6 +116,9 @@ _SOHBET_SISTEM = (
     "- CANLI GÖZLEM: analist mesajı '🌐 Gözlemle' ile gönderdiyse sana CANLI UYGULAMA GÖREVİ verilir — "
     "uygulamayı GERÇEKTEN gez, gördüğünü (ekran, kolon, buton var/yok, servis) sohbet tonunda yaz. Normal "
     "turda uygulamayı açma. Giriş reddedilirse tekrar deneme; 'Girişi Test Et' ile hesabın düzeltilmesini iste.\n"
+    "- EKRAN GÖRÜNTÜSÜ EKİ: analist mesajına ekran görüntüsü eklediyse (görsel ya da 'EKRAN GÖRÜNTÜSÜ EKİ … Read' notu) "
+    "önce onu AÇ/incele; gördüğün ekran/alan/hata mesajını yanıtında somut olarak kullan (hangi ekran, hangi alan, ne "
+    "yazıyor). Görseli açamadıysan bunu söyle, tahmin etme.\n"
     "- ANALİSTİN CEVAPLADIĞI AÇIK SORULAR sana 'CEVAPLANAN SORULAR' bloğunda gelir — bunları KESİN kabul et, "
     "tekrar sorma.\n"
     "- HEDEF ÇIKTI: iş EKRAN BAZLIDIR. Kapsam netleşince (hangi ekranlar, her ekranda ne) analiste "
@@ -196,15 +257,22 @@ def _sohbet_gozlem_devam() -> int:
 
 # ─── Sohbet turu ─────────────────────────────────────────────────────────────
 
-def sohbet_mesaj(metin: str, gozlem: bool = False) -> dict:
+def sohbet_mesaj(metin: str, gozlem: bool = False, ekler: list[str] | None = None) -> dict:
     """Analistin mesajını ekler, RAG'li yanıt üretir, ekler ve oturumu döndürür.
     gozlem=False: canlı gözlem YAPILMAZ (hızlı sohbet). gozlem=True ('🌐 Gözlemle'): miras canlı
-    uygulamada mesaja göre GERÇEK gözlem yapılır (dakikalar sürer — arka plan iş)."""
+    uygulamada mesaja göre GERÇEK gözlem yapılır (dakikalar sürer — arka plan iş).
+    ekler: `ek_kaydet` ile kaydedilmiş ekran görüntüsü adları — yalnız SON analist mesajının ekleri modele görsel
+    olarak gider (API: image bloğu · CLI: `Read` ile açılan mutlak yol); eski mesajların ekleri ad olarak kalır
+    (agent'ın o turdaki yanıtı görüntüyü zaten metne çevirmiştir)."""
     metin = (metin or "").strip()
-    if not metin:
+    ekler = _ekleri_dogrula(ekler)
+    if not metin and not ekler:
         raise ValueError("Boş mesaj gönderilemez.")
+    if not metin:
+        metin = "(ekran görüntüsü eklendi — incele ve yorumla)"
     oturum = oturum_oku()
-    oturum["mesajlar"].append({"rol": "analist", "metin": metin, "ts": time.time(), **({"gozlem": True} if gozlem else {})})
+    oturum["mesajlar"].append({"rol": "analist", "metin": metin, "ts": time.time(), **({"gozlem": True} if gozlem else {}),
+                               **({"ekler": ekler} if ekler else {})})
     if not oturum.get("baslik"):
         oturum["baslik"] = metin[:60] + ("…" if len(metin) > 60 else "")
     _oturum_yaz(oturum)   # gözlem turu uzun sürer → analist mesajı hemen görünsün (yeniden bağlanma)
@@ -236,9 +304,19 @@ def sohbet_mesaj(metin: str, gozlem: bool = False) -> dict:
         mesajlar.append({"role": "user", "content": [{"type": "text", "text":
             "### CEVAPLANAN SORULAR (analistin Sorular defterindeki kesin cevapları — tekrar sorma)\n" + cevaplanan}]})
         mesajlar.append({"role": "assistant", "content": [{"type": "text", "text": "Cevapları kesin bilgi olarak aldım."}]})
-    for m in oturum["mesajlar"]:
+    okunur_dosyalar: list[str] = []
+    son_idx = len(oturum["mesajlar"]) - 1
+    for i, m in enumerate(oturum["mesajlar"]):
         rol = "user" if m.get("rol") == "analist" else "assistant"
-        mesajlar.append({"role": rol, "content": [{"type": "text", "text": m.get("metin", "")}]})
+        icerik: list[dict] = [{"type": "text", "text": m.get("metin", "")}]
+        m_ekler = m.get("ekler") or []
+        if m_ekler and i == son_idx:
+            bloklar, yollar = _ek_icerik(m_ekler, gorsel_olarak=not _base.USE_CLAUDE_CLI)
+            icerik += bloklar
+            okunur_dosyalar += yollar
+        elif m_ekler:
+            icerik.append({"type": "text", "text": "(bu mesaja ekran görüntüsü eklenmişti: " + ", ".join(m_ekler) + ")"})
+        mesajlar.append({"role": rol, "content": icerik})
 
     hedef = _gozlem_hedefi(oturum, metin) if gozlem else metin
     canli = _canli_tabanli_baglam(hedef) if gozlem else None
@@ -264,7 +342,8 @@ def sohbet_mesaj(metin: str, gozlem: bool = False) -> dict:
 
     sistem = _SOHBET_SISTEM + _domain_kurallari_oku()
     # Gözlem ayrı fazda yapıldı → bu çağrı tarayıcı aracı kullanmaz (taze rapor metni zaten prompt'u/önbellek anahtarını değiştirir).
-    yanit = _api_cagri(sistem, mesajlar, max_tokens=MAX_TOKENS_COMBINED, thinking=False, onbellek=not (gozlem and canli))
+    yanit = _api_cagri(sistem, mesajlar, max_tokens=MAX_TOKENS_COMBINED, thinking=False, onbellek=not (gozlem and canli),
+                       **({"okunur_dosyalar": okunur_dosyalar} if okunur_dosyalar else {}))
     yanit = (yanit or "").strip()
     oturum = oturum_oku()   # gözlem sürerken oturum değişmiş olabilir → taze oku
     oturum["mesajlar"].append({"rol": "agent", "metin": yanit, "ts": time.time(), **({"gozlem": True} if gozlem else {})})

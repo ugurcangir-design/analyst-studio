@@ -25,7 +25,9 @@ POST /api/shutdown             DESKTOP_MODE'da sunucuyu kapat
 ## İnteraktif Analiz (Sohbetle Analiz — doküman YOK; skills/sohbet_analiz.py)
 ```
 GET  /api/sohbet/oturum        Aktif sohbet oturumu {oturum_id, baslik, mesajlar[], surec_var, teknik_var}
-POST /api/sohbet/mesaj         {metin} → RAG'li agent yanıtı (canlı gözlem YOK — hızlı sohbet); {ok, oturum}
+POST /api/sohbet/mesaj         {metin, ekler?:[ad]} → RAG'li agent yanıtı (canlı gözlem YOK — hızlı sohbet); {ok, oturum}. `ekler` = ekran görüntüsü ek adları (son mesajın ekleri modele görsel/Read yoluyla gider)
+POST /api/sohbet/ek            multipart `file` (PNG/JPG/WEBP/GIF ≤8 MB) → {ok, ek:{ad, boyut, url}} — `output/sohbet/ekler/`
+GET  /api/sohbet/ek/<ad>       kayıtlı eki döndürür (ad deseni doğrulanır; 404)
 POST /api/sohbet/sifirla       Yeni oturum (sohbet temizlenir; çıktı dosyalarına dokunmaz)
 POST /api/sohbet/uret          Kilometre taşı: {hedef:'surec'|'teknik'} → ARKA PLAN üretim (canlı gözlem DAHİL);
                                surec_analizi_yap(icerik_override=sohbet, ozel_atla=True) / teknik_analiz_yap(ozel_atla=True)
