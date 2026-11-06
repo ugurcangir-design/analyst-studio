@@ -401,6 +401,14 @@ _TASK_DILI_KURALLARI = (
     "kaynak adı ('Analist cevabı', 'Analist notu', 'Confluence') tek başına hücre/durum DEĞİLDİR; kaynak yalnız "
     "`[K: …]` etiketi olarak hücre sonuna gelir. Kayıtlı Swagger sözleşmesinde LİSTELENEN bir parametre için "
     "'doğrulanamadı/bulunamadı/analist bildirdi' yazılmaz — `[K: Swagger:<servis>]` ile kesin yazılır.\n"
+    "8. YALNIZ DEĞİŞEN DAVRANIŞ yazılır: görevle AYNEN SÜREN mevcut davranış (başka ekranın/akışın bugünkü işleyişi, "
+    "değişmeyen uç/alan/DB kolonu) için gereksinim maddesi, mekanizma, alternatif dal ya da kabul kriteri yazılmaz; "
+    "korunması GEREKEN bir davranış varsa `## Kapsam Dışı` altında tek satır ('X değişmez'). Mevcut davranış, yalnız "
+    "değişikliğin tanımı için gereken kadar ve kısaca anılır. Kaldırma görevinde 'kaldırılmazsa/gönderilirse ne olur' "
+    "dalı tasarlanmaz — ister kaldırılacağını söylüyorsa kaldırılmıştır.\n"
+    "9. KARŞI KATMAN yalnız `## Bağımlılık ve Arayüz (FE↔BE)` bölümünde, en fazla 2-3 satır SÖZLEŞME olarak anılır "
+    "(FE için: BE'den beklenen çağrı/alan/sonuç; BE için: FE'ye sunulan uç/alan). §1/§2/§3/§7 ve Kabul Kriterleri'nde "
+    "karşı katmanın işi/kuralı/testi TEKRARLANMAZ; her kabul kriteri BU katmanda gözlenebilir bir sonuçtur.\n"
 )
 
 _EK_KURAL_SKILL_IDS = frozenset({
@@ -1570,7 +1578,14 @@ added / updated / removed olabilir."""
             "- `## 11. Kabul Kriterleri` — test edilebilir davranış varsa ZORUNLU (AC-1, AC-2…).\n"
             "ÇEKİRDEK: 1, 3 ve (test edilebilirse) 11 neredeyse her görevde DOLU olmalı; FE görevinde 7, DB "
             "görevinde 4, endpoint görevinde 5 de eklenir. Numarayı, dokunulmayan başlık atlandığı için "
-            "atlamak SERBEST (ör. yalnız 1,3,7,11 çıkabilir) — kalanları uydurup doldurma.\n\n"
+            "atlamak SERBEST (ör. yalnız 1,3,7,11 çıkabilir) — kalanları uydurup doldurma.\n"
+            "- BÖLÜMLER BİRBİRİNİ TEKRARLAMAZ: §2 İş Gereksinimleri = hangi ekran/bileşen/alanda NE değişir (iş kuralı); "
+            "§7 FE Kırılımı = kod tarafında NASIL (bileşen/state/payload eşlemesi); §3 = uçtan uca akış/servis. Aynı madde "
+            "iki bölümde yazılmaz, her bölüm kendi düzeyinde ekler. Kalan/değişmeyen bölümleri (ör. modalda duran diğer "
+            "alanlar) SAYMA; gözlemden gelen min/step/dizi-yapısı gibi ayrıntı, geliştiricinin değiştireceği şey DEĞİLSE yazılmaz.\n"
+            "- İŞ KÜÇÜK DİYE İÇERİK ELENMEZ: geliştiricinin dikkat etmesi gereken her kural, etkilenen her ekran/alan ve "
+            "testçinin kontrol edeceği her davranış ilgili bölümde ve Kabul Kriterleri'nde KALIR. Kısalık yalnız gereksiz "
+            "dal/arka plan/tekrar atılarak sağlanır, gerekli içerik atılarak DEĞİL.\n\n"
             "# KALİTE (bundan ÖDÜN YOK)\n"
             "- Her teknik iddiayı kaynağa dayandır: `[K: Jira]`, `[K: Confluence:<sayfa>]`, "
             "`[K: Swagger:<dosya>]`, `[K: Canlı UI:<route>]`, `[K: Network:<METHOD> <path>]`; "
@@ -1990,7 +2005,7 @@ def yonetici_ozeti_olustur(markdown: str, kapsam: dict | None = None,
         kapsam_parca.append(f"{endpoint} endpoint")
     if tablo:
         kapsam_parca.append(f"{tablo} tablo")
-    if bolum:
+    if bolum and (endpoint or tablo):   # tek başına 'N bölüm' bilgi taşımaz (owner 2026-11-06) → yazılmaz
         kapsam_parca.append(f"{bolum} bölüm")
 
     # MODEL KENDİ ÖZETİNİ YAZDIYSA (few-shot örnekleri özet başlığıyla başladığından stil olarak
@@ -2013,7 +2028,7 @@ def yonetici_ozeti_olustur(markdown: str, kapsam: dict | None = None,
         kritik_not = f" ({kritik} kritik)" if kritik else ""
         satirlar.append(f"- **Açık sorular:** {soru}{kritik_not} — ekibe sormadan başlamayın")
     if not kapsam_parca and not soru and not model_maddeleri:
-        satirlar.append("- _(özetlenecek yapılandırılmış içerik bulunamadı)_")
+        return ""   # özetlenecek bir şey yok → blok hiç eklenmez (boş 'Kapsam: 4 bölüm' özeti üretilmez)
     satirlar += ["", "---", ""]
     return "\n".join(satirlar)
 

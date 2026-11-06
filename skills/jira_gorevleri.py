@@ -170,6 +170,34 @@ _HATA_KELIME_DESEN = re.compile(
     re.IGNORECASE)
 
 
+_BASIT_DEGISIKLIK_DESEN = re.compile(
+    r"(kald[ıi]r[ıi]l|kald[ıi]r[ıi]lmas[ıi]|kald[ıi]r[ıi]lacak|kald[ıi]r[ıi]ls[ıi]n|[çc][ıi]kar[ıi]l|gizlen|g[öo]sterilme|"
+    r"yeniden\s+adland[ıi]r|ad[ıi]\s+de[ğg]i[şs]|s[ıi]ras[ıi]\s+de[ğg]i[şs]|pasif\s+(?:yap|hale)|devre\s+d[ıi][şs][ıi]|remove|hide|rename)",
+    re.IGNORECASE)
+_BASIT_DEGISIKLIK_KC = 700
+
+_BASIT_DEGISIKLIK_DIREKTIF = (
+    "### İŞ BOYUTU: BASİT DEĞİŞİKLİK (kaldırma/gizleme/yeniden adlandırma — kısa ister)\n"
+    "Ekip şablonu ve başlık adları AYNEN korunur; görevin dokunduğu bölümler DOLU gelir, dokunmadığı bölüm AÇILMAZ.\n"
+    "- İsterde KALDIRILACAĞI yazan alan/bileşen KALDIRILMIŞTIR: 'yine gönderilirse / kaldırılmazsa / null gelirse' gibi "
+    "alternatif dal, sarmalayıcı/mekanizma tasarımı ve bu dallar için kabul kriteri YAZMA. Yalnız istenen değişiklik ve "
+    "onun doğrudan sonucu (ör. alan gönderilmeyince kayıttaki değer korunur) yazılır.\n"
+    "- Aynen süren davranış (başka ekranın işleyişi, değişmeyen uç/alan) gereksinim/AC olmaz; korunması gerekiyorsa "
+    "`## Kapsam Dışı` altında tek satır.\n"
+    "- Kalan/değişmeyen alanları SAYMA; gözlem ayrıntısı (min/step/dizi yapısı) geliştiricinin değiştireceği şey değilse yazma.\n"
+    "- İÇERİK ELENMEZ: etkilenen HER ekran/modal/tablo/alan §2'de (ne değişir) ve §7/§3'te (nasıl) ayrı ayrı; "
+    "testçinin her yüzeyde kontrol edeceği davranış Kabul Kriterleri'nde ayrı madde olarak KALIR. Kısalık gereksiz dal ve "
+    "tekrar atılarak sağlanır.\n"
+)
+
+
+def _basit_degisiklik_mi(gorev: dict) -> bool:
+    """Kısa isterli kaldırma/gizleme/yeniden adlandırma işi mi? Şablonu DEĞİŞTİRMEZ (kısa mod değil); yalnız
+    `_BASIT_DEGISIKLIK_DIREKTIF` eklenir: alternatif dal/mekanizma/değişmeyen davranış yazılmaz, gerekli içerik kalır."""
+    metin = f"{gorev.get('summary') or ''}\n{gorev.get('description') or ''}"
+    return len((gorev.get("description") or "").strip()) <= _BASIT_DEGISIKLIK_KC and bool(_BASIT_DEGISIKLIK_DESEN.search(metin))
+
+
 def _hata_gorev_mi(gorev: dict) -> bool:
     """Görev GERÇEKTEN küçük bir HATA/BUG mı? → çıktı KISA-NET (Sorun+Çözüm). Yalnızca ipucu; içeriği AI değerlendirir.
     **Owner 2026-10-26 (MBSUATEAM-362):** issuetype TEK BAŞINA sinyal DEĞİL — bu UAT board'unda geliştirme/iyileştirme
@@ -1037,10 +1065,18 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
                   "BE'nin FE'ye SUNACAĞI endpoint/alan/yanıt sözleşmesi (method/path, istek/yanıt alanları, "
                   "durum kodları) ve hangi FE task'ının tükettiği. FE'nin nasıl render edeceğini YAZMA.")
                if iliskili else "Karşı katman işini bu analize KATMA.")
+            + "\nKARŞI KATMAN YALNIZ O BÖLÜMDE: karşı katmanın yapacağı iş, kuralı ve davranışı §1/§2/§3/§7'de ve Kabul "
+              "Kriterleri'nde TEKRARLANMAZ (bağlı task metninden kopyalama). Her kabul kriteri BU katmanda gözlenebilir "
+              f"bir sonuç olmalı ({'ekranda görünür/görünmez, gönderilen istek gövdesi' if katman=='fe' else 'uç yanıtı, kayıt durumu, four-eyes/iş kuralı sonucu'})."
             + "\n\nANALİZİN EN BAŞINA TEK SATIR yaz: `**Bu katmanda iş:** VAR — <tek cümle: ne>` ya da, bu görev için "
               f"{kat_et} tarafında HİÇ değişiklik gerekmiyorsa `**Bu katmanda iş:** YOK — <tek cümle gerekçe>` (o zaman kalan "
               "analizi 2-3 cümleyle sınırla; dolgu bölüm açma). Analist bu satıra bakarak yalnız gereken katmanın task'ını açar."
         )})
+    # BASİT DEĞİŞİKLİK (kaldır/çıkar/gizle, kısa ister) — şablon KORUNUR, yalnız dolgu/alternatif dal engellenir
+    # (owner 2026-11-06, MBSUATEAM-393: 3 satırlık 'çarpanı kaldır' isteri 11 bölüm + 5 AC'lik iki dala büyümüştü).
+    if not _hata_gorev_mi(gorev) and _basit_degisiklik_mi(gorev):
+        print("  ✂️  Basit değişiklik algılandı — şablon korunur, yalnız dokunulan bölümler, değişmeyen davranış yazılmaz.")
+        icerik.append({"type": "text", "text": _BASIT_DEGISIKLIK_DIREKTIF})
     # HATA/BASİT İŞ MODU — çıktıyı işin boyutuna göre ÖLÇEKLE. Küçük iş, task'ta büyük iş gibi durmasın.
     if _hata_gorev_mi(gorev):
         print("  🐞 Hata/basit iş algılandı — analiz KISA-NET tutulacak (bug modu).")
@@ -1164,6 +1200,8 @@ def _soru_asamasi(teknikler: list[str], gorev: dict, *, cevaplar: str = "", once
 
 _SOZLESME_BASLIK = re.compile(r"(?im)^#{1,4}\s+[^\n]*(ba[ğg][ıi]ml[ıi]l[ıi]k|aray[üu]z|\bapi\b|endpoint|s[öo]zle[şs]me)[^\n]*$")
 _FE_GIRDI_TAVAN = 6_000
+_FE_GOVDE_PAYI = 1_500   # sözleşme dışında FE'ye giden BE gövdesi: yalnız §1 Amaç, bu kadar
+_FE_DISLA_BASLIK = re.compile(r"(?i)^#{1,4}\s+[^\n]*(kabul\s+kriter|teknik\s+bor[çc]|i[şs]\s+mant[ıi][ğg][ıi]|hata\s+y[öo]netimi)")
 
 
 def _fe_icin_be_sozlesme(be_markdown: str) -> str:
@@ -1178,13 +1216,22 @@ def _fe_icin_be_sozlesme(be_markdown: str) -> str:
         bolumler = [b for b in bolumlere_ayir(govde) if b["seviye"] > 0]
     except Exception:
         bolumler = []
+    # Kabul Kriterleri / Teknik Borç / İş Mantığı BE'nin KENDİ test ve iç işidir → FE'ye gitmez (owner 2026-11-06,
+    # MBSUATEAM-393: FE analizi BE'nin AC'lerini ve 'alan gönderilmezse korunur' kuralını dört bölümde tekrarlıyordu).
+    bolumler = [b for b in bolumler if not _FE_DISLA_BASLIK.search(b["icerik"].split("\n", 1)[0])]
     sozlesme = [b["icerik"].strip() for b in bolumler if _SOZLESME_BASLIK.search(b["icerik"].split("\n", 1)[0])]
+    uyari = ("(Bu metin yalnız `## Bağımlılık ve Arayüz (FE↔BE)` bölümünü 2-3 satır sözleşme olarak yazmak içindir — "
+             "BE'nin kurallarını/mekanizmasını/kabul kriterlerini FE analizine KOPYALAMA.)\n\n")
     if not sozlesme:
-        return govde if len(govde) <= _FE_GIRDI_TAVAN else "…(baş kırpıldı)\n" + govde[-_FE_GIRDI_TAVAN:]
-    on = ("### BE SÖZLEŞMESİ (FE'nin tükettiği arayüz — önce bunu kullan)\n\n" + "\n\n".join(sozlesme))[:_FE_GIRDI_TAVAN]
-    kalan = _FE_GIRDI_TAVAN - len(on)
+        kalan_govde = "\n\n".join(b["icerik"].strip() for b in bolumler) or govde
+        # sözleşme genelde sonda → SON kısım korunur (eski davranış)
+        return uyari + (kalan_govde if len(kalan_govde) <= _FE_GIRDI_TAVAN else "…(baş kırpıldı)\n" + kalan_govde[-_FE_GIRDI_TAVAN:])
+    on = (uyari + "### BE SÖZLEŞMESİ (FE'nin tükettiği arayüz — önce bunu kullan)\n\n" + "\n\n".join(sozlesme))[:_FE_GIRDI_TAVAN]
+    kalan = min(_FE_GIRDI_TAVAN - len(on), _FE_GOVDE_PAYI)
     if kalan > 400:
-        on += "\n\n### BE analizi (özet)\n\n" + govde[:kalan]
+        amac = next((b["icerik"].strip() for b in bolumler if re.match(r"(?i)#{1,4}\s+1\.", b["icerik"])), "")
+        if amac:
+            on += "\n\n### BE analizi — Amaç (yalnız bağlam)\n\n" + amac[:kalan]
     return on
 
 

@@ -158,7 +158,8 @@ JG._gorev_acik_sorular_uret = lambda *a, **k: ""
 # FE girdisi: BE sözleşmesi öne alınır (baştan 4000 kırpmada sondaki sözleşme kaybolmasın)
 BE_MD = "## 📋 Yönetici Özeti\n- x\n\n---\n\n<!-- RAG: 1 -->\n\n## 1. Amaç\n" + ("a" * 5000) + "\n\n## 7. Bağımlılık ve Arayüz (FE↔BE)\n- GET /bff/x → {id,name}\n"
 fe_in = JG._fe_icin_be_sozlesme(BE_MD)
-chk("_fe_icin_be_sozlesme: sözleşme bölümü ÖNDE, özet/RAG yok, ≤6k", fe_in.startswith("### BE SÖZLEŞMESİ") and "GET /bff/x" in fe_in[:300]
+chk("_fe_icin_be_sozlesme: KOPYALAMA uyarısı + sözleşme bölümü ÖNDE, özet/RAG yok, ≤6k", fe_in.startswith("(Bu metin yalnız")
+    and "### BE SÖZLEŞMESİ" in fe_in[:400] and "GET /bff/x" in fe_in[:600]
     and "Yönetici Özeti" not in fe_in and "RAG:" not in fe_in and len(fe_in) <= 6100, fe_in[:120])
 chk("_fe_icin_be_sozlesme: sözleşme başlığı yoksa SON 4k (sözleşme genelde sonda)", JG._fe_icin_be_sozlesme("## 1. Amaç\n" + "b" * 7000 + "\nSON").endswith("SON"))
 JG.canli_uygulama_baglami_hazirla = lambda *a, **k: ""

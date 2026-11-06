@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 os.environ.setdefault("BILDIRIM", "false")
 
 from skills import jira_gorevleri as JG  # noqa: E402
+from skills.base import _TASK_DILI_KURALLARI as _TDK, yonetici_ozeti_olustur as _yo  # noqa: E402
 JG.canli_uygulama_baglami_hazirla = lambda *a, **k: ""   # gözlem fazı gerçek CLI açmasın (0 token)
 import skills.jira_tasks as JT  # noqa: E402
 import skills.jira_fe_be as JF  # noqa: E402
@@ -198,6 +199,35 @@ _ck = JG.katman_satiri_cikar(_m)
 chk("katman_satiri_cikar: gösterge + önündeki '---' çıkar, iş + özet kalır",
     "Bu katmanda iş" not in _ck and "## 1. Amaç" in _ck and "Yönetici Özeti" in _ck, _ck)
 chk("YOK göstergesi de çıkar", "Bu katmanda iş" not in JG.katman_satiri_cikar("**Bu katmanda iş:** YOK — gerekçe\n\n## 1. Amaç\nx"))
+
+print("7) Basit değişiklik direktifi + FE'ye giden BE sözleşmesi (owner 2026-11-06, MBSUATEAM-393)")
+_g393 = {"summary": "Market Definition'larından Çarpanın Kaldırılması",
+         "description": "Market Mapping Data > Definitions sayfasında Add, View ve Edit modallarından çarpanların "
+                        "kaldırılması gerekiyor. Aynı şekilde data table’dan da kaldırılmalı."}
+chk("kısa 'kaldırılması' isteri → basit değişiklik (hata modu DEĞİL)",
+    JG._basit_degisiklik_mi(_g393) and not JG._hata_gorev_mi(_g393))
+chk("kaldırma sinyali yok → basit değil", not JG._basit_degisiklik_mi({"summary": "Prematch filtre eklenmesi", "description": "x" * 100}))
+chk("uzun ister → basit değil (standart şablon)", not JG._basit_degisiklik_mi({"summary": "Alan kaldırılsın", "description": "y" * 900}))
+chk("direktif şablonu korur + içerik elenmez + alternatif dal yok",
+    "AYNEN korunur" in JG._BASIT_DEGISIKLIK_DIREKTIF and "İÇERİK ELENMEZ" in JG._BASIT_DEGISIKLIK_DIREKTIF
+    and "alternatif dal" in JG._BASIT_DEGISIKLIK_DIREKTIF)
+_be_md = ("## 📋 Yönetici Özeti\n- x\n\n---\n## 1. Amaç ve Hedefler\n- Definitions akışında çarpan yönetilmez.\n"
+          "## 3. Teknik Gereksinimler\n- Alan yoksa korunur. Mekanizma: JsonNullable sarmalayıcı.\n"
+          "## 5. API Tasarımı\n- `PUT /markets/{id}` — çarpan alanı yoksa mevcut değer korunur.\n"
+          "## 6. İş Mantığı ve Algoritma Detayları\n- four-eyes karşılaştırması.\n"
+          "## 10. Teknik Borç ve Riskler\n- risk.\n"
+          "## 11. Kabul Kriterleri\n- **AC-1 — PUT:** four-eyes mesajı dönmez.\n- **AC-3 — Market Per Sport:** mevcut davranış sürer.\n")
+_fe_in = JG._fe_icin_be_sozlesme(_be_md)
+chk("FE'ye BE'nin API sözleşmesi + Amaç gider; Kabul Kriterleri / Teknik Borç / İş Mantığı / §3 mekanizma GİTMEZ",
+    "## 5. API" in _fe_in and "## 1. Amaç" in _fe_in and "AC-1" not in _fe_in and "AC-3" not in _fe_in
+    and "Teknik Bor" not in _fe_in and "four-eyes karşılaştırması" not in _fe_in and "JsonNullable" not in _fe_in, _fe_in)
+chk("FE girdisi 'KOPYALAMA' uyarısıyla başlar", _fe_in.startswith("(Bu metin yalnız"))
+_fe_in2 = JG._fe_icin_be_sozlesme("## 1. Amaç\n- a\n## 11. Kabul Kriterleri\n- AC-1 x\n")
+chk("sözleşme bölümü yoksa: kalan gövde gider ama Kabul Kriterleri yine dışlanır", "AC-1" not in _fe_in2 and "## 1. Amaç" in _fe_in2, _fe_in2)
+chk("task dili #8 (yalnız değişen davranış) + #9 (karşı katman yalnız Bağımlılık'ta, AC bu katmanda)",
+    "8. YALNIZ DEĞİŞEN DAVRANIŞ" in _TDK and "9. KARŞI KATMAN yalnız" in _TDK and "her kabul kriteri BU katmanda" in _TDK)
+chk("Yönetici Özeti: yalnız 'N bölüm' sayımı varsa blok üretilmez", _yo("## 1. Amaç\n- a\n## 3. Teknik\n- b\n") == "")
+chk("Yönetici Özeti: endpoint/soru varsa blok yine üretilir", "Kapsam:" in _yo("| GET /x |\n## 1. A\n"))
 
 print()
 if _hata:

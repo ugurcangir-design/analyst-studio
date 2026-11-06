@@ -144,7 +144,7 @@ chk("gorev_analiz_duzelt(asama=…) telemetri etiketi ezilmez ('gorev:cevap')", 
 _gercek_duzelt(gorev, "## 1. Amaç\nx", "düzelt")
 chk("varsayılan etiket 'gorev:duzelt'", asamalar[-1] == "gorev:duzelt")
 r4 = _gercek_duzelt(gorev, base.yonetici_ozeti_olustur("## 1. Amaç\nx") + "<!-- RAG: 1 -->\n\n## 1. Amaç\nx", "düzelt")
-chk("düzelt: özetli girdi → çıktıda RAG yorumu + tek yeni özet + düzeltilmiş gövde", r4.startswith("<!-- RAG: 1 -->") and r4.count("Yönetici Özeti") == 1
+chk("düzelt: özetli girdi → çıktıda RAG yorumu + en fazla TEK özet (yalnız bölüm sayımı varsa özet üretilmez — 2026-11-06) + düzeltilmiş gövde", r4.startswith("<!-- RAG: 1 -->") and r4.count("Yönetici Özeti") <= 1
     and "düzeltildi" in r4)
 jg.asama_ayarla = _eski_asama
 chk("varsayılan açık", jg.cevap_hedefli_acik() is True)
