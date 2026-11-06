@@ -1579,7 +1579,21 @@ def upload():
         _sorular_uygula_durum.update({"calisiyor": False, "toplam": 0, "tamamlanan": 0,
                                       "sonuclar": [], "mesaj": "", "bitti": None})
     logger.info(f"Dosya yüklendi: {guvenli_ad} (yeni oturum — workflow + revizyon sıfırlandı)")
-    return jsonify({"ok": True, "dosya": guvenli_ad})
+    # İPUCU (Emin 2026-11-06 #3): girdi bir Jira task'ı / küçük bug kaydıysa doküman akışı yerine Task Analizi daha uygun
+    # (kısa Sorun/Çözüm, agent araştırması, az soru). UI onay sorar; analist doküman akışında da kalabilir.
+    ipucu = None
+    try:
+        from skills.soru_turu import bug_modu_mu, jira_anahtari
+        from skills.base import dosya_oku
+        if suffix not in (".png", ".jpg", ".jpeg", ".webp"):
+            _m = dosya_oku(hedef, 6000)
+            _key = jira_anahtari(_m[:600])
+            if bug_modu_mu(_m) or (_key and len(_m) <= 2500):
+                ipucu = {"oneri": "task-analizi", "jira_key": _key, "neden": "küçük hata/düzeltme girdisi"
+                         + (f" ({_key})" if _key else "")}
+    except Exception as e:
+        logger.warning("Yükleme ipucu hesaplanamadı: %s", e)
+    return jsonify({"ok": True, "dosya": guvenli_ad, **({"ipucu": ipucu} if ipucu else {})})
 
 
 # ─── Backlog Mutabakat (UAT board ↔ TRADE/OPS board karşılaştırma) ──────────────────────────────────────────

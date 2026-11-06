@@ -129,6 +129,18 @@ def surec_analizi_yap(icerik_override: list | None = None,
     })
 
     sistem = _surec_prompt_olustur(ozel_atla=ozel_atla)
+    # İş boyutuna göre ölçek (Emin 2026-11-06 #3): küçük hata/düzeltme girdisi → kısa mod (ilgili bölümler, ≤3 iş kararı sorusu)
+    bug_modu = False
+    try:
+        from .soru_turu import bug_modu_mu, KISA_MOD_SUREC
+        _girdi = (" ".join(p.get("text", "") for p in icerik if isinstance(p, dict) and p.get("type") == "text")
+                  if isinstance(icerik, list) else str(icerik))
+        bug_modu = bug_modu_mu(_girdi)
+        if bug_modu and (ozel_atla or not ozel_prompt_oku("surec")):
+            print("  🐞 Küçük hata/düzeltme girdisi — süreç analizi KISA modda üretiliyor.")
+            sistem = sistem + KISA_MOD_SUREC
+    except Exception as _e:
+        print(f"  ⚠ İş boyutu tespiti atlandı: {_e}")
     mesajlar = [{"role": "user", "content": icerik_parcalari}]
     asama_ayarla("surec:analiz")
     # Gözlem ayrı fazda (taze rapor → prompt değişir → taze analiz); bu çağrı tarayıcı kullanmaz.
@@ -155,7 +167,7 @@ def surec_analizi_yap(icerik_override: list | None = None,
     # Soru türü (0 token): her Q- bloğuna `Tür:` + Zorunlu yalnız İş Kararı'nda (Emin 2026-11-06 #4)
     try:
         from .soru_turu import md_tur_etiketle, zorunlu_normalize
-        yanit = zorunlu_normalize(md_tur_etiketle(yanit))
+        yanit = zorunlu_normalize(md_tur_etiketle(yanit), tavan=(3 if bug_modu else None))
     except Exception as _e:
         print(f"  ⚠ Soru türü etiketleme atlandı: {_e}")
     ozet = yonetici_ozeti_olustur(yanit)                 # modelin kendi özet maddeleri birleştirilir

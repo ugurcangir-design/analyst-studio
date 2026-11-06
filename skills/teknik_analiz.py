@@ -155,6 +155,18 @@ def _acik_sorular_uret(teknik_metni: str, surec_metni: str, eksik_idler: list[st
     return _xml_ayir(yanit, "acik_sorular")
 
 
+def _girdi_metni(limit: int = 4000) -> str:
+    """input/ dokümanının metni (iş boyutu tespiti için; görsel/okunamaz → '')."""
+    try:
+        from .base import INPUT_DIR, dosya_oku
+        girdiler = sorted(f for f in INPUT_DIR.iterdir() if f.is_file() and not f.name.startswith("."))
+        if not girdiler or girdiler[0].suffix.lower() in (".png", ".jpg", ".jpeg", ".webp"):
+            return ""
+        return dosya_oku(girdiler[0], limit)
+    except Exception:
+        return ""
+
+
 def _oturum_esigi() -> float | None:
     """Bu oturumun başlangıcı: girdi dokümanının mtime'ı (upload = yeni oturum). Yoksa None (filtresiz)."""
     try:
@@ -378,6 +390,16 @@ def teknik_analiz_yap(ozel_atla: bool = False, canli_baglam_override: str | None
 
     # ── AŞAMA 1: Sadece teknik analiz ──
     sistem = _teknik_prompt_olustur(mockup_var=bool(mockup_icerik), ozel_atla=ozel_atla)
+    # İş boyutuna göre ölçek: kaynak girdi (input/) küçük bir hata/düzeltmeyse teknik analiz de KISA modda.
+    bug_modu = False
+    try:
+        from .soru_turu import bug_modu_mu, KISA_MOD_TEKNIK
+        bug_modu = bug_modu_mu(_girdi_metni())
+        if bug_modu and not ozel_teknik:
+            print("  🐞 Küçük hata/düzeltme işi — teknik analiz KISA modda üretiliyor (≤3 iş kararı sorusu).")
+            sistem = sistem + KISA_MOD_TEKNIK
+    except Exception as _e:
+        print(f"  ⚠ İş boyutu tespiti atlandı: {_e}")
     mesajlar = [{"role": "user", "content": icerik_parcalari}]
     asama_ayarla("teknik:analiz")
     yanit = _teknik_uret_tam(sistem, mesajlar)   # gözlem ayrı fazda → tarayıcı yok, önbellek normal
@@ -432,7 +454,7 @@ def teknik_analiz_yap(ozel_atla: bool = False, canli_baglam_override: str | None
     try:
         sorular = _acik_sorular_uret(teknik_ham, surec_metni, kapsam["eksik"], gozlem_rapor=gozlem_rapor,
                                      cevaplanan_blok=_cevaplanan_blok(cevaplanan))
-        sorular = sorulari_sonradan_isle(sorular, cevaplanan)
+        sorular = sorulari_sonradan_isle(sorular, cevaplanan, bug_modu=bug_modu)
         # Öz-çözümleme (Task Analizi ile aynı motor): teknik araştırma sorularını agent kendisi kapatır
         sorular, teknik_final = _oz_cozumleme(sorular, teknik_final, surec_metni, canli=bool(canli_baglam))
     except Exception as e:

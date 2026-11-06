@@ -132,5 +132,31 @@ chk("kalan teknik soru → Doğrulanamadı (risk notu), iş kararı kalır", "##
 SC.acik_mi = lambda: False
 chk("kapalıyken dokunmaz", TA._oz_cozumleme("### Q-T-001: a\n- Soru: b\n", "t", "s", canli=False) == ("### Q-T-001: a\n- Soru: b\n", "t"))
 
+print("8) iş boyutu + kısa mod + yükleme ipucu")
+BUG = "MBSTRADE-1502 — Markets sayfasında Ext ID kolonu sıralaması yanlış gösteriliyor (text sıralaması, numeric değil)."
+chk("kısa bug girdisi → bug modu + Jira anahtarı", ST.bug_modu_mu(BUG) and ST.jira_anahtari(BUG) == "MBSTRADE-1502")
+chk("uzun BRD (hata kelimesi geçse de) → bug modu DEĞİL", not ST.bug_modu_mu("Hata yönetimi bölümü … " + "x" * 3000))
+chk("hata ifadesi yoksa → bug modu değil", not ST.bug_modu_mu("Bülten ekranına canlı oran değişim göstergesi eklensin."))
+chk("kısa mod direktifleri", "ÇIKTI MODU" in ST.KISA_MOD_SUREC and "Kök nedeni ANALİSTE SORMA" in ST.KISA_MOD_TEKNIK)
+sys.argv = ["test_soru_turu"]
+import io  # noqa: E402
+import app as A  # noqa: E402
+from skills import telemetri as T  # noqa: E402
+T.USAGE_DIR = tmp / "usage"
+T.EVENTS_DOSYA = T.USAGE_DIR / "events.jsonl"
+T._sink_gonder = lambda k: None
+A._kimlik_tam_mi = lambda *a, **k: True
+A.INPUT_DIR = tmp / "input"
+A.INPUT_DIR.mkdir(exist_ok=True)
+import workflow as WF  # noqa: E402
+WF.calisiyor_mu = lambda: False
+WF.sifirla = lambda: None
+c = A.app.test_client()
+H = {"Origin": "http://localhost"}
+r = c.post("/api/upload", data={"file": (io.BytesIO(BUG.encode()), "bug.txt")}, headers=H, content_type="multipart/form-data").get_json()
+chk("upload ipucu: task-analizi + anahtar", (r.get("ipucu") or {}).get("oneri") == "task-analizi" and r["ipucu"]["jira_key"] == "MBSTRADE-1502", r)
+r2 = c.post("/api/upload", data={"file": (io.BytesIO(("BRD " + "x" * 4000).encode()), "brd.txt")}, headers=H, content_type="multipart/form-data").get_json()
+chk("uzun doküman → ipucu yok", r2.get("ok") and "ipucu" not in r2)
+
 print(f"\n{'SORU TÜRÜ TESTLERİ GEÇTİ' if not hatalar else 'HATA: ' + ', '.join(hatalar)}")
 sys.exit(1 if hatalar else 0)

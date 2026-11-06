@@ -8789,6 +8789,17 @@ async function runPipeline(pipeline) {
   const upRes = await fetch('/api/upload', {method:'POST', body: fd});
   const upData = await upRes.json();
   if (!upRes.ok) { toast('Yükleme hatası: ' + upData.error, 'error'); return; }
+  // Küçük bug / Jira task'ı girdisi → Task Analizi daha uygun (kısa format, agent araştırması, az soru) — analist seçer
+  if (pipeline === 'surec' && upData.ipucu && upData.ipucu.oneri === 'task-analizi') {
+    const k = upData.ipucu.jira_key || '';
+    const git = confirm(`Bu girdi küçük bir hata/düzeltme${k ? ' (' + k + ')' : ''} görünüyor.\n\nBöyle işler için Task Analizi daha uygun: kısa Sorun/Çözüm formatı, teknik soruları agent'ın kendisinin araştırması, 11 bölümlük süreç+teknik analiz yerine tek analiz ve çok daha az açık soru.\n\nTamam → Task Analizi'ne git${k ? ' (' + k + ' ile)' : ''}\nİptal → doküman akışında (kısa modda) devam et`);
+    if (git) {
+      switchTab('jira-gorevler');
+      if (k) { const pk = document.getElementById('jg-parent-key'); if (pk) pk.value = k; }
+      toast(k ? `Task Analizi: ${k} anahtarıyla "Görevleri Çek" deyip "Teknik Analiz Et" ile çalıştırın` : 'Task Analizi: task anahtarını girip çalıştırın', 'info');
+      return;
+    }
+  }
 
   const res = await fetch('/api/run', {
     method: 'POST', headers: {'Content-Type':'application/json'},

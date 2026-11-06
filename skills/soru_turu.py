@@ -241,3 +241,45 @@ def teknik_kalanlari_dogrulanamadi(md: str) -> tuple[str, int]:
         son = b["son"]
     parcalar.append(md[son:])
     return "".join(parcalar), n
+
+
+# ─── İş boyutu — doküman akışı (Emin 2026-11-06 #3: 3 satırlık bug için 11 bölüm + 24 soru) ───────────────────
+_BUG_KELIME = re.compile(
+    r"(^\s*(?:hata|bug|fix|hotfix)\s*[:\-]|çal[ıi][şs]m[ıi]yor|hata\s+(?:al[ıi]yor|veriyor|d[öo]n[üu]yor)|"
+    r"\w{3,}[ae]m[ıi]yor\b|yanlış\s+(?:göster|sırala|hesapla|çalış)|hatalı|bozuk|sorun[u]?\b|"
+    r"\bbug\b|düzelt(?:il|me)|beklendiği gibi\s+(?:çalışm|gelm|görünm))", re.I)
+_JIRA_KEY = re.compile(r"\b([A-Z][A-Z0-9]{2,}-\d+)\b")
+BUG_GIRDI_KC = 2_500
+
+
+def bug_modu_mu(metin: str, girdi_kc: int | None = None) -> bool:
+    """Girdi küçük bir hata/düzeltme işi mi? Kısa metin (≤ BUG_GIRDI_KC) + başlık/ilk satırlarda hata ifadesi.
+    Uzun BRD'lerde (çok ekranlı iş) 'hata' kelimesi geçse de False."""
+    m = (metin or "").strip()
+    uzunluk = girdi_kc if girdi_kc is not None else len(m)
+    if not m or uzunluk > BUG_GIRDI_KC:
+        return False
+    return bool(_BUG_KELIME.search(m[:600]))
+
+
+def jira_anahtari(metin: str) -> str:
+    m = _JIRA_KEY.search(metin or "")
+    return m.group(1) if m else ""
+
+
+KISA_MOD_SUREC = (
+    "\n\n## ÇIKTI MODU: HATA/BASİT İŞ — KISA-NET (girdi küçük bir düzeltme)\n"
+    "Bu girdi tek alan/tek ekranlık bir hata ya da küçük düzeltme. Standart şablonun yalnız İLGİLİ bölümlerini doldur: "
+    "Amaç (sorun + beklenen davranış), İş Gereksinimleri (en fazla 3 BR), Ana Akış (yalnız işin dokunduğu adım), Etki Analizi "
+    "(tek tablo satırı), Kabul Kriterleri (2-4). İlgisiz bölümleri (paydaş listesi, alternatif akışlar, KPI, rol matrisi vb.) "
+    "ATLA — boş başlık yazma. ID şeması (PA-/BR-/AC-) KORUNUR. Açık soru: EN FAZLA 3 ve yalnız İş Kararı türünde; teknik "
+    "noktaları (hangi serviste, kolon tipi, sıralama katmanı) soru yapma — Teknik Notlar'a 'gözlem/kaynakla doğrulanacak' yaz."
+)
+KISA_MOD_TEKNIK = (
+    "\n\n## ÇIKTI MODU: HATA/BASİT İŞ — KISA-NET (kaynak girdi küçük bir düzeltme)\n"
+    "Geliştirici 20 saniyede ne yapacağını anlamalı. Yalnız şu bölümler: 1. Amaç (sorun + kök neden — Swagger/gözlem/kaynak "
+    "kanıtıyla), 2. İş Gereksinimleri (süreç BR ID'leriyle), 3. Teknik Gereksinimler (değişecek nokta: servis/uç/alan/sorgu), "
+    "5. API Tasarımı (yalnız değişen uç/parametre), 9. Hata Yönetimi (gerekiyorsa), 11. Kabul Kriterleri (2-4). DB/Role/"
+    "Algoritma/Teknik Borç bölümlerini işin dokunmadığı sürece ATLA. Kök nedeni ANALİSTE SORMA — kaynaklardan bul; "
+    "bulamadıysan `[K: ❓ Belirsiz]` + 'Doğrulanamadı' notu."
+)
