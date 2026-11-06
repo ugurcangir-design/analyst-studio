@@ -108,5 +108,29 @@ chk("teknik soru promptu Tür kuralı", "Tür:" in TA._acik_sorular_prompt_olust
 chk("şablonlar Tür satırı taşır", "- Tür:" in B.prompt_yukle("teknik_analiz_sorular") and "Açık Soru TÜRÜ" in B._BUTUNLUK_KURALLARI)
 chk("cevaplanan bloğu", "KESİN BİLGİ" in TA._cevaplanan_blok(c) and TA._cevaplanan_blok([]) == "")
 
+print("7) doküman akışı öz-çözümleme (AI enjekte)")
+from skills import soru_cozumleme as SC  # noqa: E402
+SC.acik_mi = lambda: True
+SC.uygula_acik_mi = lambda: True
+SC.kanit_topla = lambda sorular, rag_ctx=None: {s["id"]: "[K: Swagger:x] sortBy=externalId destekleniyor" for s in sorular}
+sc_gor = []
+SC._siniflandir = lambda gorev, sorular, kanitlar, _ai=None: (sc_gor.append([s["id"] for s in sorular]) or {
+    "Q-T-001": {"durum": "cevaplandi", "cevap": "Sıralama BFF'te string sort ile yapılıyor", "kanit": "[K: Swagger:x]", "gozlem_gerekli": False, "gozlem_adimi": ""},
+    "Q-T-002": {"durum": "karar_gerekli", "cevap": "ürün kararı", "kanit": "", "gozlem_gerekli": False, "gozlem_adimi": ""}})
+import skills.jira_gorevleri as JG  # noqa: E402
+JG.gorev_analiz_duzelt = lambda gorev, md, talimat, **k: md + "\n\n(düzeltildi: " + ("Q-T-001" if "Q-T-001" in talimat else "") + ")"
+MD2 = MD + """
+### Q-T-005: Cache
+- Öncelik: Orta
+- Soru: Liste yanıtı cache'leniyor mu, TTL nedir?
+"""
+s_md, t_md = TA._oz_cozumleme(ST.md_tur_etiketle(MD2), "## 1. Amaç\n" + "x" * 400, "# Markets sıralama\n...", canli=False)
+chk("teknik araştırma soruları sınıflandırıcıya ÖNCE gider", sc_gor and sc_gor[0][:2] == ["Q-T-001", "Q-T-005"], sc_gor)
+chk("çözülen soru analize işlendi + listeden düştü + şeffaflık bölümü", "(düzeltildi: Q-T-001)" in t_md and "### Q-T-001" not in s_md and "Agent'ın çözüp" in s_md)
+chk("kalan teknik soru → Doğrulanamadı (risk notu), iş kararı kalır", "### Q-T-005" in s_md and "Doğrulanamadı" in s_md.split("### Q-T-005")[1]
+    and "### Q-T-002" in s_md and "- Tür: İş Kararı" in s_md.split("### Q-T-002")[1])
+SC.acik_mi = lambda: False
+chk("kapalıyken dokunmaz", TA._oz_cozumleme("### Q-T-001: a\n- Soru: b\n", "t", "s", canli=False) == ("### Q-T-001: a\n- Soru: b\n", "t"))
+
 print(f"\n{'SORU TÜRÜ TESTLERİ GEÇTİ' if not hatalar else 'HATA: ' + ', '.join(hatalar)}")
 sys.exit(1 if hatalar else 0)

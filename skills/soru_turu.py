@@ -216,3 +216,28 @@ def tur_sayilari(md: str) -> dict:
     for b in _bloklar(md or ""):
         s[tur_belirle(b["metin"])] += 1
     return s
+
+
+_AGENT_DURUM = re.compile(r"(?mi)^[ \t]*[-*•]?[ \t]*\*{0,2}Agent durumu\*{0,2}\s*:\s*(.+)$")
+
+
+def teknik_kalanlari_dogrulanamadi(md: str) -> tuple[str, int]:
+    """Öz-çözümleme SONRASI: hâlâ cevaplanmamış 'Teknik Araştırma' blokları 'Doğrulanamadı'ya çevrilir (analist kararı
+    gerektirmez — teknik risk notu olarak kalır; Zorunlu satırı silinir). Dönen: (md, çevrilen sayısı)."""
+    if not md or not _BLOK_BAS.search(md):
+        return md, 0
+    n = 0
+    parcalar, son = [], 0
+    for b in _bloklar(md):
+        metin = b["metin"]
+        if tur_belirle(metin) == "teknik_arastirma":
+            d = _AGENT_DURUM.search(metin)
+            if not (d and d.group(1).strip().lower().startswith("cevap")):
+                metin = _TUR_SATIR.sub("- Tür: Doğrulanamadı", metin, count=1) if _TUR_SATIR.search(metin) else metin
+                metin = _ZORUNLU_SATIR.sub("", metin)
+                n += 1
+        parcalar.append(md[son:b["bas"]])
+        parcalar.append(metin)
+        son = b["son"]
+    parcalar.append(md[son:])
+    return "".join(parcalar), n

@@ -8,6 +8,7 @@ timeout riskini düşürür. Teknik analiz biter bitmez kaydedilir; açık
 sorular ondan sonra bağımsız adım olarak üretilir.
 """
 
+import os
 import re
 from pathlib import Path
 from .base import (
@@ -171,6 +172,44 @@ def _cevaplanan_blok(cevaplanan: list[dict]) -> str:
             "`[K: Analist cevabı]` etiketiyle kullan)\n" + "\n".join(
                 f"- {q['id']} ({q['kaynak_dosya']}): {q['soru']} → {'VARSAYIM: ' if q.get('varsayim') else ''}{q['cevap']}"
                 for q in cevaplanan))
+
+
+def _oz_cozumleme(sorular_md: str, teknik_md: str, surec_metni: str, canli: bool) -> tuple[str, str]:
+    """Doküman akışı öz-çözümleme (Emin 2026-11-06 #1: teknik araştırma gerektiren sorular analiste yöneltiliyordu).
+    Task Analizi'ndeki `soru_cozumleme` aynı motorla: referans/Swagger/kod/tüketici kanıtı + tek canlı tur; kanıtla
+    cevaplananlar teknik analize hedefli işlenir ve listeden düşer; kalan 'Teknik Araştırma' → 'Doğrulanamadı' (risk notu).
+    Hata → girdiler aynen. Dönen: (sorular_md, teknik_md)."""
+    try:
+        from . import soru_cozumleme as _sc
+        if not _sc.acik_mi() or not (sorular_md or "").strip():
+            return sorular_md, teknik_md
+        _h1 = re.search(r"(?m)^#\s+(.+)$", surec_metni or "")
+        gorev = {"key": "TEKNIK", "summary": (_h1.group(1).strip() if _h1 else "Teknik analiz")[:120],
+                 "description": (surec_metni or "")[:4000]}
+        azami = int(os.getenv("SORU_COZUM_AZAMI_DOKUMAN", "12") or 12)
+        sorular_md = _sc.cozumle(sorular_md, gorev, canli=canli, canli_kapsam="surec", azami=azami)
+        if _sc.uygula_acik_mi():
+            kalan, cozulen = _sc.cozulenleri_ayir(sorular_md)
+            if cozulen:
+                try:
+                    from .jira_gorevleri import gorev_analiz_duzelt
+                    print(f"  ✍️  {len(cozulen)} çözülen soru teknik analize işleniyor (hedefli düzeltme)...")
+                    yeni = gorev_analiz_duzelt(gorev, teknik_md, _sc.uygulama_talimati(cozulen), asama="teknik:duzelt")
+                    if yeni and len(yeni) > 0.5 * len(teknik_md):
+                        teknik_md = yeni
+                        sorular_md = (kalan + ("\n\n" if kalan else "") + _sc.cozulen_bolumu(cozulen)).strip()
+                    else:
+                        print("  ⚠ Düzeltme çıktısı güvenilmez (çok kısa) — sorular ön-dolu bırakıldı.")
+                except Exception as e:
+                    print(f"  ⚠ Çözülen sorular teknik analize işlenemedi: {str(e)[:160]}")
+        from .soru_turu import teknik_kalanlari_dogrulanamadi
+        sorular_md, n = teknik_kalanlari_dogrulanamadi(sorular_md)
+        if n:
+            print(f"  ⚠ {n} teknik araştırma sorusu kanıtla kapatılamadı → 'Doğrulanamadı' (teknik risk notu, analist kararı gerekmez).")
+        return sorular_md, teknik_md
+    except Exception as e:
+        print(f"  ⚠ Doküman akışı öz-çözümleme atlandı: {str(e)[:160]}")
+        return sorular_md, teknik_md
 
 
 def sorulari_sonradan_isle(sorular_md: str, cevaplanan: list[dict], bug_modu: bool = False) -> str:
@@ -394,6 +433,8 @@ def teknik_analiz_yap(ozel_atla: bool = False, canli_baglam_override: str | None
         sorular = _acik_sorular_uret(teknik_ham, surec_metni, kapsam["eksik"], gozlem_rapor=gozlem_rapor,
                                      cevaplanan_blok=_cevaplanan_blok(cevaplanan))
         sorular = sorulari_sonradan_isle(sorular, cevaplanan)
+        # Öz-çözümleme (Task Analizi ile aynı motor): teknik araştırma sorularını agent kendisi kapatır
+        sorular, teknik_final = _oz_cozumleme(sorular, teknik_final, surec_metni, canli=bool(canli_baglam))
     except Exception as e:
         # Açık sorular üretimi başarısız olursa teknik analizi kaybetme;
         # açık sorular dosyasına hata notu yaz, akış devam etsin.

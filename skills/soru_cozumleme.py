@@ -418,14 +418,21 @@ def _bloga_yaz(blok: dict, c: dict) -> str:
 
 
 def cozumle(acik_md: str, gorev: dict, canli: bool = True, _ai=None, _ai_canli=None,
-            rag_ctx: dict | None = None, canli_kapsam: str | None = None) -> str:
+            rag_ctx: dict | None = None, canli_kapsam: str | None = None, azami: int | None = None) -> str:
     """Açık sorular md'sini agent araştırmasıyla zenginleştirir. Hata → orijinal md. Analizi yeniden yazmaz.
     `rag_ctx` / `canli_kapsam`: köprü (ekran_baglami=False) kendi kendine yeterli bağlamını geçirir → kanıt araması
     task keyword'leriyle, gözlem doğru URL kapsamıyla (eskiden ekrandaki filtre + sabit sıra kullanılıyordu)."""
     if not (acik_md or "").strip() or "açık soru tespit edilmedi" in acik_md.lower():
         return acik_md
     try:
-        sorular = [b for b in _bloklar(acik_md) if not b["zaten"]][:_MAX_SORU]
+        adaylar = [b for b in _bloklar(acik_md) if not b["zaten"]]
+        # Teknik Araştırma türü ÖNCE (Emin 2026-11-06: agent'ın kendisinin araştırması gereken sorular bütçeyi önce alsın)
+        try:
+            from .soru_turu import tur_belirle as _tb
+            adaylar.sort(key=lambda b: 0 if _tb(b["metin"]) == "teknik_arastirma" else 1)
+        except Exception:
+            pass
+        sorular = adaylar[:int(azami or _MAX_SORU)]
         if not sorular:
             return acik_md
         print(f"  🔎 Açık soru öz-çözümleme: {len(sorular)} soru için referans/kod kanıtı toplanıyor...")
