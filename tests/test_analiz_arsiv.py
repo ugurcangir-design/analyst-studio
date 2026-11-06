@@ -64,13 +64,17 @@ A._gorev_egitim_topla("EKRAN-1", "Sports", "", "fe-be-ayir", {"fe_be": {"be": {"
 chk("Task FE+BE (sentetik EKRAN- dahil) → 2 arşiv kaydı", len(AR.liste()) == n0 + 2 and any(x["jira_key"] == "EKRAN-1::FE" for x in AR.liste()))
 A._gorev_egitim_topla("MBS-1", "s", "", "formatla", {"markdown": "x" * 500})
 chk("formatla arşivlenmez", len(AR.liste()) == n0 + 2)
-out = tmp / "output"; out.mkdir()
+out = tmp / "output"
+out.mkdir()
 (out / "surec-analizi.md").write_text("# Süreç\n" + "s" * 400, encoding="utf-8")
 A.OUTPUT_DIR = out
-A.INPUT_DIR = tmp / "input"; A.INPUT_DIR.mkdir(); (A.INPUT_DIR / "dok.txt").write_text("d")
+A.INPUT_DIR = tmp / "input"
+A.INPUT_DIR.mkdir()
+(A.INPUT_DIR / "dok.txt").write_text("d")
 import workflow as WF  # noqa: E402
 WF.ozet = lambda: {"onay_bekleniyor": True}
-A._analiz_arsiv_kontrol(); A._analiz_arsiv_kontrol()
+A._analiz_arsiv_kontrol()
+A._analiz_arsiv_kontrol()
 chk("süreç onay geçişinde TEK kez arşiv (dedup)", len(AR.liste()) == n0 + 3 and any(x["tip"] == "surec" and x["kaynak"] == "dok.txt" for x in AR.liste()))
 WF.ozet = lambda: {}
 A._analiz_arsiv_kontrol()
