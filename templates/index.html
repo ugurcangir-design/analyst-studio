@@ -3386,15 +3386,6 @@ function temaDegistir() {
               <span id="ku-import-msg" style="color:var(--text3);width:100%"></span>
             </div>
           </details>
-          <!-- Ekip verisi okuma anahtarı — app-sahibinden alınır, YEREL kaydedilir (git'e girmez).
-               Ayarlı değilken "Uzaktan Çek" çalışmaz → yalnız bu makinenin kayıtları görünür. -->
-          <div id="ku-key-row" style="display:none;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:14px;padding:10px 13px;border:1px solid var(--border);background:var(--surface2);border-radius:9px;font-size:12.5px">
-            <svg class="ico" style="width:15px;height:15px;color:var(--accent);flex-shrink:0"><use href="#i-key"/></svg>
-            <span id="ku-key-durum" style="color:var(--text2)"></span>
-            <input type="password" id="ku-key-input" class="setting-input" placeholder="Okuma anahtarı (opsiyonel — eski yöntem)" autocomplete="off" style="flex:1;min-width:220px;max-width:420px">
-            <button class="btn btn-primary btn-sm" onclick="kullanimKeyKaydet()">Kaydet</button>
-            <span id="ku-key-msg" style="font-size:12px;width:100%"></span>
-          </div>
           <!-- Kontroller: dönem + analist + aralık -->
           <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px">
             <div>
@@ -4285,7 +4276,9 @@ function kilavuzYukle() {
 }
 
 // ─── Kullanım İzleme (owner-only) ───────────────────────────────────────────────
-const _KU_TIP_ETIKET = {surec_analizi:'Süreç Analizi',teknik_analiz:'Teknik Analiz',brd_analizi:'BRD Analizi',kapsam_analizi:'Kapsam Analizi',mockup:'Prototip',gorev_analiz:'Görev Analizi',gorev_guncelle:'Görev Güncelleme',jira_gonder:'Task Açma',mutabakat:'UAT Mutabakat',sohbet:'İnteraktif Sohbet',sohbet_uret:'İnteraktif Analiz Üretimi'};
+const _KU_TIP_ETIKET = {surec_analizi:'Süreç Analizi',teknik_analiz:'Teknik Analiz',brd_analizi:'BRD Analizi',kapsam_analizi:'Kapsam Analizi',mockup:'Prototip',gorev_analiz:'Görev Analizi',gorev_guncelle:'Görev Güncelleme',jira_gonder:'Task Açma',mutabakat:'UAT Mutabakat',sohbet:'İnteraktif Sohbet',sohbet_uret:'İnteraktif Analiz Üretimi',ekran_goruntu:'Ekran Görüntüsü',kabul_kontrol:'Kabul Kontrolü',giris_test:'Giriş Testi',bff_kesif:'BFF Keşfi',diger:'Diğer'};
+// Sütunlar: sabit sıra + o dönemde görülen DİĞER tipler (sohbet, ekran görüntüsü…) — eskiden listede olmayan tip toplamda sayılıp sütunsuz kalıyordu
+function _kuAktifTipler(tipToplam, hepsi) { const ekstra = Object.keys(tipToplam || {}).filter(t => !_KU_TIP_SIRA.includes(t) && tipToplam[t]).sort((a, b) => tipToplam[b] - tipToplam[a]); return (hepsi ? _KU_TIP_SIRA : _KU_TIP_SIRA.filter(t => (tipToplam || {})[t])).concat(ekstra); }
 // Sütun tooltip'leri — bu tablodaki sayılar KOŞU (işlem) adedidir, açılan issue adedi değil ("Açılan Task" sütunu).
 const _KU_TIP_TOOLTIP = {jira_gonder:'Jira\'ya yeni issue açma işleminin kaç kez çalıştırıldığı — bir koşu FE+BE\'de 2 issue açsa da 1 sayılır (gerçek issue adedi: Analist Özeti\'ndeki "Açılan Task" sütunu)',mutabakat:'UAT Mutabakat karşılaştırmasının kaç kez çalıştırıldığı — hiç task açmaz, 0 token deterministik board okuması',gorev_guncelle:'Mevcut Jira task\'ının analizle güncellenme işleminin kaç kez çalıştırıldığı',gorev_analiz:'Tek Jira task\'ı üzerinden teknik analiz işleminin kaç kez çalıştırıldığı'};
 const _kuTipTip = t => _KU_TIP_TOOLTIP[t] ? ` title="${_KU_TIP_TOOLTIP[t]}"` : '';
@@ -4335,7 +4328,7 @@ async function kuDrill(etiket, donem) {
       sub = `<div class="ku-grup-lbl" style="margin:12px 0 8px">Günlük Dağılım — güne tıklayıp o günü görün</div><div class="ku-chart" style="height:120px">${gs.map(x => { const h = Math.round(x.adet / gm * 85); const bg = x.etiket === bugunKey; return `<div class="ku-col${bg ? ' bugun' : ''}" onclick="kuDrill('${x.etiket}','gun')" style="cursor:pointer" title="${_kuTrendEtiket(x.etiket, 'gun')}: ${x.adet}"><div class="ku-col-ba"><span class="cv">${x.adet}</span><span class="cb" style="height:${h}%"></span></div><span class="cl">${_kuTrendEtiket(x.etiket, 'gun')}</span></div>`; }).join('')}</div>`;
     }
     // Analist × tür matrisi (o dönem, yalnız veri olan tipler)
-    const aktif = _KU_TIP_SIRA.filter(t => (d.tip_toplam || {})[t]);
+    const aktif = _kuAktifTipler(d.tip_toplam, false);
     let matris;
     if (!(d.analistler || []).length) {
       matris = '<div style="font-size:12px;color:var(--text3);padding:8px 0">Bu dönemde kayıt yok.</div>';
@@ -4366,7 +4359,6 @@ async function kullanimYukle() {
   ornekDurumYukle();   // few-shot havuz durumu (erken return'dan etkilenmesin)
   // Ekip verisini ekran açılınca BİR KEZ otomatik çek (e-posta kapısı — anahtar gerekmez;
   // owner-rolü zaten bu ekranı görüyor). Backend e-posta/anahtar ile yetkilendirir.
-  await _kuKeyDurumYukle();
   if (!_kuAutoPullYapildi) { _kuAutoPullYapildi = true; await kullanimUzaktanCek(false); }   // tek çekim; rapor aşağıda BİR kez yüklenir
   const gun = document.getElementById('ku-gun') ? document.getElementById('ku-gun').value : 90;
   const analist = document.getElementById('ku-analist-sec') ? document.getElementById('ku-analist-sec').value : '';
@@ -4422,7 +4414,8 @@ async function kullanimYukle() {
       : '<div style="font-size:12px;color:var(--text3);padding:16px 0">Bu dönemde veri yok.</div>';
     // Süre biçimlendirme (sn/dk/sa)
     const sureFmt = (ms) => { const s = Math.round((ms || 0) / 1000); if (s < 60) return s + ' sn'; const dk = Math.floor(s / 60), sn = s % 60; if (dk < 60) return dk + ' dk' + (sn ? (' ' + sn + ' sn') : ''); return Math.floor(dk / 60) + ' sa ' + (dk % 60) + ' dk'; };
-    const aktifTipler = _KU_TIP_SIRA;   // Tüm iş tiplerini SABİT sütun göster (0 olsa bile) — ölçüm tam
+    const _tipTop = {}; (d.analistler || []).forEach(a => Object.entries(a.tipler || {}).forEach(([t, n]) => { _tipTop[t] = (_tipTop[t] || 0) + n; }));
+    const aktifTipler = _kuAktifTipler(_tipTop, true);   // Sabit sütunlar (0 olsa bile) + bu aralıkta görülen diğer tipler
     const th = 'padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--text3);border-bottom:1px solid var(--border);white-space:nowrap';
     const thc = th + ';text-align:center';
     const td = 'padding:8px 10px;font-size:13px;border-bottom:1px solid var(--border);color:var(--text)';
@@ -4719,40 +4712,8 @@ async function kullanimUzaktanCek(yenile) {
   }
 }
 
-// Okuma anahtarı durumu + auto-pull: anahtar varsa ekip verisi otomatik çekilir (owner rolü → rapor DİREKT).
-let _kuKeyVar = null, _kuAutoPullYapildi = false;
-async function _kuKeyDurumYukle() {
-  const row = document.getElementById('ku-key-row'); if (!row) return;
-  try {
-    const d = await (await fetch('/api/usage/sink-key')).json();
-    if (!d.ok) { row.style.display = 'none'; return; }
-    _kuKeyVar = !!d.has_key;
-    row.style.display = 'flex';
-    const durum = document.getElementById('ku-key-durum');
-    durum.innerHTML = _kuKeyVar
-      ? '✓ Okuma anahtarı ayarlı (opsiyonel/eski yöntem).'
-      : 'Ekip verisi <b>şirket e-postanızın yetkisiyle otomatik</b> gelir. Okuma anahtarı <b>opsiyoneldir</b> (yalnız e-posta kapısı yoksa gerekir).';
-    durum.style.color = 'var(--text2)';
-  } catch (e) { row.style.display = 'none'; }
-}
-async function kullanimKeyKaydet() {
-  const inp = document.getElementById('ku-key-input');
-  const msg = document.getElementById('ku-key-msg');
-  const key = (inp.value || '').trim();
-  if (!key) { msg.textContent = 'Anahtar boş.'; msg.style.color = 'var(--run)'; return; }
-  try {
-    const d = await (await fetch('/api/usage/sink-key', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key })
-    })).json();
-    if (d.ok && d.has_key) {
-      inp.value = ''; msg.textContent = '✓ Anahtar kaydedildi (yerel, git\'e girmez). Ekip verisi çekiliyor…';
-      msg.style.color = 'var(--green)';
-      _kuKeyVar = true; _kuAutoPullYapildi = true;
-      await kullanimUzaktanCek();   // hemen çek → rapor dolsun
-      await _kuKeyDurumYukle();
-    } else { msg.textContent = 'Kaydedilemedi.'; msg.style.color = 'var(--run)'; }
-  } catch (e) { msg.textContent = 'Bağlantı hatası.'; msg.style.color = 'var(--run)'; }
-}
+// Ekip verisi: şirket e-postası kapısıyla otomatik çekilir (okuma anahtarı alanı 2026-11-06'da ekrandan kaldırıldı — backend `?read=` geri uyumu duruyor).
+let _kuAutoPullYapildi = false;
 // ─── Rol uygulama (v2 Faz 2.4) ───────────────────────────────────────────────
 // Owner: her şey görünür (+ Kullanım sekmesi USAGE_DASHBOARD ile). Analist: Yönetim
 // grubu + owner'ın gizlediği id'ler (nav item + element) gizlenir. Sunucu tarafı

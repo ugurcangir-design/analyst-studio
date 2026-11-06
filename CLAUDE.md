@@ -480,7 +480,10 @@ env eksikse bile başka porta düşmez). AUTO_UPDATE `origin/main`'i `ff-only` �
   gitignore/0600) varsa `?read=<key>` de gönderilir → eski Apps Script (e-posta kapısı eklenmemiş) owner'da çalışır.
   `telemetri._sink_key()` env+dosyayı okur; `GET/POST /api/usage/sink-key` (owner rolü) opsiyonel/eski yöntem. UI:
   Kullanım Raporu açılınca ekip verisi OTOMATİK çekilir (`_kuAutoPullYapildi`, anahtar GEREKMEZ); "Okuma anahtarı"
-  alanı opsiyonel (eski yöntem). Yetkisizde çekme `⚠ e-postanız owner listesinde değil` mesajı döner (başlıkta kalıcı).
+  alanı 2026-11-06'da EKRANDAN KALDIRILDI (owner: gereksiz) — `GET/POST /api/usage/sink-key` + `_sink_key()` geri uyum için duruyor,
+  UI'da çağrılmaz. **Gün/dönem detay tablosu sütunları dinamik (`_kuAktifTipler`):** sabit `_KU_TIP_SIRA` + o dönemde görülen
+  diğer olay tipleri (sohbet, sohbet_uret, ekran_goruntu…) — eskiden bu tipler Toplam'da sayılıp sütunsuz kalıyordu (Elif/Uğur
+  satırında '·' ama toplam 2/1). Yetkisizde çekme `⚠ e-postanız owner listesinde değil` mesajı döner (başlıkta kalıcı).
 - **Task analizi SUNUCU DEPOSU + EĞİTİM TOPLAMA (Jira'sız da — `skills/gorev_deposu.py`):** Üretilen her Task
   analizi (`_adim_isle` başarı → `app._gorev_egitim_topla`) **(C)** `output/gorev-analizleri/<key>.json`'a yazılır
   (kalıcı; restart/yenileme kurtarması; **30 gün sonra `prune()` ile otomatik silinir**, `SAKLAMA_GUN`) **VE (A)**
