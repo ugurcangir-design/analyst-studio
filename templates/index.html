@@ -3343,6 +3343,16 @@ function temaDegistir() {
           </div>
           <!-- Token/Maliyet + Kota ölçümü + Analiz kalitesi tabloları (kullanimYukle buraya yazar) -->
           <div id="ku-ozet-olcum" class="ku-ozet-wrap" style="margin-bottom:20px"></div>
+          <!-- Analiz İnceleme (owner): analistlerin ürettiği her analiz — onaylanmasa da — soru sayılarıyla; aç, not düş -->
+          <div id="ku-arsiv-panel" style="margin-bottom:14px;padding:11px 14px;border:1px solid var(--border);background:var(--surface2);border-radius:9px;font-size:12.5px">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+              <div style="flex:1;min-width:220px"><div style="font-weight:600;color:var(--text)">Analiz İnceleme</div>
+                <div id="ku-arsiv-ozet" style="color:var(--text2);margin-top:2px">Analistlerin agent'la ürettiği analizler (onaylanmasa da) — soru sayıları tür bazlı; açıp inceleyin, sorun notu düşün.</div></div>
+              <button class="btn btn-outline btn-sm" id="ku-arsiv-cek-btn" onclick="arsivCek()" title="Ekip kayıtlarını merkezi sink'ten indir (owner e-posta kapısı)">Uzaktan Çek</button>
+              <button class="btn btn-ghost btn-sm" onclick="arsivListeYukle()">Yenile</button>
+            </div>
+            <div id="ku-arsiv-liste" style="overflow:auto">Yükleniyor…</div>
+          </div>
           </div><!-- /ku-view-olcum -->
           <!-- EKİP KULLANIMI görünümü (varsayılan): aktivite, roster, trend, eğitim havuzu -->
           <div id="ku-view-ekip" data-kuview="ekip">
@@ -4493,6 +4503,7 @@ function kuView(v) {
   if (bo) bo.classList.toggle('aktif', v === 'olcum');
   try { localStorage.setItem('ku-view', v); } catch (e) {}
   if (v === 'olcum') kuCagriOzetYukle();   // aşama tablosu yalnız bu sekmede görünür → açılınca tazele
+  if (v === 'olcum' && typeof arsivListeYukle === 'function') arsivListeYukle();
 }
 async function kuCagriOzetYukle() {
   const kap = document.getElementById('ku-cagri-tablo'); if (!kap) return;
@@ -4540,6 +4551,49 @@ async function ornekDurumYukle() {
     el.innerHTML = escHtml(parcalar.join(' · ')) + `/${d.limit || 80} havuz` + escHtml(sonTxt)
       + (d.toplam ? '' : ' — <span style="color:var(--yellow)">henüz örnek yok; merkezi havuz kurulunca dolar</span>');
   } catch (e) { el.textContent = 'Durum alınamadı.'; }
+}
+
+// ── Analiz İnceleme (owner) ──
+async function arsivListeYukle() {
+  const kap = document.getElementById('ku-arsiv-liste'); if (!kap) return;
+  try {
+    const r = await fetch('/api/analiz-arsiv');
+    if (!r.ok) { kap.innerHTML = '<span style="color:var(--text2)">Yetki yok (owner rolü gerekir).</span>'; return; }
+    const d = await r.json();
+    const L = d.kayitlar || [];
+    if (!L.length) { kap.innerHTML = '<span style="color:var(--text2)">Henüz arşiv kaydı yok — analizler bittikçe burada birikir; ekip kayıtları için "Uzaktan Çek".</span>'; return; }
+    const sq = s => s && s.toplam != null ? `${s.is||0} iş · ${s.teknik||0} teknik · ${s.dogru||0} doğrulanamadı${s.zorunlu ? ' · <b style="color:var(--red)">' + s.zorunlu + ' zorunlu</b>' : ''}` : '—';
+    kap.innerHTML = `<table class="ku-tablo"><thead><tr><th>Tarih</th><th>Analist</th><th>Tip</th><th>Kaynak</th><th>Sorular</th><th>Boyut</th><th>Not</th><th></th></tr></thead><tbody>`
+      + L.map(k => `<tr><td>${escHtml(String(k.ts||'').replace('T',' ').slice(0,16))}</td><td>${escHtml(k.analist||'')}${k.uzak?' <span class="panel-tag">ekip</span>':''}</td><td>${escHtml(k.tip||'')}</td><td>${escHtml(k.jira_key||'')} ${escHtml((k.kaynak||'').slice(0,60))}</td><td>${sq(k.sorular)}</td><td>${Math.round((k.boyut||0)/1000)}k</td><td style="max-width:220px">${escHtml(k.not||'')}</td><td><button class="btn btn-ghost btn-sm" onclick="arsivAc('${escHtml(k.id)}')">Aç</button> <button class="btn btn-ghost btn-sm" onclick="arsivNot('${escHtml(k.id)}', this)">Not</button></td></tr>`).join('')
+      + '</tbody></table>';
+  } catch (e) { kap.innerHTML = '<span style="color:var(--red)">Liste alınamadı.</span>'; }
+}
+async function arsivAc(id) {
+  try {
+    const d = await (await fetch('/api/analiz-arsiv/' + encodeURIComponent(id))).json();
+    if (!d.ok) { toast(d.error || 'Açılamadı', 'error'); return; }
+    const k = d.kayit;
+    taskViewerAc(`${k.tip.replace('inceleme:','')} · ${k.analist || ''} · ${k.kaynak || k.jira_key || ''}`, k.icerik || '', '', '');
+  } catch (e) { toast('Açılamadı', 'error'); }
+}
+async function arsivNot(id, btn) {
+  const mevcut = (btn && btn.closest('tr') && btn.closest('tr').children[6]) ? btn.closest('tr').children[6].textContent : '';
+  const n = prompt('İnceleme notu (sorun tespiti — boş bırakılırsa silinir):', mevcut || '');
+  if (n === null) return;
+  try {
+    const r = await (await fetch('/api/analiz-arsiv/not', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, not: n }) })).json();
+    if (!r.ok) { toast(r.error || 'Kaydedilemedi', 'error'); return; }
+    arsivListeYukle();
+  } catch (e) { toast('Kaydedilemedi', 'error'); }
+}
+async function arsivCek() {
+  const btn = document.getElementById('ku-arsiv-cek-btn'); if (btn) btn.disabled = true;
+  try {
+    const r = await (await fetch('/api/analiz-arsiv/cek', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).json();
+    toast(r.mesaj || (r.ok ? 'Çekildi' : 'Çekilemedi'), r.ok ? 'success' : 'error');
+    arsivListeYukle();
+  } catch (e) { toast('Çekilemedi', 'error'); }
+  finally { if (btn) btn.disabled = false; }
 }
 
 async function ornekListeYukle() {

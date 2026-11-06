@@ -1814,8 +1814,24 @@ def _ornek_yakala_md(tip: str, md: str, ozet: str = "", proje: str = "", jira_ke
 def _gorev_egitim_topla(key: str, summary: str, katman: str, mode: str, sonuc: dict) -> None:
     """Task analizi tamamlanınca: (C) sunucu deposuna yaz (kalıcı, 30g) + (A) few-shot havuzuna
     yakala — Jira'ya YAZILMASA da üretilen analiz toplansın. BEST-EFFORT, arka plan."""
-    if mode in ("formatla", "bff-kesif") or key.upper().startswith("EKRAN-"):
-        return  # salt biçimlendirme / sentetik ekran kaydı (Jira'da yok) — eğitim değeri yok
+    if mode in ("formatla", "bff-kesif"):
+        return
+    # Analiz İnceleme arşivi (owner görünürlüğü): Jira'ya yazılmasa da, EKRAN- sentetik olsa da HER task analizi arşivlenir
+    try:
+        from skills.analiz_arsiv import kaydet as _ak
+        _fb = sonuc.get("fe_be") or {}
+        if _fb:
+            for kat in ("be", "fe"):
+                _p = _fb.get(kat) or {}
+                if (_p.get("markdown") or "").strip():
+                    _ak("task", f"{summary} [{kat.upper()}]", _p.get("markdown", ""), _p.get("acik_sorular", ""),
+                        jira_key=(key if kat == "be" else f"{key}::FE"), proje=key.split("-")[0].upper())
+        elif (sonuc.get("markdown") or "").strip():
+            _ak("task", summary, sonuc.get("markdown", ""), sonuc.get("acik_sorular", ""), jira_key=key, proje=key.split("-")[0].upper())
+    except Exception as e:
+        logger.debug("Task analizi arşive yazılamadı (%s): %s", key, e)
+    if key.upper().startswith("EKRAN-"):
+        return  # sentetik ekran kaydı (Jira'da yok) — eğitim değeri yok
     try:
         from skills.gorev_deposu import kaydet as _gd_kaydet
         proje = key.split("-")[0].upper()
@@ -3110,6 +3126,56 @@ def _analiz_bildirim_dongusu() -> None:
         time.sleep(5)
 
 
+_son_arsivlenen: dict = {"anahtar": None}
+
+
+def _analiz_arsiv_kontrol() -> None:
+    """Workflow settled duruma GEÇİŞTE (süreç onay / teknik onay) çıktıyı Analiz İnceleme arşivine yazar (owner görünürlüğü)."""
+    import workflow as wf
+    try:
+        ozet = wf.ozet()
+    except Exception:
+        return
+    if ozet.get("onay_bekleniyor"):
+        anahtar, tip, dosya, soru_dosya = "surec", "surec", "surec-analizi.md", ""
+    elif ozet.get("teknik_onay_bekleniyor"):
+        anahtar, tip, dosya, soru_dosya = "teknik", "teknik", "teknik-analiz.md", "acik-sorular.md"
+    else:
+        _son_arsivlenen["anahtar"] = None
+        return
+    try:
+        mt = (OUTPUT_DIR / dosya).stat().st_mtime
+    except OSError:
+        return
+    imza = f"{anahtar}:{int(mt)}"
+    if _son_arsivlenen["anahtar"] == imza:
+        return
+    _son_arsivlenen["anahtar"] = imza
+    try:
+        from skills.analiz_arsiv import kaydet as _ak
+        md = (OUTPUT_DIR / dosya).read_text(encoding="utf-8", errors="ignore")
+        sm = (OUTPUT_DIR / soru_dosya).read_text(encoding="utf-8", errors="ignore") if soru_dosya and (OUTPUT_DIR / soru_dosya).exists() else ""
+        _ak(tip, _aktif_dokuman_adi(), md, sm)
+    except Exception as e:
+        logger.debug("Analiz arşivi yazılamadı: %s", e)
+
+
+def _analiz_arsiv_dongusu() -> None:
+    time.sleep(20)
+    while True:
+        try:
+            _analiz_arsiv_kontrol()
+        except Exception as e:
+            logger.debug("Analiz arşivi tur hatası: %s", e)
+        time.sleep(10)
+
+
+def _analiz_arsiv_baslat() -> None:
+    if (os.getenv("ANALIZ_ARSIV", "true") or "true").strip().lower() in ("false", "0", "hayir", "no"):
+        return
+    threading.Thread(target=_analiz_arsiv_dongusu, daemon=True, name="analiz-arsiv").start()
+
+
 def _analiz_bildirim_baslat() -> None:
     from skills import bildirim
     if not bildirim.acik_mi():
@@ -3775,6 +3841,43 @@ def usage_stats():
     analist = (request.args.get("analist") or "").strip() or None
     from skills import telemetri
     return jsonify(telemetri.istatistik(gun=gun, donem=donem, analist=analist))
+
+
+@app.route("/api/analiz-arsiv", methods=["GET"])
+@usage_gerekli
+def analiz_arsiv_liste():
+    """Analiz İnceleme: yerel + çekilmiş ekip arşiv kayıtları (içeriksiz özet; soru sayıları tür bazlı)."""
+    from skills.analiz_arsiv import liste
+    return jsonify({"ok": True, "kayitlar": liste()})
+
+
+@app.route("/api/analiz-arsiv/cek", methods=["POST"])
+@usage_gerekli
+def analiz_arsiv_cek():
+    from skills.analiz_arsiv import cek
+    ok, mesaj = cek()
+    return jsonify({"ok": ok, "mesaj": mesaj})
+
+
+@app.route("/api/analiz-arsiv/not", methods=["POST"])
+@usage_gerekli
+def analiz_arsiv_not():
+    """Owner incelemesi: kayda not (sorun tespiti) — yerel `notlar.json`."""
+    from skills.analiz_arsiv import not_yaz
+    data = request.get_json(silent=True) or {}
+    if not not_yaz(str(data.get("id") or ""), str(data.get("not") or "")):
+        return jsonify({"ok": False, "error": "Geçersiz kayıt"}), 400
+    return jsonify({"ok": True})
+
+
+@app.route("/api/analiz-arsiv/<oid>", methods=["GET"])
+@usage_gerekli
+def analiz_arsiv_oku(oid: str):
+    from skills.analiz_arsiv import oku
+    k = oku(oid)
+    if not k:
+        return jsonify({"ok": False, "error": "Kayıt bulunamadı"}), 404
+    return jsonify({"ok": True, "kayit": k})
 
 
 @app.route("/api/usage/cagri-ozet", methods=["GET"])
@@ -6555,6 +6658,7 @@ def _sohbet_uret_calistir(job_id: str, hedef: str) -> None:
         if hedef == "teknik":
             teknik_uret()
             sonuc = {"dosya": "teknik-analiz.md"}
+            _sohbet_arsivle("sohbet-teknik", "teknik-analiz.md", "acik-sorular.md")
         elif hedef == "giris":
             sonuc = {"giris": giris_testi()}
         elif hedef == "gozlem":
@@ -6574,6 +6678,7 @@ def _sohbet_uret_calistir(job_id: str, hedef: str) -> None:
         else:
             surec_uret()
             sonuc = {"dosya": "surec-analizi.md"}
+            _sohbet_arsivle("sohbet-surec", "surec-analizi.md", "")
         with _sohbet_is_lock:
             if _sohbet_isler[job_id].get("durum") == "calisiyor":
                 _sohbet_isler[job_id].update({"durum": "bitti", "sonuc": sonuc})
@@ -6592,6 +6697,18 @@ def _sohbet_uret_calistir(job_id: str, hedef: str) -> None:
                 return   # öldürülen alt sürecin yan hatası — analistin kararı korunur
             _sohbet_isler[job_id].update({"durum": "hata", "hata": str(e)})
         logger.error(f"İnteraktif analiz üretim hatası ({hedef}): {e}")
+
+
+def _sohbet_arsivle(tip: str, dosya: str, soru_dosya: str) -> None:
+    """İnteraktif Analiz üretimini Analiz İnceleme arşivine yazar (best-effort)."""
+    try:
+        from skills.analiz_arsiv import kaydet as _ak
+        from skills.sohbet_analiz import oturum_oku
+        md = (OUTPUT_DIR / dosya).read_text(encoding="utf-8", errors="ignore")
+        sm = (OUTPUT_DIR / soru_dosya).read_text(encoding="utf-8", errors="ignore") if soru_dosya and (OUTPUT_DIR / soru_dosya).exists() else ""
+        _ak(tip, "Sohbet: " + (oturum_oku().get("baslik") or ""), md, sm)
+    except Exception as e:
+        logger.debug("Sohbet üretimi arşive yazılamadı: %s", e)
 
 
 def _sohbet_is_kes(job_id: str, yeni_durum: str) -> dict | None:
@@ -7606,4 +7723,5 @@ if __name__ == "__main__":
     _jira_kopru_baslat()       # Jira Köprüsü — komutlu yorum polling (JIRA_KOPRU=false ile KAPALI, vars.)
     _uat_senkron_baslat()      # UAT Durum Senkronu — TRADE/OPS geliştirmeye alınınca UAT 'Devam Ediyor' (vars. KAPALI)
     _analiz_bildirim_baslat()  # Analiz bitti/hata → yerel masaüstü bildirimi (BILDIRIM=false ile kapatılır)
+    _analiz_arsiv_baslat()  # Süreç/teknik analiz bitince Analiz İnceleme arşivi (owner görünürlüğü; ANALIZ_ARSIV=false kapatır)
     app.run(host=host, port=port, debug=False)

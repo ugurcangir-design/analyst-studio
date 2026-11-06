@@ -148,6 +148,8 @@ eski takip-Excel senkron akışının yerini board-to-board mutabakat aldı.
 
 ## Kullanım Raporu (Telemetri — owner-only, 0 token; skills/telemetri.py)
 ```
+GET  /api/analiz-arsiv             → {kayitlar[{id,tip,ts,analist,kaynak,jira_key,sorular{is,teknik,dogru,zorunlu,toplam},uzak,not}]} (usage-gate) — Analiz İnceleme
+GET  /api/analiz-arsiv/<id>        → {kayit{…, icerik}} · POST /api/analiz-arsiv/cek → sink'ten ekip kayıtları (tip inceleme:*) · POST /api/analiz-arsiv/not {id, not}
 GET  /api/usage/cagri-ozet         ?gun=7 → {toplam{cagri,girdi,cikti,cache_yaz,cache_oku,sure_sn,tur}, asamalar[{asama,model,canli,…}]}
                                    (Faz 0 ölçüm: logs/usage/cagri.jsonl aşama+model bazlı; usage-gate; 0 token)
 GET  /api/auth/me                  → {username, is_admin, usage_admin, yetki_admin, rol, gizli[]}. usage_admin/
