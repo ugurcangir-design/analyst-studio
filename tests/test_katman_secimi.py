@@ -208,6 +208,8 @@ chk("kısa 'kaldırılması' isteri → basit değişiklik (hata modu DEĞİL)",
     JG._basit_degisiklik_mi(_g393) and not JG._hata_gorev_mi(_g393))
 chk("kaldırma sinyali yok → basit değil", not JG._basit_degisiklik_mi({"summary": "Prematch filtre eklenmesi", "description": "x" * 100}))
 chk("uzun ister → basit değil (standart şablon)", not JG._basit_degisiklik_mi({"summary": "Alan kaldırılsın", "description": "y" * 900}))
+chk("task dili #8: kaldırmanın doğrudan sonucu kapsam İÇİ, Kapsam Dışı'na gömülmez", "DOĞRUDAN SONUCU ise" in _TDK and "`## Kapsam Dışı`'na konmaz" in _TDK)
+chk("direktif: doğrudan sonuç kapsamda + BE eksik alan örneği", "DOĞRUDAN SONUCU yazılır — doğrudan sonuç KAPSAMDADIR" in JG._BASIT_DEGISIKLIK_DIREKTIF and "null sayıp" in JG._BASIT_DEGISIKLIK_DIREKTIF)
 chk("direktif şablonu korur + içerik elenmez + alternatif dal yok",
     "AYNEN korunur" in JG._BASIT_DEGISIKLIK_DIREKTIF and "İÇERİK ELENMEZ" in JG._BASIT_DEGISIKLIK_DIREKTIF
     and "alternatif dal" in JG._BASIT_DEGISIKLIK_DIREKTIF)

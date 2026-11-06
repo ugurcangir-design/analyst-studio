@@ -181,7 +181,9 @@ _BASIT_DEGISIKLIK_DIREKTIF = (
     "Ekip şablonu ve başlık adları AYNEN korunur; görevin dokunduğu bölümler DOLU gelir, dokunmadığı bölüm AÇILMAZ.\n"
     "- İsterde KALDIRILACAĞI yazan alan/bileşen KALDIRILMIŞTIR: 'yine gönderilirse / kaldırılmazsa / null gelirse' gibi "
     "alternatif dal, sarmalayıcı/mekanizma tasarımı ve bu dallar için kabul kriteri YAZMA. Yalnız istenen değişiklik ve "
-    "onun doğrudan sonucu (ör. alan gönderilmeyince kayıttaki değer korunur) yazılır.\n"
+    "onun DOĞRUDAN SONUCU yazılır — doğrudan sonuç KAPSAMDADIR ve ilgili bölümlerde TAM yazılır (ör. FE alanı göndermeyi "
+    "bırakınca BE'nin gövdede olmayan alanı null sayıp silmemesi/onaya düşürmemesi = BE işi: §1, §3, §5, §11); "
+    "`## Kapsam Dışı`'na gömülmez.\n"
     "- Aynen süren davranış (başka ekranın işleyişi, değişmeyen uç/alan) gereksinim/AC olmaz; korunması gerekiyorsa "
     "`## Kapsam Dışı` altında tek satır.\n"
     "- Kalan/değişmeyen alanları SAYMA; gözlem ayrıntısı (min/step/dizi yapısı) geliştiricinin değiştireceği şey değilse yazma.\n"
@@ -1068,9 +1070,16 @@ def gorev_analiz_et(gorev: dict, cevaplar: str = "", iliskili: list | None = Non
             + "\nKARŞI KATMAN YALNIZ O BÖLÜMDE: karşı katmanın yapacağı iş, kuralı ve davranışı §1/§2/§3/§7'de ve Kabul "
               "Kriterleri'nde TEKRARLANMAZ (bağlı task metninden kopyalama). Her kabul kriteri BU katmanda gözlenebilir "
               f"bir sonuç olmalı ({'ekranda görünür/görünmez, gönderilen istek gövdesi' if katman=='fe' else 'uç yanıtı, kayıt durumu, four-eyes/iş kuralı sonucu'})."
+            + ("\nEKSİK/YENİ ALAN KONTROLÜ (BE için zorunlu değerlendirme): FE'nin artık GÖNDERMEDİĞİ ya da yeni gönderdiği "
+               "alanı BE nasıl işler? Tam-nesne PUT/POST'ta gövdede OLMAYAN alan null sayılıp mevcut değer siliniyor/onaya "
+               "düşüyorsa bu BU görevin BE işidir ('gövdede olmayan alan → kayıttaki değer korunur' kuralı) → `**Bu katmanda iş:** VAR`, "
+               "§1/§3/§5/§11 TAM yazılır. Bu sonuç `## Kapsam Dışı`'na konmaz; Kapsam Dışı yalnız gerçekten değişmeyen davranış içindir."
+               if katman == 'be' else "")
             + "\n\nANALİZİN EN BAŞINA TEK SATIR yaz: `**Bu katmanda iş:** VAR — <tek cümle: ne>` ya da, bu görev için "
-              f"{kat_et} tarafında HİÇ değişiklik gerekmiyorsa `**Bu katmanda iş:** YOK — <tek cümle gerekçe>` (o zaman kalan "
-              "analizi 2-3 cümleyle sınırla; dolgu bölüm açma). Analist bu satıra bakarak yalnız gereken katmanın task'ını açar."
+              f"{kat_et} tarafında HİÇ değişiklik gerekmiyorsa `**Bu katmanda iş:** YOK — <tek cümle gerekçe>` (o zaman çıktı "
+              "YALNIZ `## 1. Amaç ve Hedefler` başlığı altında 2-3 cümle gerekçedir; başka başlık — Kapsam Dışı dahil — AÇMA). "
+              "YOK kararı ancak karşı katmanın değişikliği bu katmanda HİÇBİR kayıt/uç/kural etkisi yaratmıyorsa verilir. "
+              "Analist bu satıra bakarak yalnız gereken katmanın task'ını açar."
         )})
     # BASİT DEĞİŞİKLİK (kaldır/çıkar/gizle, kısa ister) — şablon KORUNUR, yalnız dolgu/alternatif dal engellenir
     # (owner 2026-11-06, MBSUATEAM-393: 3 satırlık 'çarpanı kaldır' isteri 11 bölüm + 5 AC'lik iki dala büyümüştü).
