@@ -5823,9 +5823,25 @@ def _gorev_is_calistir(job_id: str) -> None:
                 sonuc = gorev_akis_kapat(adim.get("markdown", ""), adim.get("acik_sorular", ""), gorev)
             elif mode == "fe-be-ayir":
                 # Tek görevi FE ve BE olarak İKİ AYRI katman-özel analize böl (Option A).
+                _hazir = {}
+                if adim.get("gozlem_anahtar"):
+                    try:
+                        from skills import gozlem as _gzm
+                        _gr = _gzm.rapor_oku(adim["gozlem_anahtar"])
+                        if _gzm.taze_mi(_gr):
+                            _hazir = {"gozlem_rapor": _gr}
+                            logger.info("Ekran task'ı %s: sohbetin taze gözlem raporu kullanılıyor (%s)", key, adim["gozlem_anahtar"])
+                    except Exception as _e:
+                        logger.warning("Sohbet gözlem raporu okunamadı (%s): %s", key, _e)
                 r = gorev_fe_be_analiz(gorev, cevaplar=adim.get("cevaplar", ""),
-                                       onceki_sorular=adim.get("onceki_sorular", ""), bff_rapor=_bff_blok, **_canli_ek)
+                                       onceki_sorular=adim.get("onceki_sorular", ""), bff_rapor=_bff_blok, **_canli_ek, **_hazir)
                 sonuc = {"fe_be": r}
+                if adim.get("sohbet_kaynak"):
+                    try:
+                        from skills.sohbet_analiz import ekran_sonucu_bildir
+                        ekran_sonucu_bildir(key, gorev.get("summary", ""), (r.get("be") or {}).get("is_var"), (r.get("fe") or {}).get("is_var"))
+                    except Exception as _e:
+                        logger.warning("Ekran sonucu sohbete yazılamadı (%s): %s", key, _e)
             else:
                 iliskili = []
                 for ik in adim.get("iliskili_keys", []):
@@ -5879,6 +5895,12 @@ def _gorev_is_calistir(job_id: str) -> None:
             except Exception:
                 _hz = {}
             _msg = (_hz.get("baslik") or str(e)) + (f" — {_hz['oneri']}" if _hz.get("oneri") else "")
+            if adim.get("sohbet_kaynak"):
+                try:
+                    from skills.sohbet_analiz import ekran_sonucu_bildir
+                    ekran_sonucu_bildir(key, adim.get("summary", ""), None, None, hata=_msg)
+                except Exception:
+                    pass
             with _gorev_is_lock:
                 job["sonuclar"][key] = {"hata": _msg, "hata_ozet": (_hz or None),
                                         "summary": adim.get("summary", ""),
@@ -5942,6 +5964,9 @@ def jira_gorev_is_baslat():
                       "markdown": a.get("markdown", ""), "talimat": a.get("talimat", ""),
                       "gorev": a.get("gorev") if isinstance(a.get("gorev"), dict) else None,
                       "canli_hedef": str(a.get("canli_hedef") or "").strip(),
+                      # Sohbetin taze 🌐 gözlem raporu (İnteraktif → ekran task'ı): motor yeniden gözlemez
+                      "gozlem_anahtar": str(a.get("gozlem_anahtar") or "").strip(),
+                      "sohbet_kaynak": bool(a.get("sohbet_kaynak")),
                       # FE+BE kardeş katman (mode cevap): {key, katman, markdown, acik_sorular} — yalnız ORTAK sorular işlenir
                       "kardes": ({"key": str(a["kardes"].get("key") or "").strip(), "katman": str(a["kardes"].get("katman") or "").lower(),
                                   "markdown": str(a["kardes"].get("markdown") or ""), "acik_sorular": str(a["kardes"].get("acik_sorular") or "")}

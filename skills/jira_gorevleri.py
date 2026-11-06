@@ -1191,7 +1191,7 @@ def _fe_icin_be_sozlesme(be_markdown: str) -> str:
 def gorev_fe_be_analiz(gorev: dict, cevaplar: str = "", onceki_sorular: str = "",
                        ekran_baglami: bool = True, rag_ctx: dict | None = None,
                        canli_baglam_override: str | None = None, bff_rapor: str | None = None,
-                       canli_kapsam: str | None = None) -> dict:
+                       canli_kapsam: str | None = None, gozlem_rapor: dict | None = None) -> dict:
     """Tek bir görevi HEM BE HEM FE olarak İKİ AYRI katman-özel analize böler (görev hem
     sunucu hem istemci işi içeriyorsa). Önce **BE** analizi (veri modeli/endpoint/iş kuralı +
     'Bağımlılık ve Arayüz' başlığında BE'nin SUNDUĞU sözleşme), sonra **FE** analizi — BE
@@ -1199,10 +1199,13 @@ def gorev_fe_be_analiz(gorev: dict, cevaplar: str = "", onceki_sorular: str = ""
     yalnız tükettiği arayüzü yazar. İki içerik ayrışır → 'aynı analiz iki taskta' sorunu çözülür.
     Dönen: {"be": {markdown, acik_sorular}, "fe": {markdown, acik_sorular}}."""
     # Faz 1 (kota): TEK gözlem raporu, iki analiz (eskiden BE ve FE ayrı ayrı gözlüyordu → iki döngü).
-    gozlem_rapor = None
     kapsam = canli_kapsam or ("surec" if canli_baglam_override is not None else "gorev")
     _canli = canli_baglam_override if canli_baglam_override is not None else canli_uygulama_baglami_hazirla(gorev=True)
-    if _canli:
+    # Hazır rapor (sohbetin taze 🌐 gözlemi) verildiyse yeniden gözlem YOK; yoksa canlı blok varken gözlem fazı koşar.
+    if gozlem_rapor is not None and gozlem_rapor.get("ok") and gozlem_rapor.get("md"):
+        _canli = _canli or "(hazır gözlem raporu)"
+    elif _canli:
+        gozlem_rapor = None
         from . import gozlem as _gz
         # Analist notu gözlem özetine de girer (gorev_analiz_et ile aynı — denetim 2026-11-02 B#1/D#3)
         _fb_ozet = f"{gorev.get('summary', '')}\n\n{gorev.get('description', '') or ''}"

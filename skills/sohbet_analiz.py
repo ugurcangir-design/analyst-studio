@@ -219,6 +219,52 @@ def _cevaplanan_sorular_metni() -> str:
         return ""
 
 
+# ─── Sohbet gözlem raporları (Task Analizi formatında üretime taşınır — owner 2026-11-06) ───────────────────────
+
+def _gozlem_kaydet(rapor: dict, hedef: str) -> None:
+    """Başarılı 🌐 gözlem raporunu oturuma bağlar (`oturum.gozlemler[]`: anahtar/ts/hedef) → ekran envanteri ve ekran
+    task'ları aynı raporu YENİDEN GÖZLEMEDEN kullanır."""
+    try:
+        o = oturum_oku()
+        liste = [g for g in (o.get("gozlemler") or []) if g.get("anahtar") != rapor.get("anahtar")]
+        liste.append({"anahtar": rapor.get("anahtar"), "ts": time.time(), "hedef": (hedef or "")[:200]})
+        o["gozlemler"] = liste[-10:]
+        _oturum_yaz(o)
+    except Exception as e:
+        print(f"  ⚠ Gözlem raporu oturuma yazılamadı: {e}")
+
+
+def son_gozlem_raporu(oturum: dict | None = None) -> dict | None:
+    """Bu oturumun EN TAZE (geçerlilik süresi içinde, ok) 🌐 gözlem raporu; yoksa None."""
+    try:
+        from . import gozlem as _gz
+        o = oturum or oturum_oku()
+        for g in reversed(o.get("gozlemler") or []):
+            r = _gz.rapor_oku(g.get("anahtar") or "")
+            if _gz.taze_mi(r):
+                return r
+    except Exception:
+        pass
+    return None
+
+
+def ekran_sonucu_bildir(key: str, baslik: str, be_is, fe_is, hata: str = "") -> None:
+    """Ekran task'ı (EKRAN-n) Task Analizi'nde bitince sohbete sistem mesajı: katman kararı + yönlendirme (best-effort)."""
+    try:
+        def _k(v):
+            return "iş VAR" if v is True else ("iş YOK" if v is False else "belirsiz")
+        if hata:
+            metin = f"⚠ **{baslik}** ({key}) ekran analizi üretilemedi: {hata[:200]}"
+        else:
+            metin = (f"🧩 **{baslik}** ({key}) — Task Analizi formatında FE+BE analiz hazır: **BE {_k(be_is)} · FE {_k(fe_is)}**. "
+                     "Task Analizi ekranında inceleyin; Jira'ya **'Yeni Task Aç'** (BE+FE, Blocks) ile açın.")
+        o = oturum_oku()
+        o["mesajlar"].append({"rol": "agent", "sistem": True, "ts": time.time(), "metin": metin, "task_analizi": True})
+        _oturum_yaz(o)
+    except Exception as e:
+        print(f"  ⚠ Ekran sonucu sohbete yazılamadı: {e}")
+
+
 # ─── Sohbet gözlem hedefi ────────────────────────────────────────────────────
 
 # Gözlem turu yanıt talimatı (owner 2026-11-05: 'isteklerimi yapmıyor — tespit ve örnek analiz istedim'): eski talimat
@@ -234,9 +280,13 @@ _GOZLEM_TURU_TALIMAT = (
     "- Raporda olmayanı uydurma; gözlenemeyen noktayı o maddede `[K: ❓ Belirsiz]` ile işaretle, 'gözlenemedi' de ve geç — "
     "yanıtı 'hâlâ eksik' bölümüne çevirme.\n"
     "- Yeni gözlem turu önerisi EN SONDA en fazla 1-2 satır (hangi ekran, ne denenecek); yanıtın ana gövdesi istenen çıktıdır.\n"
-    "- ÖRNEK ANALİZ ŞABLONU (ekran başına, kısa ama eksiksiz): **Ekran** (ad · rota · modal/alan) · **Mevcut durum** (gözlem + "
-    "`[K:]`) · **İster** (bu ekranda ne değişmeli) · **FE değişikliği** · **BE değişikliği** (uç/alan/validasyon; Swagger/gözlem "
-    "kanıtı) · **Kabul kriterleri** (2-4 madde) · **Açık sorular** (varsa) · **Karar** (değişiklik gerekli / gerekmez)."
+    "- ÖRNEK ANALİZ = TASK ANALİZİ ŞABLONU (ekran başına `### <Ekran — rota>` altında, Task Analizi'ndeki bölüm adlarıyla; "
+    "o ekran için içeriksiz bölüm ATLANIR, kısa ama kanıtlı): `## 1. Amaç ve Hedefler` · `## 2. İş Gereksinimleri` "
+    "(BR-n, ister) · `## 3. Teknik Gereksinimler` (gözlenen mevcut durum + değişiklik, `[K:]`) · `## 5. API Tasarımı` "
+    "(uç/alan/validasyon — Swagger/Network kanıtı) · `## 6. İş Mantığı` · `## 7. Frontend İş Kırılımı` · `## 9. Hata Yönetimi` "
+    "· `## 11. Kabul Kriterleri` (ekran × alan, 2-4 madde) · açık soru varsa `### Q-T-00n:` bloğu · sonda "
+    "`**Katman kararı:** BE iş VAR/YOK · FE iş VAR/YOK — gerekçe`. Bu sohbet içi ön izlemedir; resmi FE+BE analiz "
+    "'Ekran Task'ları Üret' ile Task Analizi'nde üretilir — analiste bunu hatırlat (tek satır)."
 )
 
 _PLAN_KC = 1_800   # önceki agent yanıtından taşınan plan (SON kısmı — öneri genelde sonda)
@@ -351,6 +401,7 @@ def sohbet_mesaj(metin: str, gozlem: bool = False, ekler: list[str] | None = Non
         gozlem_raporu = _gz.rapor_al(canli, "surec", gorev_ozet=hedef, yeniden=True,
                                      max_turns=_sohbet_gozlem_tur(), tur_devam=_sohbet_gozlem_devam())
         if gozlem_raporu.get("ok") and gozlem_raporu.get("md"):
+            _gozlem_kaydet(gozlem_raporu, metin)
             mesajlar.append({"role": "user", "content": [{"type": "text", "text": _gz.rapor_blogu(gozlem_raporu)},
                 {"type": "text", "text": _GOZLEM_TURU_TALIMAT}]})
         else:
@@ -366,7 +417,9 @@ def sohbet_mesaj(metin: str, gozlem: bool = False, ekler: list[str] | None = Non
                        **({"okunur_dosyalar": okunur_dosyalar} if okunur_dosyalar else {}))
     yanit = (yanit or "").strip()
     oturum = oturum_oku()   # gözlem sürerken oturum değişmiş olabilir → taze oku
-    oturum["mesajlar"].append({"rol": "agent", "metin": yanit, "ts": time.time(), **({"gozlem": True} if gozlem else {})})
+    _ga = (gozlem_raporu or {}).get("anahtar") if (gozlem_raporu or {}).get("ok") else None
+    oturum["mesajlar"].append({"rol": "agent", "metin": yanit, "ts": time.time(), **({"gozlem": True} if gozlem else {}),
+                               **({"gozlem_anahtar": _ga} if _ga else {})})
     _oturum_yaz(oturum)
     return oturum
 
@@ -488,7 +541,13 @@ def ekran_listesi_cikar() -> list[dict]:
             ref_bloklari, _ = _ref_bloklari_olustur(ref_dosyalar, sorgu_metni=_konusma_metni(oturum, son_n=8))
     except Exception as e:
         print(f"  ⚠ Ekran envanteri RAG atlandı: {e}")
-    icerik = list(ref_bloklari) + [
+    icerik = list(ref_bloklari)
+    _sg = son_gozlem_raporu(oturum)
+    if _sg:
+        icerik.append({"type": "text", "text": "### CANLI GÖZLEM RAPORU (bu oturumda agent'ın gerçekten gezdiği ekranlar — "
+                                                "rotaları/menüsü buradan; burada bulunan ve kapsamla ilgili ekranlar da ADAYDIR)\n"
+                                                + (_sg.get("md") or "")[:9000]})
+    icerik += [
         {"type": "text", "text": "### SOHBET\n\n" + konusma[-12000:]},
         {"type": "text", "text": _cevaplanan_sorular_metni() and ("### CEVAPLANAN SORULAR\n" + _cevaplanan_sorular_metni()) or "(cevaplanmış soru yok)"},
         {"type": "text", "text": "Ekran envanterini çıkar."},
@@ -539,6 +598,8 @@ def ekran_gorevleri(secilen: list[int]) -> list[dict]:
         raise ValueError("Önce ekran envanteri çıkarın.")
     konusma = _konusma_metni(oturum)[-6000:]
     cevaplar = _cevaplanan_sorular_metni()
+    _sg = son_gozlem_raporu(oturum)
+    gozlem_anahtar = (_sg or {}).get("anahtar") or ""
     adimlar = []
     for i in secilen:
         if not (0 <= int(i) < len(ekranlar)):
@@ -553,7 +614,9 @@ def ekran_gorevleri(secilen: list[int]) -> list[dict]:
                     + (f"Not: {e['not']}\n" if e.get("not") else "")
                     + (f"\n## Analistin kesin cevapları\n{cevaplar}\n" if cevaplar else "")
                     + f"\n## Sohbetten kararlar (bağlam)\n{konusma}")
-        adimlar.append({"key": key, "mode": "fe-be-ayir",
+        # Sohbetin TAZE 🌐 gözlem raporu adıma taşınır → motor yeniden gözlemez (owner 2026-11-06: sohbetten Task Analizi
+        # formatında üretim). Rapor yoksa/eskiyse motor canli_hedef ile kendisi gözler (eski davranış).
+        adimlar.append({"key": key, "mode": "fe-be-ayir", "gozlem_anahtar": gozlem_anahtar, "sohbet_kaynak": True,
                         "gorev": {"key": key, "summary": baslik, "description": aciklama, "issuetype": "Görev",
                                   "status": "", "ekran": e["ad"]},
                         "canli_hedef": f"{baslik} ekranı — DataTable kolonları, mevcut butonlar/aksiyonlar, tetiklenen "

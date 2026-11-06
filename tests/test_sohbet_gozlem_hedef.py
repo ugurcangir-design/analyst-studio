@@ -101,7 +101,7 @@ chk("sohbet_mesaj(gozlem=True): rapor_al özeti + canlı bloğu planı taşır, 
 # 6) gözlem turu yanıt talimatı: rapor = kanıt, yanıt = analistin isteği (tespit/örnek analiz/karar) — özetle yetinme
 chk("gözlem turu talimatı isteği yerine getirmeyi ve kararı şart koşar",
     "İSTEDİĞİ ÇIKTIDIR" in SA._GOZLEM_TURU_TALIMAT and "KARARI SEN VER" in SA._GOZLEM_TURU_TALIMAT
-    and "ÖRNEK ANALİZ ŞABLONU" in SA._GOZLEM_TURU_TALIMAT and "KISA sohbet yanıtına çevir" not in SA._GOZLEM_TURU_TALIMAT)
+    and "TASK ANALİZİ ŞABLONU" in SA._GOZLEM_TURU_TALIMAT and "KISA sohbet yanıtına çevir" not in SA._GOZLEM_TURU_TALIMAT)
 chk("sistem promptu: istenen çıktıyı üret + karar ver", "İSTENEN ÇIKTIYI ÜRET" in SA._SOHBET_SISTEM and "KARAR VER" in SA._SOHBET_SISTEM)
 
 # 4) URL yoksa override None → motor kendi (gözlemsiz) yoluna düşer

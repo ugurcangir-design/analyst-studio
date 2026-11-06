@@ -38,7 +38,7 @@ POST /api/sohbet/uret/devam    {job} → yalnız 'durduruldu' işte AYNI hedefle
 POST /api/sohbet/mesaj         {metin, gozlem:true} → ARKA PLAN iş (hedef 'gozlem'): canlı gözlemli yanıt (miras live_app ANA adresi)
 POST /api/sohbet/giris-test    → iş hedef 'giris': kayıtlı test hesabıyla giriş denemesi → oturum.giris {ok, neden, ekran, menu}
 POST /api/sohbet/ekranlar      → iş hedef 'ekranlar': sohbet+BRD'den ekran envanteri → oturum.ekranlar[]
-POST /api/sohbet/ekran-gorevleri {secilen:[index…]} → seçilen ekranlar için sentetik EKRAN-n görevleri (mode fe-be-ayir,
+POST /api/sohbet/ekran-gorevleri {secilen:[index…]} → seçilen ekranlar için sentetik EKRAN-n görevleri (mode fe-be-ayir, adımda `gozlem_anahtar` = sohbetin taze 🌐 raporu → motor yeniden gözlemez, `sohbet_kaynak` → bitince sohbete katman mesajı;
                                canli_hedef) Task Analizi iş sistemine (/api/jira/gorev/is/baslat) verilir → {ok, job}
 POST /api/sohbet/bff-kesif     {ekran} → iş hedef 'bff': bff_kesif.kesfet(miras ANA adres, ekran) → oturum.bff[] + sistem mesajı
 GET  /api/sohbet/bff-rapor     ?anahtar=<12 hex> → {ok, md, ts, ekran} (400 geçersiz anahtar, 404 yok)
