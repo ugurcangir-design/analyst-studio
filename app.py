@@ -3839,8 +3839,9 @@ def usage_stats():
         gun = 90
     donem = request.args.get("donem", "gun")
     analist = (request.args.get("analist") or "").strip() or None
+    pencere = (request.args.get("pencere") or "").strip()
     from skills import telemetri
-    return jsonify(telemetri.istatistik(gun=gun, donem=donem, analist=analist))
+    return jsonify(telemetri.istatistik(gun=gun, donem=donem, analist=analist, pencere=pencere))
 
 
 @app.route("/api/analiz-arsiv", methods=["GET"])

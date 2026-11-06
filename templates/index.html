@@ -3408,7 +3408,7 @@ function temaDegistir() {
           <div class="panel-section-label">Zaman Trendi · <span id="ku-donem-etiket">günlük</span> işlem sayısı <span style="color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0">— bir çubuğa tıklayıp detaya inin</span></div>
           <div id="ku-trend" style="margin-bottom:6px"></div>
           <div id="ku-drill"></div>
-          <div class="panel-section-label" style="margin-top:18px">Analist Özeti</div>
+          <div class="panel-section-label" style="margin-top:18px">Analist Özeti · <span id="ku-analist-donem" style="color:var(--accent)">bugün</span> <span style="color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0">— yukarıdaki Bugün / Bu Hafta / Bu Ay kartına göre</span></div>
           <div id="ku-analist" style="overflow-x:auto"></div>
           <div class="panel-section-label" style="margin-top:18px">Kim Hangi İşi Kaç Kez? · Analist × İşlem Tipi</div>
           <div style="font-size:11.5px;color:var(--text3);margin:-4px 0 8px;line-height:1.55">Her hücre o işlemin <b>kaç kez çalıştırıldığını</b> gösterir — açılan Jira issue adedi değil. Gerçek issue adedi için yukarıdaki <b>“Açılan Task”</b> sütununa bakın (bir koşu FE+BE'de 2 issue açsa da burada 1 sayılır; <b>UAT Mutabakat</b> ise hiç task açmaz).</div>
@@ -4268,11 +4268,11 @@ function kilavuzYukle() {
 }
 
 // ─── Kullanım İzleme (owner-only) ───────────────────────────────────────────────
-const _KU_TIP_ETIKET = {surec_analizi:'Süreç Analizi',teknik_analiz:'Teknik Analiz',brd_analizi:'BRD Analizi',kapsam_analizi:'Kapsam Analizi',mockup:'Prototip',gorev_analiz:'Görev Analizi',gorev_guncelle:'Görev Güncelleme',jira_gonder:'Task Açma',mutabakat:'UAT Mutabakat',sohbet:'İnteraktif Sohbet',sohbet_uret:'İnteraktif Analiz Üretimi',ekran_goruntu:'Ekran Görüntüsü',kabul_kontrol:'Kabul Kontrolü',giris_test:'Giriş Testi',bff_kesif:'BFF Keşfi',diger:'Diğer'};
+const _KU_TIP_ETIKET = {surec_analizi:'Süreç Analizi',teknik_analiz:'Teknik Analiz',brd_analizi:'BRD Analizi',kapsam_analizi:'Kapsam Analizi',mockup:'Prototip',gorev_analiz:'Görev Analizi',gorev_guncelle:'Jira Task Yazma',jira_gonder:'Task Açma',mutabakat:'UAT Mutabakat',sohbet:'İnteraktif Sohbet',sohbet_uret:'İnteraktif Analiz Üretimi',ekran_goruntu:'Ekran Görüntüsü',kabul_kontrol:'Kabul Kontrolü',giris_test:'Giriş Testi',bff_kesif:'BFF Keşfi',diger:'Diğer'};
 // Sütunlar: sabit sıra + o dönemde görülen DİĞER tipler (sohbet, ekran görüntüsü…) — eskiden listede olmayan tip toplamda sayılıp sütunsuz kalıyordu
 function _kuAktifTipler(tipToplam, hepsi) { const ekstra = Object.keys(tipToplam || {}).filter(t => !_KU_TIP_SIRA.includes(t) && tipToplam[t]).sort((a, b) => tipToplam[b] - tipToplam[a]); return (hepsi ? _KU_TIP_SIRA : _KU_TIP_SIRA.filter(t => (tipToplam || {})[t])).concat(ekstra); }
 // Sütun tooltip'leri — bu tablodaki sayılar KOŞU (işlem) adedidir, açılan issue adedi değil ("Açılan Task" sütunu).
-const _KU_TIP_TOOLTIP = {jira_gonder:'Jira\'ya yeni issue açma işleminin kaç kez çalıştırıldığı — bir koşu FE+BE\'de 2 issue açsa da 1 sayılır (gerçek issue adedi: Analist Özeti\'ndeki "Açılan Task" sütunu)',mutabakat:'UAT Mutabakat karşılaştırmasının kaç kez çalıştırıldığı — hiç task açmaz, 0 token deterministik board okuması',gorev_guncelle:'Mevcut Jira task\'ının analizle güncellenme işleminin kaç kez çalıştırıldığı',gorev_analiz:'Tek Jira task\'ı üzerinden teknik analiz işleminin kaç kez çalıştırıldığı'};
+const _KU_TIP_TOOLTIP = {jira_gonder:'Jira\'ya yeni issue açma işleminin kaç kez çalıştırıldığı — bir koşu FE+BE\'de 2 issue açsa da 1 sayılır (gerçek issue adedi: Analist Özeti\'ndeki "Açılan Task" sütunu)',mutabakat:'UAT Mutabakat karşılaştırmasının kaç kez çalıştırıldığı — hiç task açmaz, 0 token deterministik board okuması',gorev_guncelle:'Analizin Jira task\'ına YAZILDIĞI işlemler: Onayla ve Jira\'da Güncelle · FE+BE yaz (BE\'yi güncelle + FE task aç) · Yeni Task Aç · Ekran görüntüsü eki — kaç kez çalıştırıldığı',gorev_analiz:'Tek Jira task\'ı üzerinden teknik analiz işleminin kaç kez çalıştırıldığı'};
 const _kuTipTip = t => _KU_TIP_TOOLTIP[t] ? ` title="${_KU_TIP_TOOLTIP[t]}"` : '';
 let _kuDonem = 'gun';
 const _KU_AYLAR = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
@@ -4356,7 +4356,8 @@ async function kullanimYukle() {
   const analist = document.getElementById('ku-analist-sec') ? document.getElementById('ku-analist-sec').value : '';
   const analistEl = document.getElementById('ku-analist');
   try {
-    const r = await fetch(`/api/usage/stats?gun=${gun}&donem=${_kuDonem}&analist=${encodeURIComponent(analist)}`);
+    const _pencere = { gun: 'bugun', hafta: 'hafta', ay: 'ay' }[_kuDonem] || 'aralik';
+    const r = await fetch(`/api/usage/stats?gun=${gun}&donem=${_kuDonem}&analist=${encodeURIComponent(analist)}&pencere=${_pencere}`);
     if (!r.ok) { if (analistEl) analistEl.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:10px 0">Yetkisiz veya veri yok.</div>'; return; }
     const d = await r.json();
     // Analist dropdown (seçimi koru)
@@ -4397,7 +4398,9 @@ async function kullanimYukle() {
       : '') + karsGrubu + kaliteGrubu;
     document.getElementById('ku-ozet').innerHTML =
       `<div class="ku-grup"><div class="ku-grup-lbl" title="Karta tıklayınca Zaman Trendi o dönemde (günlük / haftalık / aylık) gösterilir">Aktivite (kümülatif) · <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">karta tıkla → trend dönemi</span></div><div class="ku-cards">${donemKart(oz.bugun || 0, 'Bugün', 'gun')}${donemKart(oz.bu_hafta || 0, 'Bu Hafta', 'hafta')}${donemKart(oz.bu_ay || 0, 'Bu Ay', 'ay')}</div></div>` +
-      `<div class="ku-grup"><div class="ku-grup-lbl">Seçili Aralık Toplamı</div><div class="ku-cards">${kart(d.toplam_analiz, 'Toplam İşlem')}${kart(d.toplam_jira_task, 'Açılan Task')}${kart(d.analist_sayisi, 'Analist')}</div></div>`;
+      `<div class="ku-grup"><div class="ku-grup-lbl" title="Seçili kartın penceresi (bugün / bu hafta / bu ay) — Analist Özeti ve matris de bu pencereye göre">${_donemAd[_kuDonem] === 'günlük' ? 'Bugün' : _donemAd[_kuDonem] === 'haftalık' ? 'Bu Hafta' : 'Bu Ay'} Toplamı</div><div class="ku-cards">${kart(d.toplam_analiz, 'Toplam İşlem')}${kart(d.toplam_jira_task, 'Açılan Task')}${kart(d.analist_sayisi, 'Analist')}</div></div>` +
+      `<div class="ku-grup"><div class="ku-grup-lbl" title="Kayıt başından bu yana (tüm analistler, aralık filtresinden bağımsız)">Tüm Zamanlar</div><div class="ku-cards">${kart(d.tum_zaman_toplam || 0, 'Toplam İşlem')}${kart(d.tum_zaman_task || 0, 'Açılan Task')}</div></div>`;
+    const _aoz = document.getElementById('ku-analist-donem'); if (_aoz) _aoz.textContent = ({ gun: 'bugün', hafta: 'bu hafta', ay: 'bu ay' })[_kuDonem] || '';
     document.querySelectorAll('.ku-donem-kart').forEach(b => b.classList.toggle('aktif', b.dataset.donem === _kuDonem));
     const _olcumEl = document.getElementById('ku-ozet-olcum');
     if (_olcumEl) _olcumEl.innerHTML = tokenGrubu || '<span style="color:var(--text3)">Bu aralıkta ölçüm verisi yok.</span>';

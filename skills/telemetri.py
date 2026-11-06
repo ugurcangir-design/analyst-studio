@@ -658,11 +658,15 @@ def _olaylari_filtrele(gun: int, analist: str | None = None) -> list[dict]:
     return out
 
 
-def istatistik(gun: int = 90, donem: str = "gun", analist: str | None = None) -> dict:
-    """Deterministik, 0-token özet. donem: gun|hafta|ay (trend kovası). analist: tek kişi filtresi."""
+def istatistik(gun: int = 90, donem: str = "gun", analist: str | None = None, pencere: str = "") -> dict:
+    """Deterministik, 0-token özet. donem: gun|hafta|ay (trend kovası). analist: tek kişi filtresi.
+    pencere (owner 2026-11-06 — 'analist özeti seçili karta göre olmalı'): ''|'aralik' → tablolar seçili gün aralığı
+    (eski davranış); 'bugun'|'hafta'|'ay' → Analist Özeti / matris / dönem toplamı YALNIZ o takvim penceresi
+    (bugün / bu ISO haftası / bu ay). Trend + Aktivite kartları her zaman aralıktan. `tum_zaman_toplam` = tüm kayıtlar."""
     if donem not in ("gun", "hafta", "ay"):
         donem = "gun"
     # 'kimlik' olayları (Yetki roster'ı için bildirilen ad+e-posta) İŞLEM sayılmaz → istatistikten çıkar.
+    tum_olaylar = [e for e in olaylari_oku() if (e.get("olay") or "") != "kimlik"]
     aralik = [e for e in _olaylari_filtrele(gun) if (e.get("olay") or "") != "kimlik"]  # dropdown + genel
     tum_analistler = sorted({(e.get("analist") or "bilinmeyen") for e in aralik},
                             key=lambda x: str(x).casefold())
@@ -673,6 +677,19 @@ def istatistik(gun: int = 90, donem: str = "gun", analist: str | None = None) ->
     y, w, _ = now.isocalendar()
     bu_hafta = f"{y}-H{w:02d}"
     bu_ay = now.strftime("%Y-%m")
+    pencere = (pencere or "").strip().lower()
+    if pencere not in ("bugun", "hafta", "ay"):
+        pencere = "aralik"
+
+    def _pencerede(e: dict) -> bool:
+        ts = str(e.get("ts", ""))
+        if pencere == "bugun":
+            return _donem_key(ts, "gun") == bugun
+        if pencere == "hafta":
+            return _donem_key(ts, "hafta") == bu_hafta
+        if pencere == "ay":
+            return _donem_key(ts, "ay") == bu_ay
+        return True
 
     analistler: dict[str, dict] = {}
     tip_toplam: dict[str, int] = {}
@@ -684,6 +701,17 @@ def istatistik(gun: int = 90, donem: str = "gun", analist: str | None = None) ->
     token_ozet = {"girdi": 0, "cikti": 0, "cache_yaz": 0, "cache_oku": 0, "cagri": 0, "maliyet_usd": 0.0}
 
     for e in filtreli:
+        ts_str = str(e.get("ts", ""))
+        trend[_donem_key(ts_str, donem)] = trend.get(_donem_key(ts_str, donem), 0) + 1
+        if _donem_key(ts_str, "gun") == bugun:
+            ozet["bugun"] += 1
+        if _donem_key(ts_str, "hafta") == bu_hafta:
+            ozet["bu_hafta"] += 1
+        if _donem_key(ts_str, "ay") == bu_ay:
+            ozet["bu_ay"] += 1
+
+    tablo = [e for e in filtreli if _pencerede(e)]
+    for e in tablo:
         a = e.get("analist") or "bilinmeyen"
         olay = e.get("olay") or "diger"
         durum = e.get("durum") or "ok"
@@ -722,13 +750,6 @@ def istatistik(gun: int = 90, donem: str = "gun", analist: str | None = None) ->
                 "keyler": jira.get("keyler", []),
                 "islem": jira.get("islem", ""),
             })
-        trend[_donem_key(ts_str, donem)] = trend.get(_donem_key(ts_str, donem), 0) + 1
-        if _donem_key(ts_str, "gun") == bugun:
-            ozet["bugun"] += 1
-        if _donem_key(ts_str, "hafta") == bu_hafta:
-            ozet["bu_hafta"] += 1
-        if _donem_key(ts_str, "ay") == bu_ay:
-            ozet["bu_ay"] += 1
 
     for an in analistler.values():
         an["ort_sure_ms"] = round(an["sure_ms_toplam"] / an["toplam"]) if an["toplam"] else 0
@@ -745,13 +766,16 @@ def istatistik(gun: int = 90, donem: str = "gun", analist: str | None = None) ->
         "gun": gun,
         "donem": donem,
         "analist": analist,
-        "toplam_analiz": len(filtreli),
+        "pencere": pencere,
+        "toplam_analiz": len(tablo),
         "toplam_jira_task": toplam_task,
         "analist_sayisi": len(analistler),
+        "tum_zaman_toplam": len(tum_olaylar),
+        "tum_zaman_task": sum(int((e.get("jira") or {}).get("toplam", 0) or 0) for e in tum_olaylar if isinstance(e.get("jira"), dict)),
         "ozet": ozet,
         "token_ozet": {**token_ozet, "maliyet_usd": round(token_ozet["maliyet_usd"], 4)},
-        "karsilastirma": kota_karsilastirma(filtreli),
-        "kalite": kalite_ozeti(filtreli),
+        "karsilastirma": kota_karsilastirma(tablo),
+        "kalite": kalite_ozeti(tablo),
         "analistler": sirali,
         "tum_analistler": list(tum_analistler),
         "tip_toplam": tip_toplam,
