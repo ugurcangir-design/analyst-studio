@@ -12,6 +12,7 @@ doğrudan Swagger'dan çekip verir → agent mevcut sözleşmeyi görür, kullan
 from __future__ import annotations
 
 import json
+import math
 import re
 from pathlib import Path
 
@@ -23,6 +24,36 @@ _YOL_KAYNAK = re.compile(r"/([a-zA-Z][a-zA-Z0-9-]{2,})")   # path segmentleri (k
 _STOP = {"the", "and", "for", "with", "get", "post", "put", "api", "bff", "service", "list", "all", "new"}
 # Jenerik path segmentleri — TÜM endpoint'lerde geçtiği için alaka/boost sinyali DEĞİL (yoksa 'bff' herkesi eşler).
 _YOL_STOP = {"bff", "api", "v1", "v2", "v3", "service", "services", "external", "internal", "by", "id", "all"}
+
+
+# Türkçe task metni → Swagger (İngilizce) token eşlemesi (owner 2026-11-06, MBSUATEAM-393: 'çarpan' hiçbir
+# 'multiplier' ucunu eşlemedi → PATCH /odd-multiplier ve MarketUpdateRequest bloğa girmedi, model 'aynı uç' sandı).
+_ES_ANLAM = {
+    "çarpan": {"multiplier"}, "carpan": {"multiplier"}, "oran": {"odd", "odds"}, "oranlar": {"odd", "odds"},
+    "market": {"market"}, "tanım": {"definition"}, "tanim": {"definition"}, "tanımı": {"definition"}, "tanımlar": {"definition"},
+    "spor": {"sport"}, "turnuva": {"tournament"}, "lig": {"tournament", "league"}, "grup": {"group"},
+    "maç": {"fixture", "event", "match"}, "mac": {"fixture", "event", "match"}, "etkinlik": {"fixture", "event"},
+    "sonuç": {"outcome", "result"}, "sonuc": {"outcome", "result"}, "takım": {"competitor", "team"}, "takim": {"competitor"},
+    "kupon": {"ticket", "coupon"}, "bahis": {"bet"}, "limit": {"limit"}, "onay": {"approval", "four", "eyes"},
+    "kaldır": {"remove", "delete"}, "kaldir": {"remove", "delete"}, "kaldırılması": {"remove", "delete"}, "sil": {"delete", "remove"},
+    "ekle": {"create", "add"}, "ekleme": {"create", "add"}, "güncelle": {"update"}, "guncelle": {"update"},
+    "düzenle": {"update", "edit"}, "duzenle": {"update", "edit"}, "yayın": {"publish", "published"}, "yayin": {"publish"},
+}
+# Add/Edit/modal/kaldır gibi sinyaller → task yazma akışı içeriyor → POST/PUT/PATCH/DELETE uçlarına ek puan
+_YAZMA_SINYAL = re.compile(r"(?i)\b(add|edit|create|update|save|delete|remove|modal|form|kaydet|ekle|güncelle|guncelle|"
+                           r"düzenle|duzenle|kaldır|kaldir|çıkar|cikar|sil)\w*")
+_YAZMA = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _es_anlam_tokenlari(metin: str) -> set[str]:
+    """Türkçe kelimeleri (ek/çekim dahil, önek eşleşmesi) Swagger İngilizce token'larına çevirir."""
+    out: set[str] = set()
+    for w in re.findall(r"[A-Za-zÇĞİÖŞÜçğıöşü]+", metin or ""):
+        wl = w.lower().replace("i̇", "i")
+        for kok, ing in _ES_ANLAM.items():
+            if wl.startswith(kok):
+                out |= ing
+    return out
 
 
 def _yol_kaynaklari(yol: str) -> set[str]:
@@ -91,6 +122,12 @@ def _parametreler(op: dict, path_seviye: list) -> list[dict]:
     return out
 
 
+# Her yanıt sarmalayıcısında geçen jenerik alan adları (tradoria `{code,data,error,message,success,timestamp}`) — alaka
+# sinyali DEĞİL; gözlem metnindeki "data table"/"message" kelimeleri tüm tradoria uçlarını şişiriyordu (393).
+_GENEL_ALAN = {"code", "data", "error", "message", "success", "timestamp", "status", "value", "type", "content",
+               "total", "totalelements", "totalpages", "number", "pageable", "empty", "first", "last", "sort"}
+
+
 def _alan_tokenlari(d, derinlik: int = 0) -> set[str]:
     """İstek/yanıt şemasının alan ADLARINI token'a çevirir (eşleşme sinyali: ör. 'sportId' → {sport}})."""
     out: set[str] = set()
@@ -151,7 +188,7 @@ def _endpointleri_oku() -> list[dict]:
                 for pr in parametreler:
                     param_tok |= _tokenle(pr["ad"])
                     param_tok.add(pr["ad"].lower())   # 'id', 'q' gibi <3 karakterli adlar da eşleşsin (denetim A#6: 211 param düşüyordu)
-                alan_tok = _alan_tokenlari(istek) | _alan_tokenlari(yanit)
+                alan_tok = (_alan_tokenlari(istek) | _alan_tokenlari(yanit)) - _GENEL_ALAN
                 kayitlar.append({
                     "servis": f.stem, "method": method.upper(), "path": yol, "ozet": ozet,
                     "istek": istek, "yanit": yanit, "parametreler": parametreler,
@@ -161,7 +198,7 @@ def _endpointleri_oku() -> list[dict]:
     return kayitlar
 
 
-def endpoint_baglami(sorgu_metni: str, ek_metin: str = "", butce: int = 9000, azami: int = 20) -> str:
+def endpoint_baglami(sorgu_metni: str, ek_metin: str = "", butce: int = 13000, azami: int = 24) -> str:
     """Task metni (+ canlı gözlem/BFF metni) ile EN ALAKALI kayıtlı endpoint'lerin SÖZLEŞMESİNİ (method+path+
     istek/yanıt şeması) döndürür — agent mevcut servisi görsün ve kullansın (ister dışı endpoint EKLEMEZ; yalnız
     task'a alakalı olanlar). Alaka yoksa/boşsa boş döner (blok eklenmez)."""
@@ -171,19 +208,44 @@ def endpoint_baglami(sorgu_metni: str, ek_metin: str = "", butce: int = 9000, az
     sorgu_tok = _tokenle(sorgu_metni + " " + ek_metin)
     # 'id', 'q' gibi 1-2 karakterli parametre adları sorguda geçiyorsa da eşleşsin (A#6; _tokenle <3'ü atar)
     sorgu_tok |= {w.lower() for w in re.findall(r"\b[a-zA-Z]{1,2}\b", sorgu_metni + " " + ek_metin)}
+    sorgu_tok |= _es_anlam_tokenlari(sorgu_metni)          # Türkçe task metni → İngilizce Swagger token'ları
+    # Task metninin kendi token'ları (başlık/ister) gözlem/BFF metninden (çok gürültülü) daha ağır: ×2
+    task_tok = _tokenle(sorgu_metni) | _es_anlam_tokenlari(sorgu_metni)
+    yazma_akisi = bool(_YAZMA_SINYAL.search(sorgu_metni))  # Add/Edit/kaldır → yazma uçları da sözleşmedir
     # Canlı gözlem/task metninde GEÇEN gerçek path kaynakları (ör. /bff/nebula/id-mapping-service/...) güçlü sinyal
     gecenler = _yol_kaynaklari(sorgu_metni + " " + ek_metin)
     if not sorgu_tok and not gecenler:
         return ""
+    # IDF ağırlığı (owner 2026-11-06): 'sport'/'data'/'definition' hemen her uçta geçer, 'multiplier' nadirdir →
+    # nadir eşleşme daha değerli; gözlem metnindeki sayfalama parametreleri (page/size/sortBy) listeleri şişirmesin.
+    df: dict[str, int] = {}
+    for k in kayitlar:
+        for t in k["token"]:
+            df[t] = df.get(t, 0) + 1
+    n_kayit = max(1, len(kayitlar))
+
+    def _agirlik(tokenler: set[str], tavan: int = 8) -> float:
+        # En değerli `tavan` eşleşme sayılır: 40 alanlı şişman DTO (tournament/market) salt alan sayısıyla öne geçmesin
+        return sum(sorted((math.log(1 + n_kayit / df.get(t, 1)) for t in tokenler), reverse=True)[:tavan])
+
     skorlu = []
     for k in kayitlar:
-        ortak = len(k["token"] & sorgu_tok)
+        ortak = _agirlik(k["token"] & sorgu_tok) + _agirlik(k["token"] & task_tok)
         # Path kaynağı metinde birebir geçiyorsa büyük boost (gözlemlenen/istenen endpoint)
         path_boost = 5 * len(_yol_kaynaklari(k["path"]) & gecenler)
         # Parametre adı sorguda geçiyorsa güçlü sinyal (ör. 'sportId/name/marketId ile filtre' → GET /market
         # bu sayede createMarket/updateMarket gibi parametresiz uçları geçer; filtre/arama sözleşmesi budur).
-        param_boost = 3 * len(k.get("param_token", set()) & sorgu_tok)
-        skor = ortak + path_boost + param_boost
+        # Parametre eşleşmesi: task metninde GEÇEN parametre adı güçlü (1254: id→marketId), yalnız gözlem/BFF metninde
+        # geçen (page/size/sortBy/sportId) zayıf — yoksa her liste ucu 30-40 puan alıp yazma uçlarını gömüyordu (393).
+        prm = k.get("param_token", set())
+        param_boost = 3 * len(prm & task_tok) + min(3, len(prm & (sorgu_tok - task_tok)))
+        # Yazma akışlı task'ta POST/PUT/PATCH uçları GET'lerin gerisinde kalmasın (eskiden ilk 20 tamamen GET'ti →
+        # Add/Edit modalının istek sözleşmesi (MarketUpdateRequest) ve ayrı yazma uçları hiç görünmüyordu).
+        yazma_boost = 2 if (yazma_akisi and k["method"] in _YAZMA and ortak) else 0
+        # Task'ın kavramı (ör. çarpan→multiplier) ucun PATH'inde geçiyorsa uç o kavrama ADANMIŞTIR (PATCH /odd-multiplier) —
+        # şişman DTO'da alan olarak geçmesinden çok daha güçlü sinyal: 3×IDF
+        kavram_boost = 3 * _agirlik(_tokenle(k["path"]) & task_tok - {"api", "bff"})
+        skor = ortak + path_boost + param_boost + yazma_boost + kavram_boost
         if skor > 0:
             skorlu.append((skor, k))
     if not skorlu:
@@ -206,6 +268,23 @@ def endpoint_baglami(sorgu_metni: str, ek_metin: str = "", butce: int = 9000, az
         tekil[anahtar] = dict(k)
         tekil[anahtar]["_skor"] = skor
     skorlu = [(v["_skor"], v) for v in tekil.values()]
+    if yazma_akisi:
+        # Aynı path-kuyruğunun yazma kardeşi (GET /markets seçildiyse PUT/POST /markets da) en az GET skoruna çekilir
+        en_iyi: dict[str, int] = {}
+        ust = sorted({sk for sk, _ in skorlu}, reverse=True)[:6]   # yalnız en iyi 6 skor düzeyindeki path'lerin kardeşi
+        for sk, v in skorlu:
+            if sk not in ust:
+                continue
+            ky = "/".join(x for x in v["path"].lower().split("/") if x and x not in _YOL_STOP).rstrip("/")
+            ky = re.sub(r"/\{[^}]+\}$", "", ky)
+            en_iyi[ky] = max(en_iyi.get(ky, 0), sk)
+        yeni = []
+        for sk, v in skorlu:
+            ky = re.sub(r"/\{[^}]+\}$", "", "/".join(x for x in v["path"].lower().split("/") if x and x not in _YOL_STOP))
+            if v["method"] in _YAZMA and en_iyi.get(ky, 0) > sk:
+                sk = en_iyi[ky]
+            yeni.append((sk, v))
+        skorlu = yeni
     satirlar = ["### KAYITLI SERVİS SÖZLEŞMELERİ (Swagger — task'a alakalı MEVCUT endpoint'ler)",
                 "Aşağıdakiler sistemde ZATEN VAR olan endpoint'lerdir. İhtiyacını karşılayan varsa ÇÖZÜM OLARAK KULLAN "
                 "(method+path+alanları aynen), `[K: Swagger:<servis>]` ile. Yoksa canlı gözlemle doğrula; o da yoksa yeni tasarla.\n"
@@ -213,6 +292,15 @@ def endpoint_baglami(sorgu_metni: str, ek_metin: str = "", butce: int = 9000, az
                 "DOĞRULANMIŞ say — 'Swagger'da doğrulanamadı' / 'BE teyit' YAZMA. Task/analist notu parametreyi başka adla "
                 "anıyorsa (ör. 'id ile arama' → listede `marketId`) Swagger'daki GERÇEK adı kullan ve eşlemeyi tek cümleyle belirt. "
                 "`/bff/<servis>/...` proxy yolu ile servisin kendi `/api/v1/...` yolu AYNI uçtur (parametreleri birleştir).\n"]
+    skorlu.sort(key=lambda x: x[0], reverse=True)
+    # KAVRAM UÇLARI GARANTİSİ (393): task'ın Türkçe kavramı (çarpan→multiplier) ucun PATH'inde geçiyorsa
+    # (PATCH /odd-multiplier, four-eyes change-*-multiplier) o uç sözleşmeye MUTLAKA girer — şişman DTO'lu
+    # market/sport uçları skorla onu 50. sıraya itmişti, model "ayrı uç yok, aynı uç" varsaydı.
+    kavram_tok = _es_anlam_tokenlari(sorgu_metni) - {"create", "add", "update", "edit", "remove", "delete", "market", "sport"}
+    if kavram_tok:
+        kavram = [(sk, v) for sk, v in skorlu if _tokenle(v["path"]) & kavram_tok][:4]
+        kavram_id = {id(v) for _, v in kavram}
+        skorlu = kavram + [(sk, v) for sk, v in skorlu if id(v) not in kavram_id]
     toplam = len(satirlar[0]) + len(satirlar[1])
     n = 0
     for skor, k in skorlu:

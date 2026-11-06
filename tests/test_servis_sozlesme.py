@@ -7,6 +7,9 @@ kullanmalı. servis_sozlesme.endpoint_baglami: task/gözlem metniyle alakalı ME
 from __future__ import annotations
 
 import json
+import json as _js  # noqa: E402
+import pathlib as _pl
+import tempfile as _tf  # noqa: E402
 import sys
 import tempfile
 from pathlib import Path
@@ -131,7 +134,6 @@ chk("prompt: 'BE TEYİT EDİLMELİ' bir sonuç değil — Swagger/canlı yakala"
 chk("prompt: NOTTA/İSTERDE ADLANDIRILAN EKRAN = KESİN KAPSAM (künye yazma)", "NOTTA/İSTERDE ADLANDIRILAN EKRAN" in gtp)
 chk("prompt: 'ANALİST BİLDİRDİ' geçersiz kaynak — Swagger/gözlem raporuyla doğrula", "ANALİST BİLDİRDİ" in gtp and "DOĞRULAYIP" in gtp)
 # owner 2026-11-01: Swagger servis sözleşmesi enjeksiyonu artık task-only DEĞİL — süreç + teknik de kullanır
-import pathlib as _pl  # noqa: E402
 _surec_src = _pl.Path("skills/surec_analizi.py").read_text(encoding="utf-8")
 _teknik_src = _pl.Path("skills/teknik_analiz.py").read_text(encoding="utf-8")
 chk("süreç analizi servis_sozlesme enjekte eder", "servis_sozlesme" in _surec_src and "endpoint_baglami" in _surec_src)
@@ -222,4 +224,37 @@ print()
 if HATA:
     print(f"FAIL — {HATA} kontrol başarısız")
     sys.exit(1)
+
+print("Y) owner 2026-11-06 (MBSUATEAM-393) — Türkçe kavram eşlemesi + yazma uçları + kavram ucu garantisi + jenerik alan")
+_tok = SS._es_anlam_tokenlari("Çarpanın kaldırılması; oranlar güncellensin")
+chk("çarpan→multiplier, kaldır→remove/delete, oran→odd, güncelle→update", {"multiplier", "remove", "update", "odd"} <= _tok, _tok)
+_d = _pl.Path(_tf.mkdtemp())
+_spec = {"openapi": "3.0.0", "paths": {
+    "/api/v1/market": {"get": {"operationId": "getMarkets", "parameters": [{"name": "sportId", "in": "query", "schema": {"type": "integer"}}, {"name": "page", "in": "query", "schema": {"type": "integer"}}]},
+                       "post": {"operationId": "createMarket", "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/MarketCreateRequest"}}}}}},
+    "/api/v1/market/{marketId}": {"put": {"operationId": "updateMarket", "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/MarketCreateRequest"}}}}}},
+    "/api/v1/odd-multiplier": {"patch": {"operationId": "changeOddMultiplier", "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/OddMultiplierChangeRequest"}}}}}},
+    "/api/v1/tournament": {"get": {"operationId": "getTournaments", "parameters": [{"name": "sportId", "in": "query", "schema": {"type": "integer"}}, {"name": "page", "in": "query", "schema": {"type": "integer"}}],
+                                   "responses": {"200": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/Sarmal"}}}}}}},
+}, "components": {"schemas": {
+    "MarketCreateRequest": {"type": "object", "properties": {"name": {"type": "string"}, "sportId": {"type": "integer"}, "favorite": {"type": "boolean"}, "preOddMultiplierWeb": {"type": "number"}, "liveOddMultiplierLrt": {"type": "number"}}},
+    "OddMultiplierChangeRequest": {"type": "object", "properties": {"type": {"type": "string"}, "definitionId": {"type": "integer"}, "preOddMultiplierWeb": {"type": "number"}}},
+    "Sarmal": {"type": "object", "properties": {"code": {"type": "string"}, "data": {"type": "object"}, "message": {"type": "string"}, "success": {"type": "boolean"}}},
+}}}
+(_d / "tradoria.json").write_text(_js.dumps(_spec))
+_eski_dir = SS.SERVICES_DIR
+SS.SERVICES_DIR = _d
+try:
+    _kay = SS._endpointleri_oku()
+    _tour = next(k for k in _kay if k["path"] == "/api/v1/tournament")
+    chk("jenerik sarmalayıcı alanlar (code/data/message/success) token DEĞİL", not ({"code", "data", "message", "success"} & _tour["token"]), _tour["token"])
+    _b = SS.endpoint_baglami("Market Definition'larından Çarpanın Kaldırılması. Definitions Add ve Edit modallarından çarpanların kaldırılması gerekiyor. Çarpanlar Market Per Sport sayfasında yapılması yeterlidir.", "data table message")
+    chk("Türkçe 'çarpan' → PATCH /odd-multiplier bloğa girer (kavram ucu garantisi)", "PATCH /api/v1/odd-multiplier" in _b, _b[:400])
+    chk("Add/Edit (yazma akışı) → PUT /market/{marketId} + POST /market ve istek alanları (preOddMultiplierWeb) bloğa girer",
+        "PUT /api/v1/market/{marketId}" in _b and "POST /api/v1/market" in _b and "preOddMultiplierWeb" in _b, _b)
+    _b2 = SS.endpoint_baglami("Market listesinde id ile arama — marketId ve name ile filtre", "")
+    chk("filtre task'ı (1254) regresyonu: GET /market yine ilk sırada", _b2.find("GET /api/v1/market") < _b2.find("PATCH /api/v1/odd-multiplier") if "PATCH /api/v1/odd-multiplier" in _b2 else "GET /api/v1/market" in _b2, _b2[:300])
+finally:
+    SS.SERVICES_DIR = _eski_dir
+
 print("SERVİS SÖZLEŞME TESTLERİ GEÇTİ")

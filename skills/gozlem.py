@@ -105,6 +105,11 @@ _RAPOR_FORMAT = """
   ekrana menü/rota ile GİT ve her birini AYRI gözlemle — rotası, liste/istek ucu, filtre/alan davranışı. Ekranlar arasında
   uç/alan/filtre FARKI olabilir; birini gözleyip "diğerleri aynı" DEME. Her ekran için ayrı `[K: Canlı UI:/route]` +
   `[K: Network:…]` ver. Gidemediğin ekranı 'Gezilemeyen'e yaz (neden); varsayma.
+- **ALANIN TAŞINDIĞI / YÖNETİLDİĞİ EKRAN (owner 2026-11-06):** görev 'X ekranından kaldırılsın, Y ekranında yapılması
+  yeterli / Y'den yönetilecek' diyorsa Y KAPSAMDADIR: Y'ye git, o alanın düzenlendiği satırın Edit/düzenleme modalını AÇ,
+  alanı değiştirip KAYDET'e bas ve yazma isteğini yakala (`[K: Network:METHOD /path]` + payload alan adları), sonra eski
+  değere geri al. Amaç: Y'nin alanı HANGİ UÇLA yazdığı (X ile aynı uç mu, ayrı bir uç mu — ör. `PATCH …/odd-multiplier`).
+  Bu sorunun cevabı olmadan 'aynı uç' VARSAYMA; Y'ye gidemediysen 'Gezilemeyen'e yaz.
 
 ## Alanlar ve Bileşenler
 | Alan/Bileşen | Tip | Zorunlu | Varsayılan / Seçenekler | Davranış (disabled, bağımlılık) |
@@ -162,6 +167,9 @@ def _ozet_kirp(metin: str) -> str:
 _PARAM_ADAY = re.compile(r"`?\b([a-z][A-Za-z0-9]*(?:Id|ID|Name|Code)|id|name|q|page|size|sportId|marketId)\b`?")
 _UC_ADAY = re.compile(r"(?:GET|POST|PUT|PATCH|DELETE)?\s*(/(?:bff|api)/[A-Za-z0-9_./{}-]+)")
 # Hedef modal/form gözlemi istiyor mu (Edit/Add/modal/input'a değer yaz…) → zorunlu doğrulama listesine modal maddesi girer.
+# "… Y sayfasında/ekranında yapılması yeterli(dir)" / "Y üzerinden yönetil…" → alanın taşındığı ekran adı
+_TASINAN_EKRAN = re.compile(r"((?:[A-ZÇĞİÖŞÜ][\w'’-]*\s+){0,3}[A-ZÇĞİÖŞÜ][\w'’-]*)\s+(?i:sayfas[ıi]nda|ekran[ıi]nda|"
+                            r"sekmesinde|üzerinden)\s+(?i:yap[ıi]lmas[ıi]\s+yeterli|y[öo]netil|g[üu]ncellen|d[üu]zenlen)")
 _MODAL_ADAY = re.compile(r"(?i)\b(edit|add|düzenle|modal|form|yeni kayıt|input|alan[a-zı]* (?:yaz|gir)|yaz(?:ıp|ın)?\b|gir(?:ip|in)?\b|"
                          r"popup|drawer|detail)")
 
@@ -181,7 +189,8 @@ def _dogrulama_listesi(gorev_ozet: str) -> str:
         if u not in ucler:
             ucler.append(u)
     modal_istek = bool(_MODAL_ADAY.search(kaynak))
-    if not not_bolumu and not params and not modal_istek:
+    tasinan = [t.strip() for t in _TASINAN_EKRAN.findall(m)]
+    if not not_bolumu and not params and not modal_istek and not tasinan:
         return ""
     # Kayıtlı Swagger'daki GERÇEK parametre adları (1254 koşusu: gözlemci nottaki 'id'/'q' ile uğraşıp `name`/`marketId`'yi
     # hiç denemedi) — uç adı eşleşen kayıtlı endpoint'lerin query parametreleri listeye eklenir.
@@ -219,6 +228,10 @@ def _dogrulama_listesi(gorev_ozet: str) -> str:
         sat.append("- Hedefte Edit/Add/modal/form/alan yazımı geçiyor → ilgili satırın Edit (ya da Add/View Details) düğmesine bas, "
                    "modalı AÇ, alanları ve istenen değerin girişini (maske, ondalık, mesaj) gözle; bu salt-okunur gözlemdir, "
                    "Save'e basmadan kapat (hedef 'kaydet/payload' demiyorsa). Modalı açmadan 'yazma işlemi yapılmadı' diye bitirme.")
+    for t in tasinan[:2]:
+        sat.append(f"- Görev alanın yönetimini **{t}** ekranına bırakıyor → o ekrana git, ilgili satırın Edit modalını aç, alanı "
+                   "değiştirip kaydet, yazma isteğini (method + path + payload alanları) `[K: Network:…]` ile yakala, değeri geri al. "
+                   "Hangi UÇ olduğunu raporda açıkça yaz (kaldırılan ekranla aynı uç mu, ayrı mı). Gidemediysen 'Gezilemeyen'e yaz.")
     sat.append("- Bu listedeki her madde rapora 'denendi' ya da 'denenemedi + neden' olarak girmeden raporu BİTİRME.")
     return "\n".join(sat)
 
