@@ -3274,10 +3274,10 @@ function temaDegistir() {
     </div>
 
     <style>
-      .ku-donem-btn{background:var(--surface);border:none;padding:6px 15px;font-size:12px;font-weight:500;color:var(--text2);cursor:pointer;font-family:inherit;border-right:1px solid var(--border);transition:background .15s}
-      .ku-donem-btn:last-child{border-right:none}
-      .ku-donem-btn.aktif{background:var(--accent);color:#04201c}
-      .ku-donem-btn:hover:not(.aktif){background:var(--surface2)}
+      .ku-donem-kart{cursor:pointer;font-family:inherit;text-align:left;transition:border-color .15s,box-shadow .15s}
+      .ku-donem-kart:hover{border-color:var(--accent)}
+      .ku-donem-kart.aktif{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft, rgba(99,102,241,.25))}
+      .ku-donem-kart.aktif .k::after{content:' · trend';color:var(--accent);font-weight:600}
       /* İstatistik kart grupları */
       .ku-ozet-wrap{display:flex;gap:0;flex-wrap:wrap;align-items:stretch}
       .ku-grup{display:flex;flex-direction:column}
@@ -3388,14 +3388,6 @@ function temaDegistir() {
           </details>
           <!-- Kontroller: dönem + analist + aralık -->
           <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px">
-            <div>
-              <div style="font-size:11px;color:var(--text3);margin-bottom:5px">Dönem</div>
-              <div id="ku-donem" style="display:inline-flex;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden">
-                <button class="ku-donem-btn aktif" data-donem="gun" onclick="kuDonemSec('gun')">Günlük</button>
-                <button class="ku-donem-btn" data-donem="hafta" onclick="kuDonemSec('hafta')">Haftalık</button>
-                <button class="ku-donem-btn" data-donem="ay" onclick="kuDonemSec('ay')">Aylık</button>
-              </div>
-            </div>
             <div>
               <div style="font-size:11px;color:var(--text3);margin-bottom:5px">Analist</div>
               <select id="ku-analist-sec" class="ctx-input" style="width:auto;min-width:150px" onchange="kullanimYukle()">
@@ -4350,7 +4342,7 @@ async function kuDrill(etiket, donem) {
 }
 function kuDonemSec(d) {
   _kuDonem = d;
-  document.querySelectorAll('.ku-donem-btn').forEach(b => b.classList.toggle('aktif', b.dataset.donem === d));
+  document.querySelectorAll('.ku-donem-kart').forEach(b => b.classList.toggle('aktif', b.dataset.donem === d));
   const et = document.getElementById('ku-donem-etiket');
   if (et) et.textContent = { gun: 'günlük', hafta: 'haftalık', ay: 'aylık' }[d];
   kullanimYukle();
@@ -4373,6 +4365,9 @@ async function kullanimYukle() {
     // Özet: iki anlamlı grup — Aktivite (kümülatif zaman pencereleri) + Seçili Aralık toplamları
     const oz = d.ozet || {};
     const kart = (v, k, vurgu) => `<div class="ku-card${vurgu ? ' vurgu' : ''}"><div class="n">${v}</div><div class="k">${k}</div></div>`;
+    // Aktivite kartı aynı zamanda trend DÖNEM seçicisidir (owner 2026-11-06: ayrı Dönem düğmesi gereksiz)
+    const _donemAd = { gun: 'günlük', hafta: 'haftalık', ay: 'aylık' };
+    const donemKart = (v, k, d) => `<button type="button" class="ku-card vurgu ku-donem-kart" data-donem="${d}" onclick="kuDonemSec('${d}')" title="Zaman trendini ${_donemAd[d]} göster"><div class="n">${v}</div><div class="k">${k}</div></button>`;
     // Token biçimi: 1234→1.2K, 3400000→3.4M (okunur, kompakt)
     const tokFmt = (n) => { n = Number(n || 0); if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'; if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K'; return String(n); };
     const usdFmt = (n) => '$' + Number(n || 0).toFixed(2);
@@ -4401,8 +4396,9 @@ async function kullanimYukle() {
       ? `<div class="ku-grup"><div class="ku-grup-lbl" title="AI çağrılarında harcanan token ve tahmini maliyet (CLI JSON usage + API usage). Cache okuma girdiden düşülür.">Token / Maliyet</div><div class="ku-cards">${kart(tokFmt(tk.girdi), 'Girdi Token')}${kart(tokFmt(tk.cikti), 'Çıktı Token')}${kart(tokFmt(tk.cache_oku), 'Cache Okuma', true)}${kart(usdFmt(tk.maliyet_usd), 'Tahmini Maliyet')}</div></div>`
       : '') + karsGrubu + kaliteGrubu;
     document.getElementById('ku-ozet').innerHTML =
-      `<div class="ku-grup"><div class="ku-grup-lbl">Aktivite (kümülatif)</div><div class="ku-cards">${kart(oz.bugun || 0, 'Bugün', true)}${kart(oz.bu_hafta || 0, 'Bu Hafta', true)}${kart(oz.bu_ay || 0, 'Bu Ay', true)}</div></div>` +
+      `<div class="ku-grup"><div class="ku-grup-lbl" title="Karta tıklayınca Zaman Trendi o dönemde (günlük / haftalık / aylık) gösterilir">Aktivite (kümülatif) · <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text3)">karta tıkla → trend dönemi</span></div><div class="ku-cards">${donemKart(oz.bugun || 0, 'Bugün', 'gun')}${donemKart(oz.bu_hafta || 0, 'Bu Hafta', 'hafta')}${donemKart(oz.bu_ay || 0, 'Bu Ay', 'ay')}</div></div>` +
       `<div class="ku-grup"><div class="ku-grup-lbl">Seçili Aralık Toplamı</div><div class="ku-cards">${kart(d.toplam_analiz, 'Toplam İşlem')}${kart(d.toplam_jira_task, 'Açılan Task')}${kart(d.analist_sayisi, 'Analist')}</div></div>`;
+    document.querySelectorAll('.ku-donem-kart').forEach(b => b.classList.toggle('aktif', b.dataset.donem === _kuDonem));
     const _olcumEl = document.getElementById('ku-ozet-olcum');
     if (_olcumEl) _olcumEl.innerHTML = tokenGrubu || '<span style="color:var(--text3)">Bu aralıkta ölçüm verisi yok.</span>';
     // Zaman trendi — dikey bar chart, okunur tarih etiketleri, TIKLANABİLİR (drill-down)
