@@ -78,6 +78,44 @@ def sorular_kaydet(data: dict) -> None:
 _SORU_BAS = re.compile(r"^###\s+(Q-T-\d+|Q-\d+|PO-\d+|Q-K-\d+)\s*:?\s*(.*?)\s*$", re.MULTILINE)
 
 
+def _tur(soru: dict, govde: str = "") -> str:
+    """Soru türü (is_karari | teknik_arastirma | dogrulanamadi) — `Tür:` satırı, yoksa deterministik kalıplar."""
+    try:
+        from .soru_turu import tur_belirle
+        return tur_belirle(soru, govde)
+    except Exception:
+        return "is_karari"
+
+
+def is_karari_mi(soru: dict) -> bool:
+    return (soru.get("tur") or "is_karari") == "is_karari"
+
+
+def cevaplanan_sorular(esik: float | None = None, kaynaklar: tuple[str, ...] | None = None) -> list[dict]:
+    """Analistin cevapladığı / varsayım girdiği sorular (bu oturuma ait: `guncellendi_at/olusturuldu_at` ≥ esik).
+    Sonraki aşamaya (teknik analiz, soru üretimi, sohbet) KESİN BİLGİ olarak verilir — tekrar sorulmaz."""
+    out = []
+    for q in (sorular_yukle().get("sorular") or []):
+        if q.get("durum") not in ("cevaplandi", "varsayim"):
+            continue
+        if kaynaklar and q.get("kaynak_dosya") not in kaynaklar:
+            continue
+        if esik:
+            ts = _iso_epoch(q.get("guncellendi_at") or q.get("olusturuldu_at"))
+            if ts is not None and ts < float(esik) - 1:
+                continue
+        cevap = q.get("cevap") or q.get("varsayim") or ""
+        if cevap:
+            out.append({"id": q.get("id"), "kaynak_dosya": q.get("kaynak_dosya", ""), "baslik": q.get("baslik", ""),
+                        "soru": q.get("soru") or q.get("baslik", ""), "cevap": cevap, "varsayim": q.get("durum") == "varsayim"})
+    return out
+
+
+def cevaplanan_sorular_metni(esik: float | None = None, kaynaklar: tuple[str, ...] | None = None) -> str:
+    return "\n".join(f"- {q['id']} ({q['kaynak_dosya']}): {q['soru']} → {'VARSAYIM: ' if q['varsayim'] else ''}{q['cevap']}"
+                     for q in cevaplanan_sorular(esik, kaynaklar))
+
+
 def zorunlu_mu(deger: str) -> bool:
     """'- Zorunlu: Evet' alan değeri → bool (Evet/E/Yes/True/✓; 'Evet (açıklama)' dahil)."""
     d = (deger or "").strip().lower().lstrip("*").strip()
@@ -182,7 +220,7 @@ def _parse_liste_sorulari(metin: str, dosya_adi: str) -> list[dict]:
         sonuc.append({
             "id": sid, "kaynak_dosya": dosya_adi,
             "baslik": soru[:80], "kategori": "", "katman": "",
-            "oncelik": "", "bagli_id": "", "soru": soru,
+            "oncelik": "", "bagli_id": "", "soru": soru, "tur": _tur({"soru": soru}),
             "mevcut_durum": "", "beklenen_yanit": "", "sorumlu": "", "etki": "",
         })
     return sonuc
@@ -235,7 +273,9 @@ def parse_md_sorular(md_yol: Path) -> list[dict]:
             "sorumlu": _alan_oku(blok, "Sorumlu"),
             "etki": _alan_oku(blok, "Etki"),
             "zorunlu": zorunlu_mu(_alan_oku(blok, "Zorunlu")),
+            "tur": _alan_oku(blok, "Tür") or _alan_oku(blok, "Tur"),
         })
+        sonuc[-1]["tur"] = _tur(sonuc[-1], blok)
         gorulen_idler.add(soru_id)
 
     # 2) Tablo formatı (yalnız blok'ta görülmemiş id'ler için)
@@ -466,12 +506,23 @@ def istatistik_hesapla(sorular: list[dict]) -> dict:
     kritik_acik = 0
     zorunlu_acik = 0
     uygulanmamis = 0
+    is_karari_acik = teknik_acik = dogrulanamadi = 0
     for s in sorular:
         d = s.get("durum", "acik")
         sayilar[d] = sayilar.get(d, 0) + 1
-        if d in ("acik", "bekleniyor") and (s.get("oncelik") or "").lower().startswith("kritik"):
+        acik = d in ("acik", "bekleniyor")
+        tur = s.get("tur") or "is_karari"
+        if acik:
+            if tur == "teknik_arastirma":
+                teknik_acik += 1
+            elif tur == "dogrulanamadi":
+                dogrulanamadi += 1
+            else:
+                is_karari_acik += 1
+        # Kritik/ZORUNLU sayaçları YALNIZ İş Kararı türünde (teknik araştırma onay engeli değildir — Emin 2026-11-06)
+        if acik and tur == "is_karari" and (s.get("oncelik") or "").lower().startswith("kritik"):
             kritik_acik += 1
-        if d in ("acik", "bekleniyor") and s.get("zorunlu"):
+        if acik and tur == "is_karari" and s.get("zorunlu"):
             zorunlu_acik += 1
         if d in ("cevaplandi", "varsayim") and not s.get("uygulandi_at"):
             uygulanmamis += 1
@@ -484,6 +535,9 @@ def istatistik_hesapla(sorular: list[dict]) -> dict:
         "varsayim": sayilar["varsayim"],
         "kritik_acik": kritik_acik,
         "zorunlu_acik": zorunlu_acik,
+        "is_karari_acik": is_karari_acik,
+        "teknik_acik": teknik_acik,
+        "dogrulanamadi": dogrulanamadi,
         "uygulanmamis": uygulanmamis,
     }
 

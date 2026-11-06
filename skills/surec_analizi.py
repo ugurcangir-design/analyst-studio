@@ -152,6 +152,12 @@ def surec_analizi_yap(icerik_override: list | None = None,
     if butunluk:
         print("  🔗 Akış bütünlük denetimi: akışa bağlanmamış/tanımsız öğeler — rapora eklendi.")
 
+    # Soru türü (0 token): her Q- bloğuna `Tür:` + Zorunlu yalnız İş Kararı'nda (Emin 2026-11-06 #4)
+    try:
+        from .soru_turu import md_tur_etiketle, zorunlu_normalize
+        yanit = zorunlu_normalize(md_tur_etiketle(yanit))
+    except Exception as _e:
+        print(f"  ⚠ Soru türü etiketleme atlandı: {_e}")
     ozet = yonetici_ozeti_olustur(yanit)                 # modelin kendi özet maddeleri birleştirilir
     yanit = yonetici_ozetini_cikar(yanit)                 # gövdede ikinci özet kalmasın (tek blok)
     yol = _kaydet("surec-analizi.md", ozet + yanit + belirsizlik + butunluk)

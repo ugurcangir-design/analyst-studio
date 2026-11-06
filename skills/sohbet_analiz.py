@@ -195,26 +195,11 @@ def _cevaplanan_sorular_metni() -> str:
     """Analistin Sorular defterinde (bu oturumda) cevapladığı/varsayım girdiği sorular → sohbet ve üretim
     bağlamına KESİN bilgi olarak girer (tekrar sorulmaz). Best-effort; hata → ''."""
     try:
-        from .sorular import sorular_yukle
+        from .sorular import cevaplanan_sorular_metni
         o = oturum_oku()
         mesajlar = o.get("mesajlar") or []
         esik = min((m.get("ts") or 0) for m in mesajlar) if mesajlar else (o.get("created") or 0)
-        satirlar = []
-        for q in (sorular_yukle().get("sorular") or []):
-            if q.get("durum") not in ("cevaplandi", "varsayim"):
-                continue
-            ts = q.get("guncellendi_at") or q.get("olusturuldu_at") or ""
-            try:
-                from datetime import datetime
-                if datetime.fromisoformat(ts).timestamp() < float(esik or 0) - 1:
-                    continue   # önceki oturumun cevabı
-            except Exception:
-                pass
-            cevap = q.get("cevap") or q.get("varsayim") or ""
-            if cevap:
-                satirlar.append(f"- {q.get('id')} ({q.get('kaynak_dosya', '')}): {q.get('soru') or q.get('baslik', '')} → "
-                                f"{'VARSAYIM: ' if q.get('durum') == 'varsayim' else ''}{cevap}")
-        return "\n".join(satirlar)
+        return cevaplanan_sorular_metni(esik or None)
     except Exception:
         return ""
 

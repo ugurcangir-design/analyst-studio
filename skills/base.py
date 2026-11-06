@@ -345,6 +345,8 @@ _ORTAK_EK_KURALLAR = (
 # Süreç ve ekran BÜTÜNLÜĞÜ + zorunlu açık soru. Amaç analizi büyütmek DEĞİL: uçtan uca akışı
 # kapatmak → geliştirilebilir olsun, test edilirken süreçsel/işleyiş olarak atlanmış nokta kalmasın.
 # prompt_yukle() bu kuralları _BUTUNLUK_SKILL_IDS'e (prompts.json override'ı olsa da) ekler.
+from .soru_turu import SORU_TUR_KURALI as _SORU_TUR_KURALI  # noqa: E402 — 0 token, base'i import etmez
+
 _BUTUNLUK_KURALLARI = (
     "\n\n## EK KURALLAR — Süreç ve Ekran Bütünlüğü (Uçtan Uca Akış)\n\n"
     "Amaç analizi BÜYÜTMEK değil; geliştirilebilir olmasını ve test edilirken süreçsel ya da işleyiş "
@@ -369,7 +371,7 @@ _BUTUNLUK_KURALLARI = (
     "Bir açık soru cevapsız kalırsa geliştirme/test YANLIŞ davranış üretecekse (veri kaybı/bozulması, başka "
     "ekran/rapor/entegrasyonun kırılması, akışın bir dalının tanımsız kalması, beklenen sonucun "
     "bilinmemesi) soru bloğuna `- Zorunlu: Evet` satırı ekle; bu sorular Öncelik: Kritik veya Yüksek olur. "
-    "Diğer sorulara bu satırı YAZMA."
+    "Diğer sorulara bu satırı YAZMA.\n\n" + _SORU_TUR_KURALI
 )
 _BUTUNLUK_SKILL_IDS = frozenset({
     "surec_analizi",
@@ -640,9 +642,10 @@ Belirsiz TÜM konular buraya; ana metne SIZDIRMA. Her soru, önem sırasına gö
 (teknik/BRD analiziyle AYNI yapı — tablo/madde-işaretli DEĞİL):
 
 ### Q-[N]: [Başlık]
+- Tür: İş Kararı / Teknik Araştırma / Doğrulanamadı (analist yalnız İş Kararı'nı cevaplar; teknik konuyu kendin araştır)
 - Kategori: Çelişki / Eksik / Belirsiz / Kapsam / Bağımlılık
 - Öncelik: Kritik / Yüksek / Orta / Düşük
-- Zorunlu: Evet (YALNIZ cevapsız kalırsa veri kaybı/kırılma/yanlış test riski varsa — değilse bu satırı yazma)
+- Zorunlu: Evet (YALNIZ İş Kararı türünde ve cevapsız kalırsa veri kaybı/kırılma/yanlış test riski varsa — değilse bu satırı yazma)
 - Bağlı ID: PA-XXX / BR-XXX / AF-XXX / EF-XXX / EK-XXX (varsa)
 - Soru: [net, tek konuya odaklı soru]
 - Mevcut Durum: [kaynakta ne var / ne eksik]
@@ -884,10 +887,11 @@ muğlak her konu ana metinden çıkarılıp buraya soru olarak taşınır.
 Her soru aşağıdaki formatta:
 
 ### Q-T-[N]: [Başlık]
+- Tür: İş Kararı / Teknik Araştırma / Doğrulanamadı (analist yalnız İş Kararı'nı cevaplar; teknik konuyu kendin araştır)
 - Kategori: Teknik / İş Kuralı / Entegrasyon / Güvenlik / Veri / FE-UX / Performans
 - Katman: FE / BE / FE+BE / Genel
 - Öncelik: Kritik / Yüksek / Orta / Düşük
-- Zorunlu: Evet (YALNIZ cevapsız kalırsa veri kaybı/kırılma/yanlış test riski varsa — değilse bu satırı yazma)
+- Zorunlu: Evet (YALNIZ İş Kararı türünde ve cevapsız kalırsa veri kaybı/kırılma/yanlış test riski varsa — değilse bu satırı yazma)
 - Bağlı ID: BR-XXX / AC-XXX / EF-XXX / EK-XXX (varsa)
 - Soru: [net, tek bir konuya odaklı soru]
 - Mevcut Bilgi: [kaynaklarda olan kısım]
@@ -998,6 +1002,7 @@ edilemez her gereksinim buraya bir soru olarak taşınır.
 Her soru, önem sırasına göre, aşağıdaki formatta:
 
 ### PO-[N]: [Başlık]
+- Tür: İş Kararı / Teknik Araştırma / Doğrulanamadı
 - Kategori: Fonksiyonel / Fonksiyonel Olmayan / Kapsam / Paydaş / Bağımlılık / Kabul Kriteri
 - Öncelik: Kritik / Yüksek / Orta
 - Bağlı ID: FR-XXX / NFR-XXX / AC-XXX / I-XXX (varsa)

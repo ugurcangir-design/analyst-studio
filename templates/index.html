@@ -1040,6 +1040,8 @@ html[data-theme="light"] .jira-modal { background: rgba(245,247,250,.85); }
 .soru-pill.be   { background: rgba(168,85,247,.18); color: #6b21a8; }
 .soru-pill.febe { background: rgba(234,179,8,.18); color: #854d0e; }
 .soru-pill.kritik { background: rgba(239,68,68,.18); color: var(--red); }
+.soru-pill.teknik { background: var(--surface3, var(--surface2)); color: var(--text2); border: 1px solid var(--border-strong); }
+.soru-pill.dogrulanamadi { background: rgba(245,158,11,.14); color: var(--yellow); border: 1px solid var(--yellow); }
 .soru-pill.zorunlu, .jg-sk-onem.zorunlu { background: var(--red); color: #fff; border-color: var(--red); font-weight: 700; letter-spacing: .3px; }
 .soru-pill.yuksek { background: rgba(234,179,8,.18); color: #854d0e; }
 
@@ -3551,7 +3553,8 @@ function temaDegistir() {
             </button>
             <span class="ipucu" tabindex="0" data-ipucu="AI'nın analizde belirsiz bulduğu konuları soru olarak çıkarır. Her sorunun 5 aksiyonu var: ✏ Cevapla (cevap biliyorsan), 🤖 Varsayım (mantıklı tahmin yeterli), ⏸ Beklet (sonra cevaplayacaksan), 🗑 Atla (gereksiz), ↻ Aç (geri al). Cevap yazdıktan sonra 'Cevapları Uygula' ile analize işlenir.">?</span>
             <select id="sorular-filtre-durum" onchange="sorularListele()">
-              <option value="aktif">Aktif (açık + bekleyen)</option>
+              <option value="aktif">Aktif — iş kararı bekleyen</option>
+              <option value="aktif-tum">Aktif — teknik konular dahil</option>
               <option value="">Tüm durumlar</option>
               <option value="acik">Açık</option>
               <option value="bekleniyor">Bekleyen</option>
@@ -6410,6 +6413,7 @@ function _jgSorulariAyristir(md) {
       soru: al('Soru') || (m[2] || '').trim(),
       beklenen: al('Beklenen yanıt') || al('Beklenen'),
       zorunlu: /^\**\s*(evet|yes|true|e\b)/i.test(al('Zorunlu')),
+      tur: /^(iş|is|ürün)/i.test(al('Tür')) ? 'is_karari' : /^(teknik araş|teknik aras|araş)/i.test(al('Tür')) ? 'teknik_arastirma' : /^(doğrulanamad|dogrulanamad|teknik risk|risk)/i.test(al('Tür')) ? 'dogrulanamadi' : 'is_karari',
       // Öz-çözümleme (agent araştırması): durum cevaplandı|kısmen|karar gerekli · cevap · kanıt · gözlem
       agentDurum: al('Agent durumu'), agentCevap: al('Agent cevabı'), agentKanit: al('Agent kanıtı'), agentGozlem: al('Agent gözlemi'),
     });
@@ -6418,7 +6422,7 @@ function _jgSorulariAyristir(md) {
 }
 // ZORUNLU açık sorular (Task) — yumuşak engel: Jira'ya yazmadan önce UYARIR ama gövdeye YAZMAZ.
 // (owner kararı 2026-10-21: açık/zorunlu sorular Jira task'ına gitmesin; yalnız analiz UI'da kalsın.)
-function _jgZorunluSorular(acikMd) { return _jgSorulariAyristir(acikMd).filter(s => s.zorunlu); }
+function _jgZorunluSorular(acikMd) { return _jgSorulariAyristir(acikMd).filter(s => s.zorunlu && _soruIsKarari(s)); }
 function _jgZorunluEk(acikMd) { return ''; }   // ARTIK gövdeye EKLEMEZ (açık sorular Jira'ya yazılmaz)
 function _jgZorunluKapi(acikMdList, eylem) {
   const z = acikMdList.flatMap(_jgZorunluSorular);
@@ -6443,8 +6447,13 @@ function _jgCevaplariTopla() {
 function _jgSorulariRender(md, cevaplar) {
   cevaplar = cevaplar || {};
   const kap = document.getElementById('jg-sorular-liste');
-  const sorular = _jgSorulariAyristir(md);
-  const cozulenHtml = _jgCozulenBolumu(md);   // agent'ın çözüp ANALİZE İŞLEDİĞİ sorular (katlanmış, onay gerekmez)
+  const tumSorular = _jgSorulariAyristir(md);
+  // Yalnız İŞ KARARI soruları cevap kutusu alır; Teknik Araştırma / Doğrulanamadı katlanmış bilgi grubu (Emin 2026-11-06)
+  const sorular = tumSorular.filter(_soruIsKarari);
+  const teknikler = tumSorular.filter(s => !_soruIsKarari(s));
+  const teknikHtml = teknikler.length ? `<details class="jg-cozulen"><summary>🔧 ${teknikler.length} teknik konu — analist kararı gerekmez (agent araştırır / doğrulanamadı → risk notu)</summary>`
+    + teknikler.map(s => `<div class="jg-sk-detay"><b>${escHtml(s.id)}</b> ${_turRozet(s.tur)} ${escHtml(s.soru || s.baslik)}${s.agentCevap ? '<br>🤖 ' + escHtml(s.agentCevap) : ''}</div>`).join('') + '</details>' : '';
+  const cozulenHtml = _jgCozulenBolumu(md) + teknikHtml;   // agent'ın çözüp ANALİZE İŞLEDİĞİ sorular (katlanmış, onay gerekmez)
   if (!sorular.length) {
     if (cozulenHtml) {   // tüm sorular çözüldü → yalnız katlanmış bilgi
       kap.innerHTML = cozulenHtml;
@@ -8952,7 +8961,7 @@ async function _onaySorulariRender(adim, zorla) {
   if (!zorla && kap.dataset.dolu === '1') return;
   try {
     const d = await (await fetch('/api/sorular')).json();
-    const sorular = (d.sorular || []).filter(s => (s.durum || 'acik') === 'acik' || s.durum === 'bekleniyor');
+    const sorular = (d.sorular || []).filter(s => ((s.durum || 'acik') === 'acik' || s.durum === 'bekleniyor') && _soruIsKarari(s));
     if (!sorular.length) { kap.style.display = 'none'; kap.innerHTML = ''; kap.dataset.dolu = ''; return; }
     kap.style.display = '';
     kap.dataset.dolu = '1';
@@ -9966,6 +9975,14 @@ function _katmanRozet(k) {
 }
 
 // Zorunlu açık soru rozeti — cevapsız kalırsa geliştirme/test yanlış davranış üretir.
+// Soru TÜRÜ (Emin 2026-11-06): analist yalnız 'İş Kararı'nı cevaplar; 'Teknik Araştırma' agent'ın işi, 'Doğrulanamadı' risk notu.
+function _soruIsKarari(s) { return !s.tur || s.tur === 'is_karari'; }
+function _turRozet(t) {
+  if (!t || t === 'is_karari') return '';
+  return t === 'teknik_arastirma'
+    ? '<span class="soru-pill teknik" title="Agent\'ın Swagger/gözlem/kod ile araştırması gereken konu — analist kararı gerekmez">🔧 Teknik araştırma</span>'
+    : '<span class="soru-pill dogrulanamadi" title="Araştırıldı, kanıt/erişim yok — teknik risk notu; onay engeli değil">⚠ Doğrulanamadı</span>';
+}
 function _zorunluRozet(z) { return z ? `<span class="soru-pill zorunlu" title="Cevapsız kalırsa veri kaybı/kırılma/yanlış test riski">ZORUNLU</span>` : ''; }
 
 // YUMUŞAK ENGEL: verilen analiz dosyalarında cevapsız ZORUNLU soru varsa onay öncesi uyarır;
@@ -9973,7 +9990,7 @@ function _zorunluRozet(z) { return z ? `<span class="soru-pill zorunlu" title="C
 async function _zorunluSoruKapisi(dosyalar, eylem) {
   try {
     const d = await (await fetch('/api/sorular')).json();
-    const z = (d.sorular || []).filter(s => s.zorunlu && ['acik', 'bekleniyor'].includes(s.durum || 'acik')
+    const z = (d.sorular || []).filter(s => s.zorunlu && _soruIsKarari(s) && ['acik', 'bekleniyor'].includes(s.durum || 'acik')
                                          && (!dosyalar || dosyalar.includes(s.kaynak_dosya)));
     if (!z.length) return true;
     return confirm(`⚠ ${z.length} ZORUNLU açık soru cevapsız:\n\n`
@@ -10007,10 +10024,12 @@ function sorularListele() {
   const tum    = _sorularCache.sorular || [];
 
   let gosterilen = tum;
-  if (filtre === 'aktif') gosterilen = tum.filter(s => s.durum === 'acik' || s.durum === 'bekleniyor');
+  if (filtre === 'aktif') gosterilen = tum.filter(s => (s.durum === 'acik' || s.durum === 'bekleniyor') && _soruIsKarari(s));
+  else if (filtre === 'aktif-tum') gosterilen = tum.filter(s => s.durum === 'acik' || s.durum === 'bekleniyor');
   else if (filtre)        gosterilen = tum.filter(s => s.durum === filtre);
+  const teknikGizli = (filtre === 'aktif') ? tum.filter(s => (s.durum === 'acik' || s.durum === 'bekleniyor') && !_soruIsKarari(s)).length : 0;
 
-  sayac.textContent = `${gosterilen.length} / ${tum.length} soru`;
+  sayac.textContent = `${gosterilen.length} / ${tum.length} soru` + (teknikGizli ? ` · ${teknikGizli} teknik konu gizli (agent araştırır)` : '');
 
   if (gosterilen.length === 0) {
     const ist = _sorularCache.istatistik || {};
@@ -10061,6 +10080,7 @@ function _soruKart(s) {
   return `<div class="soru-kart ${dur}" data-id="${escHtml(s.id)}" data-kaynak="${escHtml(s.kaynak_dosya)}">
     <div class="soru-kart-baslik">
       <span class="soru-id">${escHtml(s.id)}</span>
+      ${_turRozet(s.tur)}
       ${_zorunluRozet(s.zorunlu)}
       ${_oncelikRozet(s.oncelik)}
       ${_katmanRozet(s.katman)}

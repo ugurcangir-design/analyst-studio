@@ -473,7 +473,8 @@
       async function _shSorulariYukle() {
         try {
           const d = await (await fetch('/api/sorular')).json();
-          _shSorular = (d.sorular || []).filter(q => _SH_SORU_DOSYALAR.includes(q.kaynak_dosya) && ['acik', 'bekleniyor'].includes(q.durum || 'acik'));
+          _shSorular = (d.sorular || []).filter(q => _SH_SORU_DOSYALAR.includes(q.kaynak_dosya) && ['acik', 'bekleniyor'].includes(q.durum || 'acik')
+                                                   && (!q.tur || q.tur === 'is_karari'));   // teknik araştırma agent'ın işi — analiste sorulmaz
           _shSoruIdx = 0;
           _shSoruRender();
         } catch (e) { _shSorulariGizle(); }

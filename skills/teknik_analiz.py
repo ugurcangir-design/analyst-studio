@@ -81,7 +81,13 @@ def _acik_sorular_prompt_olustur() -> str:
         "- Önem sırasına göre (Kritik → Yüksek → Orta → Düşük) sırala\n"
         "- Cevapsız kalırsa veri kaybı/bozulması, başka ekran/rapor/entegrasyonun kırılması ya da testin "
         "beklenen sonucun bilinmemesi sonucunu doğuracak sorulara `- Zorunlu: Evet` satırı ekle "
-        "(özellikle belirsiz kalan veri değişikliği etkileri ve akışın tanımsız dalları); diğerlerine yazma\n\n"
+        "(özellikle belirsiz kalan veri değişikliği etkileri ve akışın tanımsız dalları); diğerlerine yazma\n"
+        "- Her soruya `- Tür:` yaz: İş Kararı (yalnız analist/PO cevaplar) / Teknik Araştırma (cevabı Swagger, gözlem, kod, "
+        "DB'den bulunur — analiste sorulmaz, agent araştırır; Zorunlu/Kritik olamaz) / Doğrulanamadı (kanıt yok — teknik risk notu). "
+        "'Hangi serviste/katmanda uygulanıyor, repository, index, collation, cache, parametre, kolon tipi, mevcut davranış' "
+        "soruları Teknik Araştırma'dır.\n"
+        "- ANALİSTİN CEVAPLADIĞI SORULAR verildiyse o konular KAPALIDIR: yeniden sorma, yeniden ifade etme.\n"
+        "- Soru sayısı işin boyutuyla orantılı: küçük/bug işinde en fazla 3 İş Kararı sorusu.\n\n"
         "Çıktıyı TEK bir XML bloğu halinde ver:\n\n"
         f"<acik_sorular>\n{sorular}\n</acik_sorular>"
     )
@@ -117,7 +123,7 @@ def _teknik_uret_tam(sistem: str, mesajlar: list, max_deneme: int = 2,
 
 
 def _acik_sorular_uret(teknik_metni: str, surec_metni: str, eksik_idler: list[str] | None = None,
-                       gozlem_rapor: dict | None = None) -> str:
+                       gozlem_rapor: dict | None = None, cevaplanan_blok: str = "") -> str:
     """Aşama 2 — teknik analizi girdi alıp açık soruları AYRI çağrıyla üretir.
     eksik_idler verilirse (kapsam denetiminden), teknik analizde referans
     bulunamayan süreç ID'leri açık soru olarak garantili eklenir. `gozlem_rapor` (ok) verilirse kısa özeti de girer →
@@ -139,11 +145,42 @@ def _acik_sorular_uret(teknik_metni: str, surec_metni: str, eksik_idler: list[st
             "soru ekle (sorunun 'Bağlı ID' alanına ilgili ID'yi yaz):\n"
             + ", ".join(eksik_idler)
         )})
+    if cevaplanan_blok:
+        icerik.append({"type": "text", "text": cevaplanan_blok})
     icerik.append({"type": "text", "text": "Yukarıdaki teknik analiz ve süreç analizindeki tüm açık konuları soru olarak topla."})
     mesajlar = [{"role": "user", "content": icerik}]
     yanit = _api_cagri(sistem, mesajlar, max_tokens=MAX_TOKENS_UZUN, thinking=extended_thinking_acik())
     yanit = _metin_sikistir(yanit)
     return _xml_ayir(yanit, "acik_sorular")
+
+
+def _oturum_esigi() -> float | None:
+    """Bu oturumun başlangıcı: girdi dokümanının mtime'ı (upload = yeni oturum). Yoksa None (filtresiz)."""
+    try:
+        from .base import INPUT_DIR
+        girdiler = [f for f in INPUT_DIR.iterdir() if f.is_file() and not f.name.startswith(".")]
+        return max(f.stat().st_mtime for f in girdiler) if girdiler else None
+    except Exception:
+        return None
+
+
+def _cevaplanan_blok(cevaplanan: list[dict]) -> str:
+    if not cevaplanan:
+        return ""
+    return ("### ANALİSTİN CEVAPLADIĞI SORULAR — KESİN BİLGİ (önceki aşamada kapandı; analize İŞLE, tekrar SORMA, "
+            "`[K: Analist cevabı]` etiketiyle kullan)\n" + "\n".join(
+                f"- {q['id']} ({q['kaynak_dosya']}): {q['soru']} → {'VARSAYIM: ' if q.get('varsayim') else ''}{q['cevap']}"
+                for q in cevaplanan))
+
+
+def sorulari_sonradan_isle(sorular_md: str, cevaplanan: list[dict], bug_modu: bool = False) -> str:
+    """0 token: Tür etiketi (güvenlik ağı) + önceki aşamada cevaplananı ele + Zorunlu yalnız İş Kararı'nda (bug'da en çok 3)."""
+    from .soru_turu import md_tur_etiketle, cevaplananlari_ele, zorunlu_normalize
+    md = md_tur_etiketle(sorular_md or "")
+    md, elenen = cevaplananlari_ele(md, cevaplanan)
+    if elenen:
+        print(f"  ♻️  {len(elenen)} soru önceki aşamada cevaplanmıştı — tekrar sorulmadı.")
+    return zorunlu_normalize(md, tavan=(3 if bug_modu else None))
 
 
 def _teknik_denetci_prompt_olustur() -> str:
@@ -237,6 +274,18 @@ def teknik_analiz_yap(ozel_atla: bool = False, canli_baglam_override: str | None
             stable_bloklar.append({"type": "text", "text": _sb})
     except Exception as _e:
         print(f"  ⚠ Servis sözleşmeleri dahil edilemedi: {_e}")
+
+    # ANALİSTİN CEVAPLARI (Emin 2026-11-06 #2: süreç onayında cevaplanan sorular teknikte yeniden soruluyordu) — süreç
+    # analizi soruları + varsa önceki teknik soruların cevapları KESİN BİLGİ olarak teknik analize ve soru üretimine girer.
+    cevaplanan: list[dict] = []
+    try:
+        from .sorular import cevaplanan_sorular
+        cevaplanan = cevaplanan_sorular(_oturum_esigi())
+        if cevaplanan:
+            print(f"  ✅ {len(cevaplanan)} analist cevabı kesin bilgi olarak dahil ediliyor...")
+            stable_bloklar.append({"type": "text", "text": _cevaplanan_blok(cevaplanan)})
+    except Exception as _e:
+        print(f"  ⚠ Analist cevapları okunamadı: {_e}")
 
     if mockup_icerik:
         print(f"  HTML prototip dahil ediliyor ({len(mockup_icerik):,} karakter)...")
@@ -342,7 +391,9 @@ def teknik_analiz_yap(ozel_atla: bool = False, canli_baglam_override: str | None
 
     # ── AŞAMA 2: Açık sorular (ayrı çağrı; karşılanmayan ID'ler garantili eklenir) ──
     try:
-        sorular = _acik_sorular_uret(teknik_ham, surec_metni, kapsam["eksik"], gozlem_rapor=gozlem_rapor)
+        sorular = _acik_sorular_uret(teknik_ham, surec_metni, kapsam["eksik"], gozlem_rapor=gozlem_rapor,
+                                     cevaplanan_blok=_cevaplanan_blok(cevaplanan))
+        sorular = sorulari_sonradan_isle(sorular, cevaplanan)
     except Exception as e:
         # Açık sorular üretimi başarısız olursa teknik analizi kaybetme;
         # açık sorular dosyasına hata notu yaz, akış devam etsin.

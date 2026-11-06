@@ -1692,8 +1692,10 @@ def _gorev_acik_sorular_uret(teknik_metni: str, gorev: dict,
         "Çıktı Türkçe Markdown, XML bloğu içinde:\n\n"
         "<acik_sorular>\n"
         "### Q-T-001: [Başlık]\n"
+        "- Tür: İş Kararı / Teknik Araştırma / Doğrulanamadı (İş Kararı = yalnız analist/PO cevaplar; Teknik Araştırma = "
+        "Swagger/gözlem/kod/DB'den SENİN bulman gereken konu — analiste sorulmaz, Zorunlu olamaz; Doğrulanamadı = kanıt yok)\n"
         "- Önem: Kritik / Yüksek / Orta / Düşük\n"
-        "- Zorunlu: Evet (yalnız zorunluysa)\n"
+        "- Zorunlu: Evet (yalnız İş Kararı türünde ve zorunluysa)\n"
         "- Bağlı bölüm: [§5 API / §4 DB / vb.]\n"
         "- Soru: [tek cümle]\n"
         "- Beklenen yanıt: [alan tipi / değer kümesi / karar]\n"
@@ -1725,6 +1727,12 @@ def _gorev_acik_sorular_uret(teknik_metni: str, gorev: dict,
     yanit = _api_cagri(sistem, [{"role": "user", "content": icerik}],
                        model=MODEL_HAFIF, max_tokens=MAX_TOKENS_KISA, thinking=False)
     acik = _xml_ayir(_metin_sikistir(yanit), "acik_sorular")
+    # Soru türü (0 token): `Tür:` etiketi + Zorunlu yalnız İş Kararı'nda; hata/basit işte en çok 3 zorunlu.
+    try:
+        from .soru_turu import md_tur_etiketle, zorunlu_normalize
+        acik = zorunlu_normalize(md_tur_etiketle(acik), tavan=(3 if _hata_gorev_mi(gorev) else None))
+    except Exception as _e:
+        print(f"  ⚠ Soru türü etiketleme atlandı: {_e}")
     # DETERMİNİSTİK YAKINSAMA (owner 2026-10-21: 'cevap girdim ama aynı soruyu tekrar çıkarıyor'):
     # Analistin CEVAPLADIĞI soru ID'lerini model ne derse desin ELE — reworded olsa da aynı ID geri gelmesin.
     return _cevaplanan_sorulari_dus(acik, cevaplar, onceki_sorular)
